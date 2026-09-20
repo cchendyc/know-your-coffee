@@ -23,8 +23,16 @@ export const MACHINE_LABELS: Record<MachineBrand, string> = {
   RANCILIO: 'Rancilio',
   BREVILLE: 'Breville',
   DECENT: 'Decent',
+  FAEMA: 'Faema',
   OTHER: 'Other',
   UNKNOWN: 'Unknown',
+}
+
+// OTHER models carry their brand as a prefix ("Astoria Storm"), so a
+// leading "Other" is noise.
+export function machineDisplay(machine: MachineBrand, model: string | null): string {
+  if (machine === 'OTHER' && model) return model
+  return `${MACHINE_LABELS[machine]}${model ? ` ${model}` : ''}`
 }
 
 export const BEAN_SOURCE_LABELS: Record<BeanSource, string> = {

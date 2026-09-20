@@ -10,6 +10,7 @@ enum MachineBrand {
   RANCILIO
   BREVILLE
   DECENT
+  FAEMA
   OTHER
   UNKNOWN
 }

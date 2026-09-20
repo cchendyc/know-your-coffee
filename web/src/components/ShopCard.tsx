@@ -1,5 +1,5 @@
 import type { CoffeeShop, User } from '../api'
-import { AMENITIES, BEAN_SOURCE_LABELS, MACHINE_LABELS } from '../labels'
+import { AMENITIES, BEAN_SOURCE_LABELS, machineDisplay } from '../labels'
 import { SaveBeenButtons } from './SaveBeen'
 
 export function ShopCard({
@@ -53,8 +53,7 @@ export function ShopCard({
 
       <div className="flex flex-wrap gap-1.5">
         <span className="rounded-full bg-espresso-700 px-2.5 py-1 text-xs font-medium text-cream-50">
-          {MACHINE_LABELS[shop.machine]}
-          {shop.machineModel ? ` · ${shop.machineModel}` : ''}
+          {machineDisplay(shop.machine, shop.machineModel)}
         </span>
         <span className="rounded-full bg-crema-400/25 px-2.5 py-1 text-xs font-medium text-espresso-700">
           {/* In-house roasters would just repeat the shop name as "<name> beans". */}

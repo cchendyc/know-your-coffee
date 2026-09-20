@@ -27,6 +27,7 @@ MACHINE_PATTERNS = [
     ("ROCKET", re.compile(r"rocket espresso", re.I)),
     ("RANCILIO", re.compile(r"rancilio", re.I)),
     ("BREVILLE", re.compile(r"breville", re.I)),
+    ("FAEMA", re.compile(r"faema", re.I)),
     ("DECENT", re.compile(r"decent espresso machine|\bde1\b", re.I)),
 ]
 

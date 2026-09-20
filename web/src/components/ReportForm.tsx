@@ -71,9 +71,67 @@ function Chips({
   )
 }
 
+// Pickable brands: OTHER is implied by free text, UNKNOWN is not a report.
+const BRAND_OPTIONS = MACHINE_BRANDS.filter((b) => b !== 'OTHER' && b !== 'UNKNOWN')
+
+function BrandCombobox({
+  value,
+  onPick,
+}: {
+  value: string
+  onPick: (brand: MachineBrand | '', text: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const matches = BRAND_OPTIONS.filter((b) => MACHINE_LABELS[b].toLowerCase().includes(value.trim().toLowerCase()))
+
+  return (
+    <div className="relative">
+      <input
+        value={value}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onChange={(e) => {
+          const text = e.target.value
+          // Typing the full label counts as picking it.
+          const exact = BRAND_OPTIONS.find((b) => MACHINE_LABELS[b].toLowerCase() === text.trim().toLowerCase())
+          onPick(exact ?? '', text)
+          setOpen(true)
+        }}
+        placeholder="Machine brand (pick or type)"
+        className={inputCls}
+      />
+      {open && matches.length > 0 && (
+        <ul className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-cream-200 bg-white py-1 shadow-lg">
+          {matches.map((b) => (
+            <li key={b}>
+              <button
+                type="button"
+                // mousedown fires before the input's blur closes the list.
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  onPick(b, MACHINE_LABELS[b])
+                  setOpen(false)
+                }}
+                className="w-full px-3 py-1.5 text-left text-sm hover:bg-cream-100"
+              >
+                {MACHINE_LABELS[b]}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {value.trim() !== '' && matches.length === 0 && open && (
+        <p className="absolute z-10 mt-1 w-full rounded-xl border border-cream-200 bg-white px-3 py-1.5 text-xs text-espresso-500 shadow-lg">
+          Not a listed brand — “{value.trim()}” will be reported as-is.
+        </p>
+      )}
+    </div>
+  )
+}
+
 export function ReportForm({ shop, onDone, onCancel }: { shop: CoffeeShop; onDone: () => void; onCancel: () => void }) {
   const [machine, setMachine] = useState<MachineBrand | ''>('')
-  const [otherBrand, setOtherBrand] = useState('')
+  const [brandText, setBrandText] = useState('')
   const [machineModel, setMachineModel] = useState('')
   const [beanSource, setBeanSource] = useState<BeanSource | ''>('')
   const [roaster, setRoaster] = useState('')
@@ -130,6 +188,7 @@ export function ReportForm({ shop, onDone, onCancel }: { shop: CoffeeShop; onDon
       setGuess(result)
       if (result.machine !== 'UNKNOWN') {
         setMachine(result.machine)
+        setBrandText(MACHINE_LABELS[result.machine])
         if (result.machineModel) setMachineModel(result.machineModel)
         setUsedPhoto(true)
       }
@@ -186,11 +245,12 @@ export function ReportForm({ shop, onDone, onCancel }: { shop: CoffeeShop; onDon
       const origins = allOrigins()
       const grinderList = allGrinders()
       const drinkList = cleanDrinks()
-      // OTHER machines carry their brand as a model prefix, e.g. "Astoria Storm".
-      const model = machine === 'OTHER' ? `${otherBrand.trim()} ${machineModel.trim()}`.trim() : machineModel.trim()
+      // Unlisted brands go as OTHER with the brand as a model prefix, e.g. "Astoria Storm".
+      const freeBrand = !machine && brandText.trim()
+      const model = freeBrand ? `${brandText.trim()} ${machineModel.trim()}`.trim() : machineModel.trim()
       await submitReport({
         shopId: shop.id,
-        machine: machine || null,
+        machine: machine || (freeBrand ? 'OTHER' : null),
         machineModel: model || null,
         beanSource: beanSource || null,
         roaster: roaster.trim() || null,
@@ -214,6 +274,7 @@ export function ReportForm({ shop, onDone, onCancel }: { shop: CoffeeShop; onDon
 
   const hasAnything =
     machine ||
+    brandText.trim() ||
     machineModel.trim() ||
     beanSource ||
     roaster.trim() ||
@@ -259,22 +320,13 @@ export function ReportForm({ shop, onDone, onCancel }: { shop: CoffeeShop; onDon
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <select value={machine} onChange={(e) => setMachine(e.target.value as MachineBrand | '')} className={inputCls}>
-          <option value="">Machine brand…</option>
-          {MACHINE_BRANDS.map((b) => (
-            <option key={b} value={b}>
-              {MACHINE_LABELS[b]}
-            </option>
-          ))}
-        </select>
-        {machine === 'OTHER' && (
-          <input
-            value={otherBrand}
-            onChange={(e) => setOtherBrand(e.target.value)}
-            placeholder="Brand (e.g. Astoria)"
-            className={inputCls}
-          />
-        )}
+        <BrandCombobox
+          value={brandText}
+          onPick={(brand, text) => {
+            setMachine(brand)
+            setBrandText(text)
+          }}
+        />
         <input
           value={machineModel}
           onChange={(e) => setMachineModel(e.target.value)}

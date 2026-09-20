@@ -1,5 +1,5 @@
 import type { Report } from '../api'
-import { AMENITIES, MACHINE_LABELS } from '../labels'
+import { AMENITIES, machineDisplay } from '../labels'
 
 export function ReportList({ reports }: { reports: Report[] }) {
   if (reports.length === 0) {
@@ -18,7 +18,7 @@ export function ReportList({ reports }: { reports: Report[] }) {
           </p>
           <p className="mt-1">
             {[
-              r.machine && `Machine: ${MACHINE_LABELS[r.machine]}${r.machineModel ? ` ${r.machineModel}` : ''}`,
+              r.machine && `Machine: ${machineDisplay(r.machine, r.machineModel)}`,
               r.roaster && `Roaster: ${r.roaster}`,
               r.beanOrigins?.length && `Origins: ${r.beanOrigins.join(', ')}`,
               r.grinders?.length && `Grinders: ${r.grinders.join(', ')}`,

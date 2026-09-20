@@ -10,6 +10,7 @@ export type MachineBrand =
   | 'RANCILIO'
   | 'BREVILLE'
   | 'DECENT'
+  | 'FAEMA'
   | 'OTHER'
   | 'UNKNOWN'
 
@@ -56,6 +57,13 @@ export interface User {
   picture: string | null
 }
 
+export interface ChainLocation {
+  id: string
+  name: string
+  address: string
+  city: string
+}
+
 export interface CoffeeShop {
   id: string
   name: string
@@ -86,6 +94,11 @@ export interface CoffeeShop {
   photoCount?: number
   reports?: Report[]
   reportCount?: number
+  chain?: {
+    id: string
+    name: string
+    shops: ChainLocation[]
+  } | null
 }
 
 export interface MachineGuess {
@@ -203,6 +216,7 @@ export function fetchShop(id: string) {
         reportCount
         photos(limit: 4) { id kind data createdAt uploader { name picture } }
         reports(limit: 3) { ${REPORT_FIELDS} }
+        chain { id name shops { id name address city } }
       }
     }`,
     { id },

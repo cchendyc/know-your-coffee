@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { fetchShop, type CoffeeShop, type User } from '../api'
-import { AMENITIES, BEAN_SOURCE_LABELS, MACHINE_LABELS } from '../labels'
+import { AMENITIES, BEAN_SOURCE_LABELS, machineDisplay } from '../labels'
+import { ChainLocations } from './ChainLocations'
 import { ReportList } from './ReportList'
 import { SaveBeenButtons } from './SaveBeen'
 import { ShopExpanded } from './ShopExpanded'
@@ -19,6 +20,7 @@ export function ShopDrawer({
   initialShop,
   user,
   onShopChanged,
+  onOpenShop,
   onClose,
 }: {
   shopId: string
@@ -26,6 +28,7 @@ export function ShopDrawer({
   initialShop?: CoffeeShop
   user: User | null
   onShopChanged: (shop: CoffeeShop) => void
+  onOpenShop: (id: string) => void
   onClose: () => void
 }) {
   // Paint immediately from the list's copy; photos/reports hydrate from fetchShop.
@@ -47,6 +50,8 @@ export function ShopDrawer({
   useEffect(() => {
     // Selecting another shop while open: repaint from its list copy, not the old shop.
     setShop((prev) => (prev?.id === shopId ? prev : (initialShop ?? null)))
+    setExpanded(false)
+    setReportOnExpand(false)
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load, shopId])
@@ -126,10 +131,7 @@ export function ShopDrawer({
               )}
               {shop.vibe && <p className="mb-4 text-sm text-espresso-500 italic">“{shop.vibe}”</p>}
               <dl className="divide-y divide-cream-200 rounded-2xl border border-cream-200 bg-white px-4">
-                <InfoRow
-                  label="Machine"
-                  value={`${MACHINE_LABELS[shop.machine]}${shop.machineModel ? ` ${shop.machineModel}` : ''}`}
-                />
+                <InfoRow label="Machine" value={machineDisplay(shop.machine, shop.machineModel)} />
                 <InfoRow label="Beans" value={BEAN_SOURCE_LABELS[shop.beanSource]} />
                 {shop.roaster && <InfoRow label="Roaster" value={shop.roaster} />}
                 {shop.beanOrigins.length > 0 && <InfoRow label="Bean origins" value={shop.beanOrigins.join(', ')} />}
@@ -153,6 +155,8 @@ export function ShopDrawer({
                   </ul>
                 </div>
               )}
+
+              <ChainLocations shop={shop} onOpenShop={onOpenShop} />
 
               {!shop.photos && (
                 <div className="mt-4 flex gap-2">
@@ -224,6 +228,7 @@ export function ShopDrawer({
           initialReporting={reportOnExpand}
           onChanged={onStatusChanged}
           onReload={load}
+          onOpenShop={onOpenShop}
           onClose={() => {
             setExpanded(false)
             setReportOnExpand(false)

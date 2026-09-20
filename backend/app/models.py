@@ -14,6 +14,7 @@ MACHINE_BRANDS = [
     "RANCILIO",
     "BREVILLE",
     "DECENT",
+    "FAEMA",
     "OTHER",
     "UNKNOWN",
 ]
@@ -33,6 +34,13 @@ class Reporter(TypedDict):
     picture: str | None
 
 
+class Chain(TypedDict):
+    id: str
+    name: str
+    slug: str
+    website: str | None
+
+
 class CoffeeShop(TypedDict):
     id: str
     name: str
@@ -40,6 +48,7 @@ class CoffeeShop(TypedDict):
     city: str
     lat: float
     lng: float
+    chainId: str | None
     machine: str
     machineModel: str | None
     beanSource: str

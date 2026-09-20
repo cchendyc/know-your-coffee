@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchShopDetails, type CoffeeShop, type PhotoKind, type Report, type ShopPhoto, type User } from '../api'
-import { BEAN_SOURCE_LABELS, MACHINE_LABELS, PHOTO_KINDS, PHOTO_KIND_LABELS } from '../labels'
+import { BEAN_SOURCE_LABELS, machineDisplay, PHOTO_KINDS, PHOTO_KIND_LABELS } from '../labels'
+import { ChainLocations } from './ChainLocations'
 import { ReportForm } from './ReportForm'
 import { ReportList } from './ReportList'
 import { SaveBeenButtons } from './SaveBeen'
@@ -22,6 +23,7 @@ export function ShopExpanded({
   initialReporting = false,
   onChanged,
   onReload,
+  onOpenShop,
   onClose,
 }: {
   shop: CoffeeShop
@@ -29,6 +31,7 @@ export function ShopExpanded({
   initialReporting?: boolean
   onChanged: (shop: CoffeeShop) => void
   onReload: () => void
+  onOpenShop: (id: string) => void
   onClose: () => void
 }) {
   const [reporting, setReporting] = useState(initialReporting)
@@ -113,7 +116,7 @@ export function ShopExpanded({
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Fact label="Machine" value={`${MACHINE_LABELS[shop.machine]}${shop.machineModel ? ` ${shop.machineModel}` : ''}`} />
+          <Fact label="Machine" value={machineDisplay(shop.machine, shop.machineModel)} />
           <Fact label="Beans" value={BEAN_SOURCE_LABELS[shop.beanSource]} />
           {shop.roaster && <Fact label="Roaster" value={shop.roaster} />}
           {shop.beanOrigins.length > 0 && <Fact label="Bean origins" value={shop.beanOrigins.join(', ')} />}
@@ -161,6 +164,8 @@ export function ShopExpanded({
             </ul>
           </div>
         )}
+
+        <ChainLocations shop={shop} onOpenShop={onOpenShop} />
 
         <h3 className="mt-8 text-sm font-bold tracking-tight">Community photos</h3>
         {loadingDetails && photos.length === 0 && (
