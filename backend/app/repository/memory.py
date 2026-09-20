@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from ..models import Chain, CoffeeShop, NewShop, Report, ShopPhoto, User
+from ..models import Chain, CoffeeShop, NewShop, Report, ShopClaim, ShopPhoto, User
 from .util import brand_name, cluster_shops, is_same_shop, norm_coffees, split_search, slugify_brand
 
 
@@ -83,6 +83,7 @@ class MemoryRepository:
         self._users: dict[str, User] = {}
         self._photos: dict[str, list[ShopPhoto]] = {}
         self._statuses: dict[tuple[str, str], dict] = {}  # (user_id, shop_id)
+        self._claims: dict[str, ShopClaim] = {}
 
     def _with_flags(self, shop: CoffeeShop, user_id: str | None) -> CoffeeShop:
         status = self._statuses.get((user_id, shop["id"])) if user_id else None
@@ -189,6 +190,7 @@ class MemoryRepository:
                 **incoming,
                 "id": str(uuid4()),
                 "chainId": None,
+                "ownerId": None,
                 "savedByMe": False,
                 "beenByMe": False,
                 "updatedAt": _now(),
@@ -227,9 +229,56 @@ class MemoryRepository:
 
     def upsert_user(self, user: dict) -> User:
         existing = next((u for u in self._users.values() if u["googleSub"] == user["googleSub"]), None)
-        record: User = {**user, "id": existing["id"] if existing else str(uuid4())}
+        # Role only ever escalates here (ADMIN_EMAILS bootstrap); sign-in never demotes.
+        role = "ADMIN" if user.get("role") == "ADMIN" or (existing or {}).get("role") == "ADMIN" else "USER"
+        record: User = {**user, "role": role, "id": existing["id"] if existing else str(uuid4())}
         self._users[record["id"]] = record
         return record
+
+    def get_user(self, user_id: str) -> User | None:
+        return self._users.get(user_id)
+
+    def list_owned_shops(self, user_id: str) -> list[CoffeeShop]:
+        owned = [s for s in self._shops.values() if s.get("ownerId") == user_id]
+        return sorted((self._with_flags(s, user_id) for s in owned), key=lambda s: s["name"])
+
+    def create_claim(self, user_id: str, shop_id: str, note: str | None) -> ShopClaim:
+        pending = next(
+            (c for c in self._claims.values()
+             if c["userId"] == user_id and c["shopId"] == shop_id and c["status"] == "PENDING"),
+            None,
+        )
+        if pending:
+            return pending
+        claim: ShopClaim = {
+            "id": str(uuid4()),
+            "shopId": shop_id,
+            "userId": user_id,
+            "status": "PENDING",
+            "note": note,
+            "createdAt": _now(),
+            "resolvedAt": None,
+        }
+        self._claims[claim["id"]] = claim
+        return claim
+
+    def list_claims(self, user_id: str | None = None, status: str | None = None) -> list[ShopClaim]:
+        claims = [
+            c for c in self._claims.values()
+            if (user_id is None or c["userId"] == user_id) and (status is None or c["status"] == status)
+        ]
+        # Admins review oldest first; a user's own list shows newest first.
+        return sorted(claims, key=lambda c: c["createdAt"], reverse=status != "PENDING")
+
+    def resolve_claim(self, claim_id: str, approve: bool) -> ShopClaim | None:
+        claim = self._claims.get(claim_id)
+        if not claim or claim["status"] != "PENDING":
+            return None
+        claim["status"] = "APPROVED" if approve else "REJECTED"
+        claim["resolvedAt"] = _now()
+        if approve and (shop := self._shops.get(claim["shopId"])):
+            shop["ownerId"] = claim["userId"]
+        return claim
 
     def set_shop_status(self, user_id: str, shop_id: str, saved: bool | None, been: bool | None) -> None:
         key = (user_id, shop_id)

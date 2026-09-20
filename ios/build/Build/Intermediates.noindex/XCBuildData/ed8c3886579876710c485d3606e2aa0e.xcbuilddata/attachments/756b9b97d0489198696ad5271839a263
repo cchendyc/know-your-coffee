@@ -1,0 +1,119 @@
+{
+  "" : {
+    "diagnostics" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/KnowYourCoffee-primary.dia",
+    "emit-module-dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/KnowYourCoffee-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/KnowYourCoffee-primary-emit-module.dia",
+    "pch" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/KnowYourCoffee-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/KnowYourCoffee-primary.swiftdeps"
+  },
+  "/Users/cindy.chen/knowYourCoffee/ios/KnowYourCoffee/API.swift" : {
+    "const-values" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/API.swiftconstvalues",
+    "dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/API.d",
+    "diagnostics" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/API.dia",
+    "index-unit-output-path" : "/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/API.o",
+    "llvm-bc" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/API.bc",
+    "object" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/API.o",
+    "swift-dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/API.swiftdeps",
+    "swiftmodule" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/API~partial.swiftmodule"
+  },
+  "/Users/cindy.chen/knowYourCoffee/ios/KnowYourCoffee/KnowYourCoffeeApp.swift" : {
+    "const-values" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/KnowYourCoffeeApp.swiftconstvalues",
+    "dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/KnowYourCoffeeApp.d",
+    "diagnostics" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/KnowYourCoffeeApp.dia",
+    "index-unit-output-path" : "/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/KnowYourCoffeeApp.o",
+    "llvm-bc" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/KnowYourCoffeeApp.bc",
+    "object" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/KnowYourCoffeeApp.o",
+    "swift-dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/KnowYourCoffeeApp.swiftdeps",
+    "swiftmodule" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/KnowYourCoffeeApp~partial.swiftmodule"
+  },
+  "/Users/cindy.chen/knowYourCoffee/ios/KnowYourCoffee/Models.swift" : {
+    "const-values" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/Models.swiftconstvalues",
+    "dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/Models.d",
+    "diagnostics" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/Models.dia",
+    "index-unit-output-path" : "/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/Models.o",
+    "llvm-bc" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/Models.bc",
+    "object" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/Models.o",
+    "swift-dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/Models.swiftdeps",
+    "swiftmodule" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/Models~partial.swiftmodule"
+  },
+  "/Users/cindy.chen/knowYourCoffee/ios/KnowYourCoffee/ShopStore.swift" : {
+    "const-values" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopStore.swiftconstvalues",
+    "dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopStore.d",
+    "diagnostics" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopStore.dia",
+    "index-unit-output-path" : "/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopStore.o",
+    "llvm-bc" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopStore.bc",
+    "object" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopStore.o",
+    "swift-dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopStore.swiftdeps",
+    "swiftmodule" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopStore~partial.swiftmodule"
+  },
+  "/Users/cindy.chen/knowYourCoffee/ios/KnowYourCoffee/Theme.swift" : {
+    "const-values" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/Theme.swiftconstvalues",
+    "dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/Theme.d",
+    "diagnostics" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/Theme.dia",
+    "index-unit-output-path" : "/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/Theme.o",
+    "llvm-bc" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/Theme.bc",
+    "object" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/Theme.o",
+    "swift-dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/Theme.swiftdeps",
+    "swiftmodule" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/Theme~partial.swiftmodule"
+  },
+  "/Users/cindy.chen/knowYourCoffee/ios/KnowYourCoffee/Views/HomeView.swift" : {
+    "const-values" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/HomeView.swiftconstvalues",
+    "dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/HomeView.d",
+    "diagnostics" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/HomeView.dia",
+    "index-unit-output-path" : "/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/HomeView.o",
+    "llvm-bc" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/HomeView.bc",
+    "object" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/HomeView.o",
+    "swift-dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/HomeView.swiftdeps",
+    "swiftmodule" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/HomeView~partial.swiftmodule"
+  },
+  "/Users/cindy.chen/knowYourCoffee/ios/KnowYourCoffee/Views/SettingsView.swift" : {
+    "const-values" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/SettingsView.swiftconstvalues",
+    "dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/SettingsView.d",
+    "diagnostics" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/SettingsView.dia",
+    "index-unit-output-path" : "/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/SettingsView.o",
+    "llvm-bc" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/SettingsView.bc",
+    "object" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/SettingsView.o",
+    "swift-dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/SettingsView.swiftdeps",
+    "swiftmodule" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/SettingsView~partial.swiftmodule"
+  },
+  "/Users/cindy.chen/knowYourCoffee/ios/KnowYourCoffee/Views/ShopCardView.swift" : {
+    "const-values" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopCardView.swiftconstvalues",
+    "dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopCardView.d",
+    "diagnostics" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopCardView.dia",
+    "index-unit-output-path" : "/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopCardView.o",
+    "llvm-bc" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopCardView.bc",
+    "object" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopCardView.o",
+    "swift-dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopCardView.swiftdeps",
+    "swiftmodule" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopCardView~partial.swiftmodule"
+  },
+  "/Users/cindy.chen/knowYourCoffee/ios/KnowYourCoffee/Views/ShopDetailView.swift" : {
+    "const-values" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopDetailView.swiftconstvalues",
+    "dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopDetailView.d",
+    "diagnostics" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopDetailView.dia",
+    "index-unit-output-path" : "/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopDetailView.o",
+    "llvm-bc" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopDetailView.bc",
+    "object" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopDetailView.o",
+    "swift-dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopDetailView.swiftdeps",
+    "swiftmodule" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopDetailView~partial.swiftmodule"
+  },
+  "/Users/cindy.chen/knowYourCoffee/ios/KnowYourCoffee/Views/ShopMapView.swift" : {
+    "const-values" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopMapView.swiftconstvalues",
+    "dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopMapView.d",
+    "diagnostics" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopMapView.dia",
+    "index-unit-output-path" : "/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopMapView.o",
+    "llvm-bc" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopMapView.bc",
+    "object" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopMapView.o",
+    "swift-dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopMapView.swiftdeps",
+    "swiftmodule" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/ShopMapView~partial.swiftmodule"
+  },
+  "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "const-values" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/GeneratedAssetSymbols.swiftconstvalues",
+    "dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/GeneratedAssetSymbols.d",
+    "diagnostics" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/GeneratedAssetSymbols.dia",
+    "index-unit-output-path" : "/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/GeneratedAssetSymbols.o",
+    "swift-dependencies" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/GeneratedAssetSymbols.swiftdeps",
+    "swiftmodule" : "/Users/cindy.chen/knowYourCoffee/ios/build/Build/Intermediates.noindex/KnowYourCoffee.build/Debug-iphonesimulator/KnowYourCoffee.build/Objects-normal/x86_64/GeneratedAssetSymbols~partial.swiftmodule"
+  }
+}

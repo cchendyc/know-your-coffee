@@ -1,3 +1,20 @@
+"An object with a globally unique ID, for client-side caching (Apollo iOS, Relay)."
+interface Node {
+  id: ID!
+}
+
+enum UserRole {
+  USER
+  "Can resolve ownership claims and override any field."
+  ADMIN
+}
+
+enum ClaimStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum MachineBrand {
   LA_MARZOCCO
   SLAYER
@@ -118,7 +135,7 @@ input DrinkInput {
   price: Float
 }
 
-type CoffeeShop {
+type CoffeeShop implements Node {
   id: ID!
   name: String!
   address: String!
@@ -155,6 +172,10 @@ type CoffeeShop {
   website: String
   "Set when this location belongs to a multi-shop brand."
   chain: Chain
+  "The verified owner's user id, set when an ownership claim is approved."
+  ownerId: ID
+  "True when the signed-in viewer is the verified owner."
+  ownedByMe: Boolean!
   "True when the signed-in viewer bookmarked this shop."
   savedByMe: Boolean!
   "True when the signed-in viewer marked this shop as visited."
@@ -169,7 +190,7 @@ type CoffeeShop {
 }
 
 "A multi-location brand. Equipment and menu stay on each CoffeeShop."
-type Chain {
+type Chain implements Node {
   id: ID!
   name: String!
   slug: String!
@@ -183,15 +204,28 @@ type ShopPage {
   total: Int!
 }
 
-type User {
+type User implements Node {
   id: ID!
   name: String!
   email: String!
   picture: String
+  role: UserRole!
   "Shops on the viewer's saved list."
   savedCount: Int!
   "Shops on the viewer's been list."
   beenCount: Int!
+}
+
+"A user's request to be recognized as a shop's owner; resolved by an admin."
+type ShopClaim implements Node {
+  id: ID!
+  shopId: ID!
+  shop: CoffeeShop!
+  status: ClaimStatus!
+  "Evidence for the claim, e.g. a link or how to verify."
+  note: String
+  createdAt: String!
+  resolvedAt: String
 }
 
 type Reporter {
@@ -204,7 +238,7 @@ type AuthPayload {
   user: User!
 }
 
-type Report {
+type Report implements Node {
   id: ID!
   shopId: ID!
   machine: MachineBrand
@@ -226,7 +260,7 @@ type Report {
   createdAt: String!
 }
 
-type ShopPhoto {
+type ShopPhoto implements Node {
   id: ID!
   kind: PhotoKind!
   "Data URL of the image."
@@ -304,6 +338,14 @@ type Query {
   shop(id: ID!): CoffeeShop
   cities: [String!]!
   me: User
+  "The signed-in viewer; alias of me, named for mobile clients."
+  userNode: User
+  "Shops the signed-in viewer owns (approved claims)."
+  myShops: [CoffeeShop!]!
+  "The signed-in viewer's ownership claims, newest first."
+  myClaims: [ShopClaim!]!
+  "All unresolved claims, oldest first. Requires ADMIN."
+  pendingClaims: [ShopClaim!]!
   "Type-ahead shop search on Google Places, biased to the Bay Area. Requires GOOGLE_PLACES_API_KEY on the server."
   searchPlaces(query: String!): [PlaceSuggestion!]!
   "Details for one suggestion, including photo and website."
@@ -329,4 +371,8 @@ type Mutation {
   importShopsFromYelp(location: String! = "San Francisco, CA"): [CoffeeShop!]!
   "Import coffee shops near a location from Google Places. Requires GOOGLE_PLACES_API_KEY on the server."
   importShopsFromGoogle(location: String! = "San Francisco, CA"): [CoffeeShop!]!
+  "Request ownership of a shop. Idempotent while a claim is pending. Requires sign-in."
+  claimShop(shopId: ID!, note: String): ShopClaim!
+  "Approve or reject a claim; approval sets the shop's owner. Requires ADMIN."
+  resolveClaim(claimId: ID!, approve: Boolean!): ShopClaim!
 }

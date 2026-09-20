@@ -12,4 +12,6 @@ SESSION_SECRET = os.getenv("SESSION_SECRET")
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY")
 YELP_API_KEY = os.getenv("YELP_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# Comma-separated emails granted ADMIN on sign-in; the only way to bootstrap an admin.
+ADMIN_EMAILS = {e.strip().lower() for e in os.getenv("ADMIN_EMAILS", "").split(",") if e.strip()}
 PORT = int(os.getenv("PORT", "4000"))

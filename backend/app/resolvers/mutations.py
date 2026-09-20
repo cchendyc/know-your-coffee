@@ -1,6 +1,7 @@
 from ariadne import MutationType
 from graphql import GraphQLError
 
+from .. import settings
 from ..auth import create_session_token, verify_google_id_token
 from ..services.google import fetch_shops_from_google, new_shop_from_place
 from ..services.vision import identify_machine, parse_menu
@@ -16,6 +17,14 @@ def _require_user(info) -> dict:
     return user
 
 
+def require_admin(info) -> dict:
+    user = _require_user(info)
+    record = info.context["repo"].get_user(user["id"])
+    if not record or record["role"] != "ADMIN":
+        raise GraphQLError("Admin access required.")
+    return user
+
+
 @mutation.field("signInWithGoogle")
 async def resolve_sign_in(_, info, idToken):
     identity = await verify_google_id_token(idToken)
@@ -25,6 +34,7 @@ async def resolve_sign_in(_, info, idToken):
             "email": identity["email"],
             "name": identity["name"],
             "picture": identity["picture"],
+            "role": "ADMIN" if identity["email"].lower() in settings.ADMIN_EMAILS else None,
         }
     )
     session = {"id": user["id"], "name": user["name"], "email": user["email"], "picture": user["picture"]}
@@ -95,3 +105,26 @@ async def resolve_import_yelp(_, info, location):
 async def resolve_import_google(_, info, location):
     shops = await fetch_shops_from_google(location)
     return info.context["repo"].upsert_shops(shops)
+
+
+@mutation.field("claimShop")
+def resolve_claim_shop(_, info, shopId, note=None):
+    user = _require_user(info)
+    repo = info.context["repo"]
+    shop = repo.get_shop(shopId)
+    if not shop:
+        raise GraphQLError(f"Shop {shopId} not found")
+    if shop.get("ownerId") == user["id"]:
+        raise GraphQLError("You already own this shop.")
+    if shop.get("ownerId"):
+        raise GraphQLError("This shop already has a verified owner. Contact an admin to dispute.")
+    return repo.create_claim(user["id"], shopId, note)
+
+
+@mutation.field("resolveClaim")
+def resolve_resolve_claim(_, info, claimId, approve):
+    require_admin(info)
+    claim = info.context["repo"].resolve_claim(claimId, approve)
+    if not claim:
+        raise GraphQLError(f"Claim {claimId} not found or already resolved.")
+    return claim

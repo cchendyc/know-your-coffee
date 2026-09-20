@@ -7,6 +7,7 @@ query = QueryType()
 coffee_shop = ObjectType("CoffeeShop")
 chain_type = ObjectType("Chain")
 user_type = ObjectType("User")
+claim_type = ObjectType("ShopClaim")
 
 
 @query.field("shops")
@@ -45,8 +46,29 @@ def resolve_cities(_, info):
 
 
 @query.field("me")
+@query.field("userNode")
 def resolve_me(_, info):
     return info.context["user"]
+
+
+@query.field("myShops")
+def resolve_my_shops(_, info):
+    user = info.context["user"]
+    return info.context["repo"].list_owned_shops(user["id"]) if user else []
+
+
+@query.field("myClaims")
+def resolve_my_claims(_, info):
+    user = info.context["user"]
+    return info.context["repo"].list_claims(user_id=user["id"]) if user else []
+
+
+@query.field("pendingClaims")
+def resolve_pending_claims(_, info):
+    from .mutations import require_admin
+
+    require_admin(info)
+    return info.context["repo"].list_claims(status="PENDING")
 
 
 @query.field("searchPlaces")
@@ -89,6 +111,18 @@ def resolve_photo_count(shop, info):
     return info.context["repo"].count_photos(shop["id"])
 
 
+@coffee_shop.field("ownedByMe")
+def resolve_owned_by_me(shop, info):
+    user = info.context["user"]
+    return bool(user and shop.get("ownerId") == user["id"])
+
+
+@claim_type.field("shop")
+def resolve_claim_shop(claim, info):
+    user = info.context["user"]
+    return info.context["repo"].get_shop(claim["shopId"], user["id"] if user else None)
+
+
 @coffee_shop.field("chain")
 def resolve_chain(shop, info):
     chain_id = shop.get("chainId")
@@ -101,6 +135,14 @@ def resolve_chain(shop, info):
 def resolve_chain_shops(chain, info):
     user = info.context["user"]
     return info.context["repo"].list_chain_shops(chain["id"], user["id"] if user else None)
+
+
+# Session tokens predate roles and repo user records may be richer than the
+# token; always read role from the store.
+@user_type.field("role")
+def resolve_role(user, info):
+    record = info.context["repo"].get_user(user["id"])
+    return record["role"] if record else "USER"
 
 
 # Saved/been counts are only meaningful for the session user (me / auth payload).

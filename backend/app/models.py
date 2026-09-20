@@ -40,6 +40,10 @@ ROAST_LEVELS = ["LIGHT", "MEDIUM", "DARK"]
 
 PHOTO_KINDS = ["MACHINE", "BEANS", "DRINKS", "MENU", "VIBE", "OTHER"]
 
+USER_ROLES = ["USER", "ADMIN"]
+
+CLAIM_STATUSES = ["PENDING", "APPROVED", "REJECTED"]
+
 
 # One espresso machine on the bar.
 class Machine(TypedDict):
@@ -101,6 +105,8 @@ class CoffeeShop(TypedDict):
     outdoorSeating: bool | None
     photoUrl: str | None
     website: str | None
+    # Set once an ownership claim is approved; owner edits outrank community reports.
+    ownerId: str | None
     savedByMe: bool
     beenByMe: bool
     updatedAt: str
@@ -159,6 +165,18 @@ class User(TypedDict):
     email: str
     name: str
     picture: str | None
+    role: str
+
+
+# A user's request to be recognized as a shop's owner; resolved by an admin.
+class ShopClaim(TypedDict):
+    id: str
+    shopId: str
+    userId: str
+    status: str
+    note: str | None
+    createdAt: str
+    resolvedAt: str | None
 
 
 class ShopPhoto(TypedDict):

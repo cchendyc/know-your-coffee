@@ -1,0 +1,64 @@
+{
+  "source": "/Users/cindy.chen/knowYourCoffee/ios/KnowYourCoffee/Views/ShopDetailView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Done",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 21
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@, %@",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 87
+        }
+      },
+      {
+        "comment": "",
+        "key": "Directions",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 103
+        }
+      },
+      {
+        "comment": "",
+        "key": "Website",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 110
+        }
+      },
+      {
+        "comment": "",
+        "key": "Milk: %@",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 161
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@, %@",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 349
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@, %@",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 435
+        }
+      }
+    ]
+  },
+  "version": 1
+}

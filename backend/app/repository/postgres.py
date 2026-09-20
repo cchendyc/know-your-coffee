@@ -7,7 +7,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Json
 from psycopg_pool import ConnectionPool
 
-from ..models import Chain, CoffeeShop, NewShop, Report, ShopPhoto, User
+from ..models import Chain, CoffeeShop, NewShop, Report, ShopClaim, ShopPhoto, User
 from .util import brand_name, cluster_shops, norm_coffees, split_search, slugify_brand
 
 
@@ -40,6 +40,7 @@ def _to_shop(r: dict) -> CoffeeShop:
         "outdoorSeating": r["outdoor_seating"],
         "photoUrl": r["photo_url"],
         "website": r["website"],
+        "ownerId": str(r["owner_user_id"]) if r.get("owner_user_id") else None,
         "savedByMe": bool(r.get("saved_by_me")),
         "beenByMe": bool(r.get("been_by_me")),
         "updatedAt": _iso(r["updated_at"]),
@@ -67,6 +68,29 @@ def _to_report(r: dict) -> Report:
         "source": r["source"],
         "reporter": {"name": r["reporter_name"], "picture": r["reporter_picture"]} if r.get("reporter_name") else None,
         "createdAt": _iso(r["created_at"]),
+    }
+
+
+def _to_user(r: dict) -> User:
+    return {
+        "id": str(r["id"]),
+        "googleSub": r["google_sub"],
+        "email": r["email"],
+        "name": r["name"],
+        "picture": r["picture"],
+        "role": r["role"],
+    }
+
+
+def _to_claim(r: dict) -> ShopClaim:
+    return {
+        "id": str(r["id"]),
+        "shopId": str(r["shop_id"]),
+        "userId": str(r["user_id"]),
+        "status": r["status"],
+        "note": r["note"],
+        "createdAt": _iso(r["created_at"]),
+        "resolvedAt": _iso(r["resolved_at"]) if r["resolved_at"] else None,
     }
 
 
@@ -366,21 +390,72 @@ class PostgresRepository:
         )
 
     def upsert_user(self, user: dict) -> User:
+        # Role only ever escalates here (ADMIN_EMAILS bootstrap); sign-in never demotes.
         rows = self._query(
-            """INSERT INTO users (google_sub, email, name, picture)
-               VALUES (%(googleSub)s, %(email)s, %(name)s, %(picture)s)
-               ON CONFLICT (google_sub) DO UPDATE SET email = %(email)s, name = %(name)s, picture = %(picture)s
+            """INSERT INTO users (google_sub, email, name, picture, role)
+               VALUES (%(googleSub)s, %(email)s, %(name)s, %(picture)s, COALESCE(%(role)s, 'USER'))
+               ON CONFLICT (google_sub) DO UPDATE SET
+                 email = %(email)s, name = %(name)s, picture = %(picture)s,
+                 role = CASE WHEN %(role)s = 'ADMIN' THEN 'ADMIN' ELSE users.role END
                RETURNING *""",
-            user,
+            {"role": None, **user},
         )
-        r = rows[0]
-        return {
-            "id": str(r["id"]),
-            "googleSub": r["google_sub"],
-            "email": r["email"],
-            "name": r["name"],
-            "picture": r["picture"],
-        }
+        return _to_user(rows[0])
+
+    def get_user(self, user_id: str) -> User | None:
+        rows = self._query("SELECT * FROM users WHERE id = %s", [user_id])
+        return _to_user(rows[0]) if rows else None
+
+    def list_owned_shops(self, user_id: str) -> list[CoffeeShop]:
+        rows = self._query(
+            """SELECT s.*, us.saved AS saved_by_me, us.been AS been_by_me
+               FROM shops s LEFT JOIN user_shops us ON us.shop_id = s.id AND us.user_id = %(user_id)s
+               WHERE s.owner_user_id = %(user_id)s ORDER BY s.name""",
+            {"user_id": user_id},
+        )
+        return [_to_shop(r) for r in rows]
+
+    def create_claim(self, user_id: str, shop_id: str, note: str | None) -> ShopClaim:
+        pending = self._query(
+            "SELECT * FROM shop_claims WHERE user_id = %s AND shop_id = %s AND status = 'PENDING'",
+            [user_id, shop_id],
+        )
+        if pending:
+            return _to_claim(pending[0])
+        rows = self._query(
+            """INSERT INTO shop_claims (shop_id, user_id, note)
+               VALUES (%(shop_id)s, %(user_id)s, %(note)s) RETURNING *""",
+            {"shop_id": shop_id, "user_id": user_id, "note": note},
+        )
+        return _to_claim(rows[0])
+
+    def list_claims(self, user_id: str | None = None, status: str | None = None) -> list[ShopClaim]:
+        conditions = ["true"]
+        params: dict[str, Any] = {"user_id": user_id, "status": status}
+        if user_id:
+            conditions.append("user_id = %(user_id)s")
+        if status:
+            conditions.append("status = %(status)s")
+        # Admins review oldest first; a user's own list shows newest first.
+        order = "created_at ASC" if status == "PENDING" else "created_at DESC"
+        rows = self._query(
+            f"SELECT * FROM shop_claims WHERE {' AND '.join(conditions)} ORDER BY {order}",
+            params,
+        )
+        return [_to_claim(r) for r in rows]
+
+    def resolve_claim(self, claim_id: str, approve: bool) -> ShopClaim | None:
+        rows = self._query(
+            """UPDATE shop_claims SET status = %s, resolved_at = now()
+               WHERE id = %s AND status = 'PENDING' RETURNING *""",
+            ["APPROVED" if approve else "REJECTED", claim_id],
+        )
+        if not rows:
+            return None
+        claim = _to_claim(rows[0])
+        if approve:
+            self._execute("UPDATE shops SET owner_user_id = %s WHERE id = %s", [claim["userId"], claim["shopId"]])
+        return claim
 
     def set_shop_status(self, user_id: str, shop_id: str, saved: bool | None, been: bool | None) -> None:
         self._execute(
