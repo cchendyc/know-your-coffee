@@ -30,6 +30,8 @@ export function AddShopModal({
   useEffect(() => {
     // Picking a place sets the input text; don't search again until the user edits it.
     if (preview || loadingPreview) return
+    // Places search is sign-in only; signed-out visitors get the banner instead.
+    if (!user) return
     const q = query.trim()
     latestQuery.current = q
     if (q.length < 3) {
@@ -46,7 +48,7 @@ export function AddShopModal({
         .finally(() => setSearching(false))
     }, 350)
     return () => clearTimeout(t)
-  }, [query, preview, loadingPreview])
+  }, [query, preview, loadingPreview, user])
 
   const pick = async (s: PlaceSuggestion) => {
     latestQuery.current = '' // discard any in-flight search results
@@ -103,9 +105,10 @@ export function AddShopModal({
               setQuery(e.target.value)
               setPreview(null)
             }}
-            placeholder="Search shop name…"
+            disabled={!user}
+            placeholder={user ? 'Search shop name…' : 'Sign in to search'}
             autoFocus
-            className="w-full rounded-xl border border-cream-200 bg-white px-3 py-2 text-sm outline-none focus:border-crema-400 focus:ring-2 focus:ring-crema-400/40"
+            className="w-full rounded-xl border border-cream-200 bg-white px-3 py-2 text-sm outline-none focus:border-crema-400 focus:ring-2 focus:ring-crema-400/40 disabled:cursor-not-allowed disabled:bg-cream-100 disabled:opacity-60"
           />
           {suggestions.length > 0 && (
             <ul className="absolute inset-x-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded-xl border border-cream-200 bg-white shadow-lg">

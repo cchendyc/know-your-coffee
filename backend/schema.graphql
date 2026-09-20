@@ -356,9 +356,9 @@ type Query {
   myClaims: [ShopClaim!]!
   "All unresolved claims, oldest first. Requires ADMIN."
   pendingClaims: [ShopClaim!]!
-  "Type-ahead shop search on Google Places, biased to the Bay Area. Requires GOOGLE_PLACES_API_KEY on the server."
+  "Type-ahead shop search on Google Places, biased to the Bay Area. Requires sign-in and GOOGLE_PLACES_API_KEY on the server."
   searchPlaces(query: String!): [PlaceSuggestion!]!
-  "Details for one suggestion, including photo and website."
+  "Details for one suggestion, including photo and website. Requires sign-in."
   placePreview(placeId: ID!): PlacePreview
 }
 
@@ -383,13 +383,13 @@ type Mutation {
   setShopStatus(shopId: ID!, saved: Boolean, been: Boolean): CoffeeShop!
   "Attach community photos to a shop, grouped by what they show. Requires sign-in."
   addShopPhotos(shopId: ID!, photos: [PhotoInput!]!): [ShopPhoto!]!
-  "Identify an espresso machine from a base64-encoded photo. Requires GEMINI_API_KEY on the server."
+  "Identify an espresso machine from a base64-encoded photo. Requires sign-in and GEMINI_API_KEY on the server."
   identifyMachine(imageBase64: String!): MachineGuess!
-  "Extract drinks and prices from a base64-encoded menu photo. Requires GEMINI_API_KEY on the server."
+  "Extract drinks and prices from a base64-encoded menu photo. Requires sign-in and GEMINI_API_KEY on the server."
   parseMenu(imageBase64: String!): [DrinkItem!]!
-  "Import coffee shops near a location from Yelp. Requires YELP_API_KEY on the server."
+  "Bulk-import coffee shops near a location from Yelp. Requires ADMIN and YELP_API_KEY on the server."
   importShopsFromYelp(location: String! = "San Francisco, CA"): [CoffeeShop!]!
-  "Import coffee shops near a location from Google Places. Requires GOOGLE_PLACES_API_KEY on the server."
+  "Bulk-import coffee shops near a location from Google Places. Requires ADMIN and GOOGLE_PLACES_API_KEY on the server."
   importShopsFromGoogle(location: String! = "San Francisco, CA"): [CoffeeShop!]!
   "Request ownership of a shop. Idempotent while a claim is pending. Requires sign-in."
   claimShop(shopId: ID!, note: String): ShopClaim!

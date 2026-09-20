@@ -2,6 +2,7 @@ from ariadne import ObjectType, QueryType
 
 from ..services.google import place_preview, search_places
 from ..services.nlsearch import parse_search
+from .mutations import _require_user, require_admin
 
 query = QueryType()
 coffee_shop = ObjectType("CoffeeShop")
@@ -69,14 +70,14 @@ def resolve_my_claims(_, info):
 
 @query.field("pendingClaims")
 def resolve_pending_claims(_, info):
-    from .mutations import require_admin
-
     require_admin(info)
     return info.context["repo"].list_claims(status="PENDING")
 
 
 @query.field("searchPlaces")
 async def resolve_search_places(_, info, query):
+    # Each call spends Google Places quota, so it is not open to anonymous traffic.
+    _require_user(info)
     if len(query.strip()) < 3:
         return []
     return await search_places(query.strip())
@@ -84,6 +85,7 @@ async def resolve_search_places(_, info, query):
 
 @query.field("placePreview")
 async def resolve_place_preview(_, info, placeId):
+    _require_user(info)
     preview = await place_preview(placeId)
     if not preview:
         return None

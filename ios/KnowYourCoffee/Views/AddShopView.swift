@@ -91,9 +91,10 @@ struct AddShopView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 14))
                 .foregroundStyle(Color.espresso500.opacity(0.55))
-            TextField("Shop name, e.g. Sightglass", text: $query)
+            TextField(auth.isSignedIn ? "Shop name, e.g. Sightglass" : "Sign in to search", text: $query)
                 .focused($focused)
                 .autocorrectionDisabled()
+                .disabled(!auth.isSignedIn)
                 .onChange(of: query) { search() }
             if searching { ProgressView().controlSize(.small) }
         }
@@ -102,13 +103,13 @@ struct AddShopView: View {
         .background(Color.espresso900.opacity(0.05), in: Capsule())
     }
 
-    // Debounced type-ahead; each Places call costs money server-side.
+    // Debounced type-ahead; each Places call costs money server-side and needs sign-in.
     private func search() {
         preview = nil
         error = nil
         searchTask?.cancel()
         let text = query.trimmingCharacters(in: .whitespaces)
-        guard text.count >= 3 else {
+        guard auth.isSignedIn, text.count >= 3 else {
             suggestions = []
             return
         }

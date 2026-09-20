@@ -225,22 +225,26 @@ def resolve_add_shop_photos(_, info, shopId, photos):
 
 @mutation.field("identifyMachine")
 async def resolve_identify_machine(_, info, imageBase64):
+    _require_user(info)
     return await identify_machine(imageBase64)
 
 
 @mutation.field("parseMenu")
 async def resolve_parse_menu(_, info, imageBase64):
+    _require_user(info)
     return await parse_menu(imageBase64)
 
 
 @mutation.field("importShopsFromYelp")
 async def resolve_import_yelp(_, info, location):
+    require_admin(info)
     shops = await fetch_shops_from_yelp(location)
     return info.context["repo"].upsert_shops(shops)
 
 
 @mutation.field("importShopsFromGoogle")
 async def resolve_import_google(_, info, location):
+    require_admin(info)
     shops = await fetch_shops_from_google(location)
     return info.context["repo"].upsert_shops(shops)
 
