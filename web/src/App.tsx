@@ -72,10 +72,21 @@ export default function App() {
   const [shops, setShops] = useState<CoffeeShop[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  // ?shop=<id> deep links (also what the iOS share sheet sends out).
+  const [selectedId, setSelectedId] = useState<string | null>(
+    () => new URLSearchParams(window.location.search).get('shop'),
+  )
   const [view, setView] = useState<'list' | 'map'>('list')
   const [user, setUser] = useState<User | null>(loadStoredUser)
   const [adding, setAdding] = useState(false)
+
+  // Keep ?shop=<id> in the URL so the open shop stays shareable.
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    if (selectedId) url.searchParams.set('shop', selectedId)
+    else url.searchParams.delete('shop')
+    window.history.replaceState(null, '', url)
+  }, [selectedId])
 
   // api.ts clears the stored login when the server rejects the session token.
   useEffect(() => {
