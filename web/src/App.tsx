@@ -155,7 +155,12 @@ export default function App() {
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 border-b border-cream-200 bg-cream-50/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-4 sm:px-6">
-          <img src="/icon-192.png" alt="Know Your Coffee" className="size-10 rounded-xl" />
+          <img
+            // BASE_URL keeps this working at github.io/<repo>/ and at the custom domain root.
+            src={`${import.meta.env.BASE_URL}icon-192.png`}
+            alt="Know Your Coffee"
+            className="size-10 rounded-xl"
+          />
           <div className="flex-1">
             <h1 className="text-lg font-bold tracking-tight">Know Your Coffee</h1>
             <p className="text-xs text-espresso-500">coffee snobs</p>
