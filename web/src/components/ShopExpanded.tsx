@@ -50,6 +50,8 @@ export function ShopExpanded({
           setReports(d.reports)
         }
       })
+      // On failure fall back to the drawer's preview slice instead of spinning.
+      .catch(() => undefined)
       .finally(() => setLoadingDetails(false))
   }
 

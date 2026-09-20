@@ -9,10 +9,10 @@ from starlette.middleware.cors import CORSMiddleware
 from .auth import verify_session_token
 from .repository import create_repository
 from .resolvers.mutations import mutation
-from .resolvers.queries import coffee_shop, query, user_type
+from .resolvers.queries import chain_type, coffee_shop, query, user_type
 
 type_defs = load_schema_from_path(Path(__file__).resolve().parents[1] / "schema.graphql")
-schema = make_executable_schema(type_defs, query, mutation, coffee_shop, user_type)
+schema = make_executable_schema(type_defs, query, mutation, coffee_shop, chain_type, user_type)
 
 repo = create_repository()
 

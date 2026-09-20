@@ -241,6 +241,7 @@ export default function App() {
           initialShop={shops.find((s) => s.id === selectedId)}
           user={user}
           onShopChanged={onShopChanged}
+          onOpenShop={setSelectedId}
           onClose={() => setSelectedId(null)}
         />
       )}

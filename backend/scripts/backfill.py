@@ -27,7 +27,8 @@ async def main() -> None:
         except Exception as e:  # noqa: BLE001 — one bad shop must not stop the run
             print(f"{shop['name']}: failed ({str(e)[:120]})")
 
-    print(f"done: {filled} shops updated, {len(shops) - filled} without new data")
+    linked = repo.relink_chains()
+    print(f"done: {filled} shops updated, {len(shops) - filled} without new data, {linked} shops linked into chains")
 
 
 asyncio.run(main())

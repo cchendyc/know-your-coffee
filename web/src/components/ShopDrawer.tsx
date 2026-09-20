@@ -37,8 +37,18 @@ export function ShopDrawer({
   // "Report an update" opens the full page with the form already showing.
   const [reportOnExpand, setReportOnExpand] = useState(false)
 
+  // null = loading, then success/failure. A failed hydration must stop the
+  // skeletons — otherwise they pulse forever over a shop with no photos.
+  const [hydrateFailed, setHydrateFailed] = useState(false)
+
   const load = useCallback(() => {
-    fetchShop(shopId).then(setShop)
+    setHydrateFailed(false)
+    fetchShop(shopId)
+      .then((full) => {
+        if (full) setShop(full)
+        else setHydrateFailed(true)
+      })
+      .catch(() => setHydrateFailed(true))
   }, [shopId])
 
   // Keep drawer state and the main list in sync after a save/been toggle.
@@ -158,12 +168,20 @@ export function ShopDrawer({
 
               <ChainLocations shop={shop} onOpenShop={onOpenShop} />
 
-              {!shop.photos && (
+              {!shop.photos && !hydrateFailed && (
                 <div className="mt-4 flex gap-2">
                   {[0, 1, 2].map((i) => (
                     <div key={i} className="size-20 animate-pulse rounded-xl bg-cream-100" />
                   ))}
                 </div>
+              )}
+              {hydrateFailed && !shop.photos && (
+                <p className="mt-4 rounded-2xl border border-cream-200 bg-white px-4 py-3 text-xs text-espresso-500">
+                  Couldn't load photos and reports.{' '}
+                  <button onClick={load} className="font-medium text-crema-500 hover:underline">
+                    Retry
+                  </button>
+                </p>
               )}
               {shop.photos && shop.photos.length > 0 && (
                 <button onClick={() => setExpanded(true)} className="mt-4 block w-full text-left">
@@ -214,7 +232,7 @@ export function ShopDrawer({
                     </button>
                   )}
                 </>
-              ) : (
+              ) : hydrateFailed ? null : (
                 <div className="mt-2 h-16 animate-pulse rounded-2xl bg-cream-100" />
               )}
             </div>

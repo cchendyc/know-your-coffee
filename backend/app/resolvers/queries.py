@@ -72,6 +72,20 @@ def resolve_photo_count(shop, info):
     return info.context["repo"].count_photos(shop["id"])
 
 
+@coffee_shop.field("chain")
+def resolve_chain(shop, info):
+    chain_id = shop.get("chainId")
+    if not chain_id:
+        return None
+    return info.context["repo"].get_chain(chain_id)
+
+
+@chain_type.field("shops")
+def resolve_chain_shops(chain, info):
+    user = info.context["user"]
+    return info.context["repo"].list_chain_shops(chain["id"], user["id"] if user else None)
+
+
 # Saved/been counts are only meaningful for the session user (me / auth payload).
 @user_type.field("savedCount")
 def resolve_saved_count(user, info):

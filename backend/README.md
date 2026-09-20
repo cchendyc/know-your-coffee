@@ -40,6 +40,7 @@ GraphQL explorer at http://localhost:4000/graphql. Without `DATABASE_URL` the AP
 .venv/bin/python -m scripts.enrich       # machine/roaster/milk from public reviews
 .venv/bin/python -m scripts.backfill     # shop photos + websites from Google Places
 .venv/bin/python -m scripts.dedup        # merge duplicates across Yelp/Google
+.venv/bin/python -m scripts.link_chains  # group locations that share a brand
 ```
 
 New migration: `.venv/bin/alembic revision -m "describe change"`, edit the file in `migrations/versions/`, then `alembic upgrade head`.

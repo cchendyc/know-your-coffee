@@ -194,8 +194,6 @@ class MemoryRepository:
         if shop:
             shop["photoUrl"] = meta.get("photoUrl") or shop["photoUrl"]
             shop["website"] = meta.get("website") or shop["website"]
-            if meta.get("website"):
-                self.relink_chains()
 
     def upsert_user(self, user: dict) -> User:
         existing = next((u for u in self._users.values() if u["googleSub"] == user["googleSub"]), None)

@@ -324,8 +324,6 @@ class PostgresRepository:
             "UPDATE shops SET photo_url = COALESCE(%s, photo_url), website = COALESCE(%s, website) WHERE id = %s",
             [meta.get("photoUrl"), meta.get("website"), shop_id],
         )
-        if meta.get("website"):
-            self.relink_chains()
 
     def upsert_user(self, user: dict) -> User:
         rows = self._query(
@@ -420,13 +418,16 @@ class PostgresRepository:
                 name = min((brand_name(m["name"]) for m in members), key=len)
                 slug = slugify_brand(name)
                 website = next((m["website"] for m in members if m.get("website")), None)
+                chain_id = None
                 if existing:
-                    chain_id = existing[0]
-                    conn.execute(
-                        "UPDATE chains SET name = %s, website = COALESCE(%s, website) WHERE id = %s",
-                        [name, website, chain_id],
-                    )
-                else:
+                    found = conn.execute("SELECT id FROM chains WHERE id = %s", [existing[0]]).fetchone()
+                    if found:
+                        chain_id = existing[0]
+                        conn.execute(
+                            "UPDATE chains SET name = %s, website = COALESCE(%s, website) WHERE id = %s",
+                            [name, website, chain_id],
+                        )
+                if chain_id is None:
                     row = conn.execute(
                         """INSERT INTO chains (name, slug, website) VALUES (%s, %s, %s)
                            ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name,
