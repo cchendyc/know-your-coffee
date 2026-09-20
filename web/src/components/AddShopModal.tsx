@@ -1,8 +1,12 @@
-import { useState } from 'react'
-import { addShop, type User } from '../api'
-
-const inputCls =
-  'w-full rounded-xl border border-cream-200 bg-white px-3 py-2 text-sm outline-none focus:border-crema-400 focus:ring-2 focus:ring-crema-400/40'
+import { useEffect, useRef, useState } from 'react'
+import {
+  addShopFromPlace,
+  fetchPlacePreview,
+  searchPlaces,
+  type PlacePreview,
+  type PlaceSuggestion,
+  type User,
+} from '../api'
 
 export function AddShopModal({
   user,
@@ -13,17 +17,58 @@ export function AddShopModal({
   onAdded: (id: string) => void
   onClose: () => void
 }) {
-  const [name, setName] = useState('')
-  const [address, setAddress] = useState('')
-  const [city, setCity] = useState('')
+  const [query, setQuery] = useState('')
+  const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([])
+  const [searching, setSearching] = useState(false)
+  const [preview, setPreview] = useState<PlacePreview | null>(null)
+  const [loadingPreview, setLoadingPreview] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const latestQuery = useRef('')
 
-  const submit = async () => {
+  // Debounced type-ahead against Google Places (via our API).
+  useEffect(() => {
+    if (preview) return // done searching once a place is picked
+    const q = query.trim()
+    latestQuery.current = q
+    if (q.length < 3) {
+      setSuggestions([])
+      return
+    }
+    setSearching(true)
+    const t = setTimeout(() => {
+      searchPlaces(q)
+        .then((results) => {
+          if (latestQuery.current === q) setSuggestions(results)
+        })
+        .catch((e: Error) => setError(e.message))
+        .finally(() => setSearching(false))
+    }, 350)
+    return () => clearTimeout(t)
+  }, [query, preview])
+
+  const pick = async (s: PlaceSuggestion) => {
+    setSuggestions([])
+    setQuery(s.name)
+    setLoadingPreview(true)
+    setError(null)
+    try {
+      const p = await fetchPlacePreview(s.placeId)
+      if (!p) throw new Error('Could not load that place. Try another result.')
+      setPreview(p)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setLoadingPreview(false)
+    }
+  }
+
+  const confirm = async () => {
+    if (!preview) return
     setSaving(true)
     setError(null)
     try {
-      const shop = await addShop(name.trim(), address.trim(), city.trim())
+      const shop = await addShopFromPlace(preview.placeId)
       onAdded(shop.id)
     } catch (e) {
       setError((e as Error).message)
@@ -41,29 +86,66 @@ export function AddShopModal({
             Cancel
           </button>
         </div>
+
         {!user && (
           <p className="rounded-xl border border-dashed border-crema-400 bg-crema-400/10 px-3 py-2 text-xs text-espresso-700">
             Sign in with Google (top right) to add shops.
           </p>
         )}
-        <p className="text-xs text-espresso-500">
-          We look it up on Google Places to fill in the exact location and photo.
-        </p>
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Shop name" className={inputCls} />
-        <input
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-          placeholder="Street address"
-          className={inputCls}
-        />
-        <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="City" className={inputCls} />
+
+        <div className="relative">
+          <input
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setPreview(null)
+            }}
+            placeholder="Search shop name…"
+            autoFocus
+            className="w-full rounded-xl border border-cream-200 bg-white px-3 py-2 text-sm outline-none focus:border-crema-400 focus:ring-2 focus:ring-crema-400/40"
+          />
+          {suggestions.length > 0 && (
+            <ul className="absolute inset-x-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded-xl border border-cream-200 bg-white shadow-lg">
+              {suggestions.map((s) => (
+                <li key={s.placeId}>
+                  <button
+                    onClick={() => pick(s)}
+                    className="w-full px-3 py-2 text-left transition hover:bg-cream-100"
+                  >
+                    <span className="block text-sm font-medium">{s.name}</span>
+                    <span className="block truncate text-xs text-espresso-500">{s.address}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {searching && !preview && <p className="text-xs text-espresso-500">Searching Google Maps…</p>}
+        {loadingPreview && <p className="text-xs text-espresso-500">Loading details…</p>}
+
+        {preview && (
+          <div className="overflow-hidden rounded-xl border border-cream-200 bg-white">
+            {preview.photoUrl && <img src={preview.photoUrl} alt={preview.name} className="h-36 w-full object-cover" />}
+            <div className="space-y-0.5 px-3 py-2.5">
+              <p className="text-sm font-semibold">{preview.name}</p>
+              <p className="text-xs text-espresso-500">
+                {preview.address}
+                {preview.city ? `, ${preview.city}` : ''}
+              </p>
+              {preview.website && <p className="truncate text-xs text-crema-500">{preview.website}</p>}
+            </div>
+          </div>
+        )}
+
         {error && <p className="text-xs text-red-600">{error}</p>}
+
         <button
-          onClick={submit}
-          disabled={!user || saving || !name.trim() || !address.trim() || !city.trim()}
+          onClick={confirm}
+          disabled={!user || !preview || saving || loadingPreview}
           className="w-full rounded-xl bg-espresso-700 py-2.5 text-sm font-semibold text-cream-50 transition hover:bg-espresso-900 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {saving ? 'Adding…' : 'Add shop'}
+          {saving ? 'Adding…' : preview ? `Add ${preview.name}` : 'Pick a shop above'}
         </button>
       </div>
     </div>

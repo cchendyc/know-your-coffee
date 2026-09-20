@@ -195,13 +195,46 @@ export function signInWithGoogle(idToken: string) {
   ).then((d) => d.signInWithGoogle)
 }
 
-export function addShop(name: string, address: string, city: string) {
-  return gql<{ addShop: CoffeeShop }>(
-    `mutation AddShop($name: String!, $address: String!, $city: String!) {
-      addShop(name: $name, address: $address, city: $city) { ${SHOP_FIELDS} }
+export interface PlaceSuggestion {
+  placeId: string
+  name: string
+  address: string
+}
+
+export interface PlacePreview {
+  placeId: string
+  name: string
+  address: string
+  city: string
+  lat: number
+  lng: number
+  photoUrl: string | null
+  website: string | null
+}
+
+export function searchPlaces(query: string) {
+  return gql<{ searchPlaces: PlaceSuggestion[] }>(
+    `query SearchPlaces($query: String!) { searchPlaces(query: $query) { placeId name address } }`,
+    { query },
+  ).then((d) => d.searchPlaces)
+}
+
+export function fetchPlacePreview(placeId: string) {
+  return gql<{ placePreview: PlacePreview | null }>(
+    `query PlacePreview($placeId: ID!) {
+      placePreview(placeId: $placeId) { placeId name address city lat lng photoUrl website }
     }`,
-    { name, address, city },
-  ).then((d) => d.addShop)
+    { placeId },
+  ).then((d) => d.placePreview)
+}
+
+export function addShopFromPlace(placeId: string) {
+  return gql<{ addShopFromPlace: CoffeeShop }>(
+    `mutation AddShopFromPlace($placeId: ID!) {
+      addShopFromPlace(placeId: $placeId) { ${SHOP_FIELDS} }
+    }`,
+    { placeId },
+  ).then((d) => d.addShopFromPlace)
 }
 
 export function identifyMachine(imageBase64: string) {

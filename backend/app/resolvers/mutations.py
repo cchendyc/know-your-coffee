@@ -2,7 +2,7 @@ from ariadne import MutationType
 from graphql import GraphQLError
 
 from ..auth import create_session_token, verify_google_id_token
-from ..services.google import fetch_shops_from_google, geocode_shop
+from ..services.google import fetch_shops_from_google, new_shop_from_place
 from ..services.vision import identify_machine, parse_menu
 from ..services.yelp import fetch_shops_from_yelp
 
@@ -31,12 +31,12 @@ async def resolve_sign_in(_, info, idToken):
     return {"token": create_session_token(session), "user": session}
 
 
-@mutation.field("addShop")
-async def resolve_add_shop(_, info, name, address, city):
+@mutation.field("addShopFromPlace")
+async def resolve_add_shop_from_place(_, info, placeId):
     _require_user(info)
-    shop = await geocode_shop(name, address, city)
+    shop = await new_shop_from_place(placeId)
     if not shop:
-        raise GraphQLError(f'Could not find "{name}" near {address}, {city} on Google Places.')
+        raise GraphQLError("That place could not be loaded from Google Places. Try searching again.")
     return info.context["repo"].upsert_shops([shop])[0]
 
 

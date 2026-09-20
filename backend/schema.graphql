@@ -148,6 +148,25 @@ type MachineGuess {
   notes: String
 }
 
+"A Google Places match while typing a shop name."
+type PlaceSuggestion {
+  placeId: ID!
+  name: String!
+  address: String!
+}
+
+"Full place details to prefill the add-shop form."
+type PlacePreview {
+  placeId: ID!
+  name: String!
+  address: String!
+  city: String!
+  lat: Float!
+  lng: Float!
+  photoUrl: String
+  website: String
+}
+
 input ReportInput {
   shopId: ID!
   machine: MachineBrand
@@ -175,13 +194,17 @@ type Query {
   shop(id: ID!): CoffeeShop
   cities: [String!]!
   me: User
+  "Type-ahead shop search on Google Places, biased to the Bay Area. Requires GOOGLE_PLACES_API_KEY on the server."
+  searchPlaces(query: String!): [PlaceSuggestion!]!
+  "Details for one suggestion, including photo and website."
+  placePreview(placeId: ID!): PlacePreview
 }
 
 type Mutation {
   "Exchange a Google ID token for a session token. Requires GOOGLE_OAUTH_CLIENT_ID on the server."
   signInWithGoogle(idToken: String!): AuthPayload!
-  "Add a coffee shop; the address is resolved via Google Places. Requires sign-in and GOOGLE_PLACES_API_KEY."
-  addShop(name: String!, address: String!, city: String!): CoffeeShop!
+  "Add the coffee shop behind a Places suggestion. Requires sign-in and GOOGLE_PLACES_API_KEY."
+  addShopFromPlace(placeId: ID!): CoffeeShop!
   "Submit a community report. Requires sign-in."
   submitReport(input: ReportInput!): Report!
   "Bookmark (saved) or mark visited (been). Omitted flags are left unchanged. Requires sign-in."

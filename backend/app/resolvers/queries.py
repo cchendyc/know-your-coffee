@@ -1,5 +1,7 @@
 from ariadne import ObjectType, QueryType
 
+from ..services.google import place_preview, search_places
+
 query = QueryType()
 coffee_shop = ObjectType("CoffeeShop")
 user_type = ObjectType("User")
@@ -27,6 +29,18 @@ def resolve_cities(_, info):
 @query.field("me")
 def resolve_me(_, info):
     return info.context["user"]
+
+
+@query.field("searchPlaces")
+async def resolve_search_places(_, info, query):
+    if len(query.strip()) < 3:
+        return []
+    return await search_places(query.strip())
+
+
+@query.field("placePreview")
+async def resolve_place_preview(_, info, placeId):
+    return await place_preview(placeId)
 
 
 @coffee_shop.field("reports")

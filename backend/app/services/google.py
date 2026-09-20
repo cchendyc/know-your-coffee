@@ -10,6 +10,14 @@ from ..models import NewShop
 
 _SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
 
+# Keep type-ahead results near the Bay Area.
+_BAY_AREA_BIAS = {
+    "rectangle": {
+        "low": {"latitude": 36.9, "longitude": -123.15},
+        "high": {"latitude": 38.7, "longitude": -121.2},
+    }
+}
+
 
 def _component(place: dict, kind: str) -> str | None:
     for c in place.get("addressComponents", []):
@@ -34,7 +42,12 @@ def _empty_shop_fields() -> dict:
     }
 
 
-async def _search(client: httpx.AsyncClient, query: str, field_mask: str, page_size: int) -> list[dict]:
+async def _search(
+    client: httpx.AsyncClient, query: str, field_mask: str, page_size: int, bias: dict | None = None
+) -> list[dict]:
+    body: dict = {"textQuery": query, "pageSize": page_size}
+    if bias:
+        body["locationBias"] = bias
     res = await client.post(
         _SEARCH_URL,
         headers={
@@ -42,11 +55,74 @@ async def _search(client: httpx.AsyncClient, query: str, field_mask: str, page_s
             "x-goog-api-key": settings.GOOGLE_PLACES_API_KEY,
             "x-goog-fieldmask": field_mask,
         },
-        json={"textQuery": query, "pageSize": page_size},
+        json=body,
     )
     if res.status_code != 200:
         raise GraphQLError(f"Google Places request failed: {res.status_code} {res.text}")
     return res.json().get("places") or []
+
+
+async def search_places(query: str) -> list[dict]:
+    """Type-ahead suggestions for the add-shop form."""
+    if not settings.GOOGLE_PLACES_API_KEY:
+        raise GraphQLError("Shop search is not configured (server is missing GOOGLE_PLACES_API_KEY).")
+    async with httpx.AsyncClient(timeout=15) as client:
+        places = await _search(
+            client,
+            query,
+            "places.id,places.displayName,places.formattedAddress",
+            6,
+            bias=_BAY_AREA_BIAS,
+        )
+    return [
+        {"placeId": p["id"], "name": p["displayName"]["text"], "address": p.get("formattedAddress", "")}
+        for p in places
+    ]
+
+
+async def place_preview(place_id: str) -> dict | None:
+    """Full details for one place: prefill data plus photo and website."""
+    if not settings.GOOGLE_PLACES_API_KEY:
+        raise GraphQLError("Shop search is not configured (server is missing GOOGLE_PLACES_API_KEY).")
+    async with httpx.AsyncClient(timeout=30) as client:
+        res = await client.get(
+            f"https://places.googleapis.com/v1/places/{place_id}",
+            headers={
+                "x-goog-api-key": settings.GOOGLE_PLACES_API_KEY,
+                "x-goog-fieldmask": "id,displayName,formattedAddress,addressComponents,location,photos,websiteUri",
+            },
+        )
+    if res.status_code != 200:
+        return None
+    p = res.json()
+    photos = p.get("photos") or []
+    street = " ".join(x for x in [_component(p, "street_number"), _component(p, "route")] if x)
+    return {
+        "placeId": p["id"],
+        "name": p["displayName"]["text"],
+        "address": street or (p.get("formattedAddress", "").split(",")[0]),
+        "city": _component(p, "locality") or _component(p, "sublocality") or "",
+        "lat": p["location"]["latitude"],
+        "lng": p["location"]["longitude"],
+        "photoUrl": await resolve_photo_url(photos[0]["name"]) if photos else None,
+        "website": p.get("websiteUri"),
+    }
+
+
+async def new_shop_from_place(place_id: str) -> NewShop | None:
+    preview = await place_preview(place_id)
+    if not preview:
+        return None
+    return {
+        **_empty_shop_fields(),
+        "name": preview["name"],
+        "address": preview["address"],
+        "city": preview["city"],
+        "lat": preview["lat"],
+        "lng": preview["lng"],
+        "photoUrl": preview["photoUrl"],
+        "website": preview["website"],
+    }
 
 
 async def fetch_shops_from_google(location: str) -> list[NewShop]:
@@ -95,35 +171,6 @@ async def resolve_photo_url(photo_name: str) -> str | None:
     if res.status_code != 200:
         return None
     return res.json().get("photoUri")
-
-
-async def geocode_shop(name: str, address: str, city: str) -> NewShop | None:
-    """Geocode a user-entered shop into a full NewShop record, including photo and website."""
-    if not settings.GOOGLE_PLACES_API_KEY:
-        raise GraphQLError("Adding shops requires GOOGLE_PLACES_API_KEY on the server.")
-
-    async with httpx.AsyncClient(timeout=30) as client:
-        places = await _search(
-            client,
-            f"{name} {address} {city}",
-            "places.displayName,places.location,places.addressComponents,places.photos,places.websiteUri",
-            1,
-        )
-    if not places:
-        return None
-    p = places[0]
-    photos = p.get("photos") or []
-    photo_url = await resolve_photo_url(photos[0]["name"]) if photos else None
-    return {
-        **_empty_shop_fields(),
-        "name": p["displayName"]["text"],
-        "address": " ".join(x for x in [_component(p, "street_number"), _component(p, "route")] if x) or address,
-        "city": _component(p, "locality") or city,
-        "lat": p["location"]["latitude"],
-        "lng": p["location"]["longitude"],
-        "photoUrl": photo_url,
-        "website": p.get("websiteUri"),
-    }
 
 
 class ShopMeta(TypedDict):
