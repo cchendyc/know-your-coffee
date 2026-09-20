@@ -161,8 +161,10 @@ class Report(TypedDict):
 
 class User(TypedDict):
     id: str
-    googleSub: str
-    email: str
+    googleSub: str | None
+    appleSub: str | None
+    email: str | None
+    phone: str | None  # E.164, for phone OTP accounts
     name: str
     picture: str | None
     role: str

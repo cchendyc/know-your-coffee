@@ -48,7 +48,11 @@ def resolve_cities(_, info):
 @query.field("me")
 @query.field("userNode")
 def resolve_me(_, info):
-    return info.context["user"]
+    user = info.context["user"]
+    if not user:
+        return None
+    # The session token predates fields like phone and role; prefer the stored record.
+    return info.context["repo"].get_user(user["id"]) or user
 
 
 @query.field("myShops")

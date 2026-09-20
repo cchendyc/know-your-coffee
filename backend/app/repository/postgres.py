@@ -1,5 +1,6 @@
 """Postgres repository (Neon). Plain SQL via psycopg; camelCase dicts out."""
 
+import hmac
 from datetime import datetime
 from typing import Any
 
@@ -75,7 +76,9 @@ def _to_user(r: dict) -> User:
     return {
         "id": str(r["id"]),
         "googleSub": r["google_sub"],
+        "appleSub": r["apple_sub"],
         "email": r["email"],
+        "phone": r["phone"],
         "name": r["name"],
         "picture": r["picture"],
         "role": r["role"],
@@ -405,6 +408,72 @@ class PostgresRepository:
     def get_user(self, user_id: str) -> User | None:
         rows = self._query("SELECT * FROM users WHERE id = %s", [user_id])
         return _to_user(rows[0]) if rows else None
+
+    def upsert_phone_user(self, phone: str, name: str) -> User:
+        # The no-op SET makes RETURNING work for existing rows; their name is kept.
+        rows = self._query(
+            """INSERT INTO users (phone, name) VALUES (%s, %s)
+               ON CONFLICT (phone) DO UPDATE SET phone = EXCLUDED.phone
+               RETURNING *""",
+            [phone, name],
+        )
+        return _to_user(rows[0])
+
+    def upsert_email_user(self, email: str, name: str) -> User:
+        # An email-code sign-in with a Google account's address is the same person.
+        rows = self._query("SELECT * FROM users WHERE lower(email) = lower(%s)", [email])
+        if rows:
+            return _to_user(rows[0])
+        rows = self._query("INSERT INTO users (email, name) VALUES (%s, %s) RETURNING *", [email, name])
+        return _to_user(rows[0])
+
+    def upsert_apple_user(self, apple_sub: str, email: str | None, name: str) -> User:
+        rows = self._query("SELECT * FROM users WHERE apple_sub = %s", [apple_sub])
+        if rows:
+            return _to_user(rows[0])
+        if email:
+            # Same address as an existing account (e.g. Google): link rather than duplicate.
+            rows = self._query(
+                "UPDATE users SET apple_sub = %s WHERE lower(email) = lower(%s) RETURNING *",
+                [apple_sub, email],
+            )
+            if rows:
+                return _to_user(rows[0])
+        rows = self._query(
+            "INSERT INTO users (apple_sub, email, name) VALUES (%s, %s, %s) RETURNING *",
+            [apple_sub, email, name],
+        )
+        return _to_user(rows[0])
+
+    def save_login_code(self, identifier: str, code_hash: str, ttl_seconds: int) -> None:
+        self._execute(
+            """INSERT INTO login_codes (identifier, code_hash, expires_at)
+               VALUES (%(id)s, %(hash)s, now() + %(ttl)s * interval '1 second')
+               ON CONFLICT (identifier) DO UPDATE SET
+                 code_hash = %(hash)s, attempts = 0,
+                 expires_at = now() + %(ttl)s * interval '1 second', created_at = now()""",
+            {"id": identifier, "hash": code_hash, "ttl": ttl_seconds},
+        )
+
+    def login_code_age(self, identifier: str) -> float | None:
+        rows = self._query(
+            "SELECT extract(epoch FROM now() - created_at) AS age FROM login_codes WHERE identifier = %s",
+            [identifier],
+        )
+        return float(rows[0]["age"]) if rows else None
+
+    def use_login_code(self, identifier: str, code_hash: str) -> bool:
+        # Count the attempt first so guessing burns tries even on mismatch; 5 max.
+        rows = self._query(
+            """UPDATE login_codes SET attempts = attempts + 1
+               WHERE identifier = %s AND expires_at > now() AND attempts < 5
+               RETURNING code_hash""",
+            [identifier],
+        )
+        ok = bool(rows) and hmac.compare_digest(rows[0]["code_hash"], code_hash)
+        if ok:
+            self._execute("DELETE FROM login_codes WHERE identifier = %s", [identifier])
+        return ok
 
     def list_owned_shops(self, user_id: str) -> list[CoffeeShop]:
         rows = self._query(

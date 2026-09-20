@@ -207,7 +207,10 @@ type ShopPage {
 type User implements Node {
   id: ID!
   name: String!
-  email: String!
+  "Null for phone-only accounts."
+  email: String
+  "E.164 phone, set for phone sign-in accounts."
+  phone: String
   picture: String
   role: UserRole!
   "Shops on the viewer's saved list."
@@ -236,6 +239,13 @@ type Reporter {
 type AuthPayload {
   token: String!
   user: User!
+}
+
+type SignInCodeRequest {
+  "True when the code went out by SMS or email."
+  sent: Boolean!
+  "Dev only: set when no SMS/email provider is configured, so local sign-in works."
+  devCode: String
 }
 
 type Report implements Node {
@@ -355,6 +365,16 @@ type Query {
 type Mutation {
   "Exchange a Google ID token for a session token. Requires GOOGLE_OAUTH_CLIENT_ID on the server."
   signInWithGoogle(idToken: String!): AuthPayload!
+  "Exchange a Sign in with Apple identity token for a session token. Pass the name Apple provides on first authorization."
+  signInWithApple(identityToken: String!, name: String): AuthPayload!
+  "Text a 6-digit code to a phone number. US numbers may omit the +1."
+  startPhoneSignIn(phone: String!): SignInCodeRequest!
+  "Exchange a phone number and its code for a session token; creates the account on first use."
+  signInWithPhone(phone: String!, code: String!): AuthPayload!
+  "Email a 6-digit code. Requires RESEND_API_KEY on the server (dev mode returns the code)."
+  startEmailSignIn(email: String!): SignInCodeRequest!
+  "Exchange an email and its code for a session token; creates or links the account."
+  signInWithEmail(email: String!, code: String!): AuthPayload!
   "Add the coffee shop behind a Places suggestion. Requires sign-in and GOOGLE_PLACES_API_KEY."
   addShopFromPlace(placeId: ID!): CoffeeShop!
   "Submit a community report. Requires sign-in."

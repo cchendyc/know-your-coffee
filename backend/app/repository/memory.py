@@ -1,5 +1,7 @@
 """In-memory repository for local development without a database."""
 
+import hmac
+import time
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -84,6 +86,7 @@ class MemoryRepository:
         self._photos: dict[str, list[ShopPhoto]] = {}
         self._statuses: dict[tuple[str, str], dict] = {}  # (user_id, shop_id)
         self._claims: dict[str, ShopClaim] = {}
+        self._login_codes: dict[str, dict] = {}
 
     def _with_flags(self, shop: CoffeeShop, user_id: str | None) -> CoffeeShop:
         status = self._statuses.get((user_id, shop["id"])) if user_id else None
@@ -231,12 +234,76 @@ class MemoryRepository:
         existing = next((u for u in self._users.values() if u["googleSub"] == user["googleSub"]), None)
         # Role only ever escalates here (ADMIN_EMAILS bootstrap); sign-in never demotes.
         role = "ADMIN" if user.get("role") == "ADMIN" or (existing or {}).get("role") == "ADMIN" else "USER"
-        record: User = {**user, "role": role, "id": existing["id"] if existing else str(uuid4())}
+        record: User = {
+            "phone": None,
+            "appleSub": None,
+            **user,
+            "role": role,
+            "id": existing["id"] if existing else str(uuid4()),
+        }
         self._users[record["id"]] = record
         return record
 
     def get_user(self, user_id: str) -> User | None:
         return self._users.get(user_id)
+
+    def _new_user(self, **fields) -> User:
+        record: User = {
+            "id": str(uuid4()),
+            "googleSub": None,
+            "appleSub": None,
+            "email": None,
+            "phone": None,
+            "picture": None,
+            "role": "USER",
+            **fields,
+        }
+        self._users[record["id"]] = record
+        return record
+
+    def upsert_phone_user(self, phone: str, name: str) -> User:
+        existing = next((u for u in self._users.values() if u.get("phone") == phone), None)
+        return existing or self._new_user(phone=phone, name=name)
+
+    def upsert_email_user(self, email: str, name: str) -> User:
+        # An email-code sign-in with a Google account's address is the same person.
+        existing = next((u for u in self._users.values() if (u.get("email") or "").lower() == email.lower()), None)
+        return existing or self._new_user(email=email, name=name)
+
+    def upsert_apple_user(self, apple_sub: str, email: str | None, name: str) -> User:
+        existing = next((u for u in self._users.values() if u.get("appleSub") == apple_sub), None)
+        if existing:
+            return existing
+        if email:
+            # Same address as an existing account (e.g. Google): link rather than duplicate.
+            match = next((u for u in self._users.values() if (u.get("email") or "").lower() == email.lower()), None)
+            if match:
+                match["appleSub"] = apple_sub
+                return match
+        return self._new_user(appleSub=apple_sub, email=email, name=name)
+
+    def save_login_code(self, identifier: str, code_hash: str, ttl_seconds: int) -> None:
+        self._login_codes[identifier] = {
+            "hash": code_hash,
+            "attempts": 0,
+            "expiresAt": time.time() + ttl_seconds,
+            "createdAt": time.time(),
+        }
+
+    def login_code_age(self, identifier: str) -> float | None:
+        entry = self._login_codes.get(identifier)
+        return time.time() - entry["createdAt"] if entry else None
+
+    def use_login_code(self, identifier: str, code_hash: str) -> bool:
+        entry = self._login_codes.get(identifier)
+        # Count the attempt first so guessing burns tries even on mismatch; 5 max.
+        if not entry or entry["expiresAt"] < time.time() or entry["attempts"] >= 5:
+            return False
+        entry["attempts"] += 1
+        ok = hmac.compare_digest(entry["hash"], code_hash)
+        if ok:
+            del self._login_codes[identifier]
+        return ok
 
     def list_owned_shops(self, user_id: str) -> list[CoffeeShop]:
         owned = [s for s in self._shops.values() if s.get("ownerId") == user_id]

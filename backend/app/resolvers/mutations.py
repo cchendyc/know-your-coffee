@@ -1,8 +1,18 @@
+import re
+import secrets
+
 from ariadne import MutationType
 from graphql import GraphQLError
 
 from .. import settings
-from ..auth import create_session_token, verify_google_id_token
+from ..auth import (
+    create_session_token,
+    hash_login_code,
+    verify_apple_identity_token,
+    verify_google_id_token,
+)
+from ..services import email as email_service
+from ..services import sms
 from ..services.google import fetch_shops_from_google, new_shop_from_place
 from ..services.vision import identify_machine, parse_menu
 from ..services.yelp import fetch_shops_from_yelp
@@ -13,7 +23,8 @@ mutation = MutationType()
 def _require_user(info) -> dict:
     user = info.context["user"]
     if not user:
-        raise GraphQLError("Sign in with Google to contribute.")
+        # Clients match on "Sign in" + "contribute" to detect a stale session.
+        raise GraphQLError("Sign in to contribute.")
     return user
 
 
@@ -38,7 +49,121 @@ async def resolve_sign_in(_, info, idToken):
         }
     )
     session = {"id": user["id"], "name": user["name"], "email": user["email"], "picture": user["picture"]}
-    return {"token": create_session_token(session), "user": session}
+    return {"token": create_session_token(session), "user": user}
+
+
+_CODE_TTL_SECONDS = 600
+_RESEND_COOLDOWN_SECONDS = 60
+
+
+def _normalize_phone(raw: str) -> str:
+    """To E.164. Bare 10-digit numbers are assumed US."""
+    digits = re.sub(r"\D", "", raw)
+    if raw.strip().startswith("+"):
+        normalized = f"+{digits}"
+    elif len(digits) == 10:
+        normalized = f"+1{digits}"
+    elif len(digits) == 11 and digits.startswith("1"):
+        normalized = f"+{digits}"
+    else:
+        raise GraphQLError("Enter the number with a country code, e.g. +14155551234.")
+    if not 8 <= len(digits) <= 15:
+        raise GraphQLError("That phone number doesn't look valid.")
+    return normalized
+
+
+def _issue_login_code(repo, identifier: str) -> str:
+    """Cooldown check + fresh 6-digit code, stored hashed."""
+    age = repo.login_code_age(identifier)
+    if age is not None and age < _RESEND_COOLDOWN_SECONDS:
+        raise GraphQLError(f"A code was just sent. You can resend in {int(_RESEND_COOLDOWN_SECONDS - age)}s.")
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    repo.save_login_code(identifier, hash_login_code(identifier, code), _CODE_TTL_SECONDS)
+    return code
+
+
+def _session_payload(user) -> dict:
+    session = {"id": user["id"], "name": user["name"], "email": user["email"], "picture": user["picture"]}
+    return {"token": create_session_token(session), "user": user}
+
+
+@mutation.field("startPhoneSignIn")
+async def resolve_start_phone_sign_in(_, info, phone):
+    normalized = _normalize_phone(phone)
+    code = _issue_login_code(info.context["repo"], normalized)
+    if sms.configured():
+        try:
+            await sms.send_sms(normalized, f"{code} is your Know Your Coffee sign-in code.")
+        except RuntimeError as e:
+            print(f"phone sign-in: {e}")
+            raise GraphQLError("The text message could not be sent. Check the number and try again.")
+        return {"sent": True, "devCode": None}
+    if not settings.AUTH_DEV_CODES:
+        raise GraphQLError("Phone sign-in is not available on this server yet.")
+    # Dev fallback: no SMS provider, so hand the code back (AUTH_DEV_CODES=1 only).
+    print(f"phone sign-in (SMS not configured): code for {normalized} is {code}")
+    return {"sent": False, "devCode": code}
+
+
+@mutation.field("signInWithPhone")
+def resolve_sign_in_with_phone(_, info, phone, code):
+    repo = info.context["repo"]
+    normalized = _normalize_phone(phone)
+    if not repo.use_login_code(normalized, hash_login_code(normalized, code.strip())):
+        raise GraphQLError("That code is wrong or expired. Request a new one.")
+    # Public display name must not expose the full number; last 4 is enough.
+    return _session_payload(repo.upsert_phone_user(normalized, name=f"Coffee fan {normalized[-4:]}"))
+
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _normalize_email(raw: str) -> str:
+    normalized = raw.strip().lower()
+    if not _EMAIL_RE.match(normalized):
+        raise GraphQLError("That doesn't look like an email address.")
+    return normalized
+
+
+@mutation.field("startEmailSignIn")
+async def resolve_start_email_sign_in(_, info, email):
+    normalized = _normalize_email(email)
+    code = _issue_login_code(info.context["repo"], normalized)
+    if email_service.configured():
+        try:
+            await email_service.send_email(
+                normalized,
+                subject=f"{code} is your Know Your Coffee sign-in code",
+                text=f"{code} is your Know Your Coffee sign-in code. It expires in 10 minutes.",
+            )
+        except RuntimeError as e:
+            print(f"email sign-in: {e}")
+            raise GraphQLError("The email could not be sent. Check the address and try again.")
+        return {"sent": True, "devCode": None}
+    if not settings.AUTH_DEV_CODES:
+        raise GraphQLError("Email sign-in is not available on this server yet.")
+    # Dev fallback: no email provider, so hand the code back (AUTH_DEV_CODES=1 only).
+    print(f"email sign-in (Resend not configured): code for {normalized} is {code}")
+    return {"sent": False, "devCode": code}
+
+
+@mutation.field("signInWithEmail")
+def resolve_sign_in_with_email(_, info, email, code):
+    repo = info.context["repo"]
+    normalized = _normalize_email(email)
+    if not repo.use_login_code(normalized, hash_login_code(normalized, code.strip())):
+        raise GraphQLError("That code is wrong or expired. Request a new one.")
+    return _session_payload(repo.upsert_email_user(normalized, name=normalized.split("@")[0]))
+
+
+@mutation.field("signInWithApple")
+async def resolve_sign_in_with_apple(_, info, identityToken, name=None):
+    identity = await verify_apple_identity_token(identityToken)
+    # Apple sends the name only on first authorization, and only client-side.
+    user = info.context["repo"].upsert_apple_user(
+        identity["sub"], identity["email"], name=(name or "").strip() or "Coffee fan"
+    )
+    return _session_payload(user)
 
 
 @mutation.field("addShopFromPlace")
