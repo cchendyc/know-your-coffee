@@ -7,6 +7,62 @@ import { MapView } from './components/MapView'
 import { AuthButton, loadStoredUser } from './components/AuthButton'
 import { AddShopModal } from './components/AddShopModal'
 
+// Native <select> pops the OS menu, which ignores the app theme entirely;
+// this draws the same styled list the report form dropdowns use.
+function MachineFilter({
+  value,
+  onChange,
+}: {
+  value: MachineBrand | ''
+  onChange: (value: MachineBrand | '') => void
+}) {
+  const [open, setOpen] = useState(false)
+  const options: (MachineBrand | '')[] = ['', ...MACHINE_BRANDS.filter((b) => b !== 'UNKNOWN')]
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        onBlur={() => setOpen(false)}
+        className="flex w-full items-center justify-between gap-2 rounded-2xl border border-cream-200 bg-white px-4 py-3 text-sm whitespace-nowrap shadow-sm outline-none focus:border-crema-400 sm:w-48"
+      >
+        <span className={value ? '' : 'text-espresso-500/60'}>{value ? MACHINE_LABELS[value] : 'Any machine'}</span>
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          className={`size-4 shrink-0 text-espresso-500 transition-transform ${open ? 'rotate-180' : ''}`}
+        >
+          <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <ul className="absolute right-0 z-20 mt-1 max-h-72 w-full min-w-48 overflow-y-auto rounded-xl border border-cream-200 bg-white py-1 shadow-lg">
+          {options.map((b) => (
+            <li key={b || 'any'}>
+              <button
+                type="button"
+                // mousedown fires before the trigger's blur closes the list.
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  onChange(b)
+                  setOpen(false)
+                }}
+                className="flex w-full items-center justify-between px-3 py-1.5 text-left text-sm hover:bg-cream-100"
+              >
+                {b ? MACHINE_LABELS[b] : 'Any machine'}
+                {value === b && <span className="text-crema-500">✓</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 export default function App() {
   const [search, setSearch] = useState('')
   const [machine, setMachine] = useState<MachineBrand | ''>('')
@@ -113,18 +169,7 @@ export default function App() {
               className="w-full rounded-2xl border border-cream-200 bg-white py-3 pr-4 pl-12 text-sm shadow-sm outline-none placeholder:text-espresso-500/60 focus:border-crema-400 focus:ring-2 focus:ring-crema-400/40"
             />
           </div>
-          <select
-            value={machine}
-            onChange={(e) => setMachine(e.target.value as MachineBrand | '')}
-            className="rounded-2xl border border-cream-200 bg-white px-4 py-3 text-sm shadow-sm outline-none focus:border-crema-400"
-          >
-            <option value="">Any machine</option>
-            {MACHINE_BRANDS.filter((b) => b !== 'UNKNOWN').map((b) => (
-              <option key={b} value={b}>
-                {MACHINE_LABELS[b]}
-              </option>
-            ))}
-          </select>
+          <MachineFilter value={machine} onChange={setMachine} />
         </div>
 
         {error && (

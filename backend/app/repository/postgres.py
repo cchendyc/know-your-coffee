@@ -158,8 +158,9 @@ class PostgresRepository:
         select = "s.*, us.saved AS saved_by_me, us.been AS been_by_me" if user_id else "s.*"
 
         if filter.get("machine"):
-            # Match the primary or any machine on the bar.
-            conditions.append("(machine = %(machine)s OR machines @> %(machine_json)s)")
+            # Match the primary or any machine on the bar. The cast matters:
+            # Json params bind as json, and @> only exists for jsonb.
+            conditions.append("(machine = %(machine)s OR machines @> %(machine_json)s::jsonb)")
             params["machine"] = filter["machine"]
             params["machine_json"] = Json([{"brand": filter["machine"]}])
         if filter.get("city"):

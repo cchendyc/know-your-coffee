@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { fetchShopLite, setShopStatus, type CoffeeShop, type User } from '../api'
 import { AMENITIES, BEAN_SOURCE_LABELS, coffeeSummary, machineDisplay } from '../labels'
 import { ShopExpanded } from './ShopExpanded'
@@ -76,6 +76,9 @@ export function ShopDrawer({
   // "Update" opens the full page with the form already showing.
   const [reportOnExpand, setReportOnExpand] = useState(false)
   const [busy, setBusy] = useState(false)
+  // Set when navigating between chain locations from the detail page, so
+  // the new shop opens straight to its detail page too.
+  const stayExpanded = useRef(false)
 
   // Keep drawer state and the main list in sync after a save/been toggle.
   const onStatusChanged = (updated: CoffeeShop) => {
@@ -97,7 +100,8 @@ export function ShopDrawer({
   }
 
   useEffect(() => {
-    setExpanded(false)
+    setExpanded(stayExpanded.current)
+    stayExpanded.current = false
     setReportOnExpand(false)
     setLoadFailed(false)
     if (initialShop && initialShop.id === shopId) {
@@ -298,7 +302,10 @@ export function ShopDrawer({
           initialReporting={reportOnExpand}
           onChanged={onStatusChanged}
           onHydrated={setShop}
-          onOpenShop={onOpenShop}
+          onOpenShop={(id) => {
+            stayExpanded.current = true
+            onOpenShop(id)
+          }}
           onClose={() => {
             setExpanded(false)
             setReportOnExpand(false)
