@@ -70,20 +70,22 @@ export function AuthButton({ user, onChange }: { user: User | null; onChange: (u
   }
 
   return (
-    <div className="flex items-center gap-2">
-      {CLIENT_ID ? (
-        <div ref={buttonRef} />
-      ) : (
-        <button
-          disabled
-          title="Set VITE_GOOGLE_CLIENT_ID in web/.env.local to enable Google sign-in"
-          className="cursor-not-allowed rounded-full border border-cream-200 px-3 py-1.5 text-xs font-medium text-espresso-500 opacity-60"
-        >
-          Google
-        </button>
-      )}
-      <EmailSignIn onChange={onChange} />
-      {error && <p className="text-xs text-red-600">{error}</p>}
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex items-center gap-2">
+        {CLIENT_ID ? (
+          <div ref={buttonRef} />
+        ) : (
+          <button
+            disabled
+            title="Set VITE_GOOGLE_CLIENT_ID in web/.env.local to enable Google sign-in"
+            className="cursor-not-allowed rounded-full border border-cream-200 px-3 py-1.5 text-xs font-medium text-espresso-500 opacity-60"
+          >
+            Google
+          </button>
+        )}
+        <EmailSignIn onChange={onChange} />
+      </div>
+      {error && <p className="max-w-xs text-right text-xs text-red-600">{error}</p>}
     </div>
   )
 }

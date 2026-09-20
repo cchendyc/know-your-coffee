@@ -11,6 +11,7 @@ from ..auth import (
     verify_apple_identity_token,
     verify_google_id_token,
 )
+from ..repository import DuplicateEmailError
 from ..services import email as email_service
 from ..services import sms
 from ..services.google import fetch_shops_from_google, new_shop_from_place
@@ -39,17 +40,18 @@ def require_admin(info) -> dict:
 @mutation.field("signInWithGoogle")
 async def resolve_sign_in(_, info, idToken):
     identity = await verify_google_id_token(idToken)
-    user = info.context["repo"].upsert_user(
-        {
-            "googleSub": identity["sub"],
-            "email": identity["email"],
-            "name": identity["name"],
-            "picture": identity["picture"],
-            "role": "ADMIN" if identity["email"].lower() in settings.ADMIN_EMAILS else None,
-        }
+    email = identity["email"].lower()
+    return _commit_sign_in(
+        lambda: info.context["repo"].upsert_user(
+            {
+                "googleSub": identity["sub"],
+                "email": email,
+                "name": identity["name"],
+                "picture": identity["picture"],
+                "role": "ADMIN" if email in settings.ADMIN_EMAILS else None,
+            }
+        )
     )
-    session = {"id": user["id"], "name": user["name"], "email": user["email"], "picture": user["picture"]}
-    return {"token": create_session_token(session), "user": user}
 
 
 _CODE_TTL_SECONDS = 600
@@ -87,6 +89,13 @@ def _session_payload(user) -> dict:
     return {"token": create_session_token(session), "user": user}
 
 
+def _commit_sign_in(fn):
+    try:
+        return _session_payload(fn())
+    except DuplicateEmailError as e:
+        raise GraphQLError(str(e))
+
+
 @mutation.field("startPhoneSignIn")
 async def resolve_start_phone_sign_in(_, info, phone):
     normalized = _normalize_phone(phone)
@@ -112,7 +121,9 @@ def resolve_sign_in_with_phone(_, info, phone, code):
     if not repo.use_login_code(normalized, hash_login_code(normalized, code.strip())):
         raise GraphQLError("That code is wrong or expired. Request a new one.")
     # Public display name must not expose the full number; last 4 is enough.
-    return _session_payload(repo.upsert_phone_user(normalized, name=f"Coffee fan {normalized[-4:]}"))
+    return _commit_sign_in(
+        lambda: repo.upsert_phone_user(normalized, name=f"Coffee fan {normalized[-4:]}")
+    )
 
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -153,17 +164,19 @@ def resolve_sign_in_with_email(_, info, email, code):
     normalized = _normalize_email(email)
     if not repo.use_login_code(normalized, hash_login_code(normalized, code.strip())):
         raise GraphQLError("That code is wrong or expired. Request a new one.")
-    return _session_payload(repo.upsert_email_user(normalized, name=normalized.split("@")[0]))
+    return _commit_sign_in(lambda: repo.upsert_email_user(normalized, name=normalized.split("@")[0]))
 
 
 @mutation.field("signInWithApple")
 async def resolve_sign_in_with_apple(_, info, identityToken, name=None):
     identity = await verify_apple_identity_token(identityToken)
     # Apple sends the name only on first authorization, and only client-side.
-    user = info.context["repo"].upsert_apple_user(
-        identity["sub"], identity["email"], name=(name or "").strip() or "Coffee fan"
+    email = identity["email"].lower() if identity.get("email") else None
+    return _commit_sign_in(
+        lambda: info.context["repo"].upsert_apple_user(
+            identity["sub"], email, name=(name or "").strip() or "Coffee fan"
+        )
     )
-    return _session_payload(user)
 
 
 @mutation.field("addShopFromPlace")

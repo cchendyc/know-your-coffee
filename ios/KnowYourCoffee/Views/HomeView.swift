@@ -115,25 +115,10 @@ struct HomeView: View {
         .frame(height: 44)
     }
 
-    @ViewBuilder
     private var profileIcon: some View {
-        if let picture = auth.user?.picture, let url = URL(string: picture) {
-            AsyncImage(url: url) { phase in
-                if case .success(let image) = phase {
-                    image.resizable().scaledToFill()
-                } else {
-                    Image(systemName: "person.crop.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundStyle(Color.espresso500)
-                }
-            }
-            .frame(width: 28, height: 28)
-            .clipShape(Circle())
-        } else {
-            Image(systemName: "line.3.horizontal")
-                .font(.system(size: 19, weight: .medium))
-                .foregroundStyle(Color.espresso700)
-        }
+        Image(systemName: "line.3.horizontal")
+            .font(.system(size: 19, weight: .medium))
+            .foregroundStyle(Color.espresso700)
     }
 
     private var expandedSearchRow: some View {

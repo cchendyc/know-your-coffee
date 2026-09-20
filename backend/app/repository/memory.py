@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from ..models import Chain, CoffeeShop, NewShop, Report, ShopClaim, ShopPhoto, User
+from . import DuplicateEmailError, EMAIL_IN_USE
 from .util import brand_name, cluster_shops, is_same_shop, norm_coffees, split_search, slugify_brand
 
 
@@ -241,18 +242,42 @@ class MemoryRepository:
             shop["website"] = meta.get("website") or shop["website"]
 
     def upsert_user(self, user: dict) -> User:
-        existing = next((u for u in self._users.values() if u["googleSub"] == user["googleSub"]), None)
-        # Role only ever escalates here (ADMIN_EMAILS bootstrap); sign-in never demotes.
-        role = "ADMIN" if user.get("role") == "ADMIN" or (existing or {}).get("role") == "ADMIN" else "USER"
-        record: User = {
-            "phone": None,
-            "appleSub": None,
-            **user,
-            "role": role,
-            "id": existing["id"] if existing else str(uuid4()),
-        }
-        self._users[record["id"]] = record
-        return record
+        email = (user.get("email") or "").lower() or None
+        existing = next((u for u in self._users.values() if u.get("googleSub") == user["googleSub"]), None)
+        if not existing and email:
+            by_email = next(
+                (u for u in self._users.values() if (u.get("email") or "").lower() == email),
+                None,
+            )
+            if by_email:
+                if by_email.get("googleSub") and by_email["googleSub"] != user["googleSub"]:
+                    raise DuplicateEmailError(EMAIL_IN_USE)
+                existing = by_email
+        if existing:
+            other = next(
+                (
+                    u
+                    for u in self._users.values()
+                    if u["id"] != existing["id"] and email and (u.get("email") or "").lower() == email
+                ),
+                None,
+            )
+            if other:
+                raise DuplicateEmailError(EMAIL_IN_USE)
+            role = "ADMIN" if user.get("role") == "ADMIN" or existing.get("role") == "ADMIN" else existing["role"]
+            existing["googleSub"] = user["googleSub"]
+            existing["email"] = email or existing.get("email")
+            existing["name"] = user["name"]
+            existing["picture"] = user.get("picture") or existing.get("picture")
+            existing["role"] = role
+            return existing
+        return self._new_user(
+            googleSub=user["googleSub"],
+            email=email,
+            name=user["name"],
+            picture=user.get("picture"),
+            role="ADMIN" if user.get("role") == "ADMIN" else "USER",
+        )
 
     def get_user(self, user_id: str) -> User | None:
         return self._users.get(user_id)
@@ -276,18 +301,20 @@ class MemoryRepository:
         return existing or self._new_user(phone=phone, name=name)
 
     def upsert_email_user(self, email: str, name: str) -> User:
-        # An email-code sign-in with a Google account's address is the same person.
-        existing = next((u for u in self._users.values() if (u.get("email") or "").lower() == email.lower()), None)
+        email = email.lower()
+        existing = next((u for u in self._users.values() if (u.get("email") or "").lower() == email), None)
         return existing or self._new_user(email=email, name=name)
 
     def upsert_apple_user(self, apple_sub: str, email: str | None, name: str) -> User:
         existing = next((u for u in self._users.values() if u.get("appleSub") == apple_sub), None)
         if existing:
             return existing
+        email = email.lower() if email else None
         if email:
-            # Same address as an existing account (e.g. Google): link rather than duplicate.
-            match = next((u for u in self._users.values() if (u.get("email") or "").lower() == email.lower()), None)
+            match = next((u for u in self._users.values() if (u.get("email") or "").lower() == email), None)
             if match:
+                if match.get("appleSub") and match["appleSub"] != apple_sub:
+                    raise DuplicateEmailError(EMAIL_IN_USE)
                 match["appleSub"] = apple_sub
                 return match
         return self._new_user(appleSub=apple_sub, email=email, name=name)

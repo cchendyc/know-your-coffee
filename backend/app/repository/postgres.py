@@ -4,11 +4,13 @@ import hmac
 from datetime import datetime
 from typing import Any
 
+from psycopg.errors import UniqueViolation
 from psycopg.rows import dict_row
 from psycopg.types.json import Json
 from psycopg_pool import ConnectionPool
 
 from ..models import Chain, CoffeeShop, NewShop, Report, ShopClaim, ShopPhoto, User
+from . import DuplicateEmailError, EMAIL_IN_USE
 from .util import brand_name, cluster_shops, norm_coffees, split_search, slugify_brand
 
 
@@ -402,16 +404,37 @@ class PostgresRepository:
 
     def upsert_user(self, user: dict) -> User:
         # Role only ever escalates here (ADMIN_EMAILS bootstrap); sign-in never demotes.
-        rows = self._query(
-            """INSERT INTO users (google_sub, email, name, picture, role)
-               VALUES (%(googleSub)s, %(email)s, %(name)s, %(picture)s, COALESCE(%(role)s, 'USER'))
-               ON CONFLICT (google_sub) DO UPDATE SET
-                 email = %(email)s, name = %(name)s, picture = %(picture)s,
-                 role = CASE WHEN %(role)s = 'ADMIN' THEN 'ADMIN' ELSE users.role END
-               RETURNING *""",
-            {"role": None, **user},
-        )
-        return _to_user(rows[0])
+        params = {"role": None, **user, "email": (user.get("email") or "").lower() or None}
+        try:
+            rows = self._query("SELECT * FROM users WHERE google_sub = %(googleSub)s", params)
+            if not rows and params["email"]:
+                rows = self._query(
+                    "SELECT * FROM users WHERE lower(email) = lower(%(email)s)",
+                    params,
+                )
+                if rows and rows[0].get("google_sub") and rows[0]["google_sub"] != params["googleSub"]:
+                    raise DuplicateEmailError(EMAIL_IN_USE)
+            if rows:
+                params["id"] = rows[0]["id"]
+                rows = self._query(
+                    """UPDATE users SET
+                         google_sub = %(googleSub)s,
+                         email = %(email)s, name = %(name)s, picture = %(picture)s,
+                         role = CASE WHEN %(role)s = 'ADMIN' THEN 'ADMIN' ELSE users.role END
+                       WHERE id = %(id)s
+                       RETURNING *""",
+                    params,
+                )
+                return _to_user(rows[0])
+            rows = self._query(
+                """INSERT INTO users (google_sub, email, name, picture, role)
+                   VALUES (%(googleSub)s, %(email)s, %(name)s, %(picture)s, COALESCE(%(role)s, 'USER'))
+                   RETURNING *""",
+                params,
+            )
+            return _to_user(rows[0])
+        except UniqueViolation:
+            raise DuplicateEmailError(EMAIL_IN_USE)
 
     def get_user(self, user_id: str) -> User | None:
         rows = self._query("SELECT * FROM users WHERE id = %s", [user_id])
@@ -428,30 +451,46 @@ class PostgresRepository:
         return _to_user(rows[0])
 
     def upsert_email_user(self, email: str, name: str) -> User:
-        # An email-code sign-in with a Google account's address is the same person.
+        email = email.lower()
         rows = self._query("SELECT * FROM users WHERE lower(email) = lower(%s)", [email])
         if rows:
             return _to_user(rows[0])
-        rows = self._query("INSERT INTO users (email, name) VALUES (%s, %s) RETURNING *", [email, name])
-        return _to_user(rows[0])
+        try:
+            rows = self._query(
+                "INSERT INTO users (email, name) VALUES (%s, %s) RETURNING *",
+                [email, name],
+            )
+            return _to_user(rows[0])
+        except UniqueViolation:
+            rows = self._query("SELECT * FROM users WHERE lower(email) = lower(%s)", [email])
+            if rows:
+                return _to_user(rows[0])
+            raise DuplicateEmailError(EMAIL_IN_USE)
 
     def upsert_apple_user(self, apple_sub: str, email: str | None, name: str) -> User:
+        email = email.lower() if email else None
         rows = self._query("SELECT * FROM users WHERE apple_sub = %s", [apple_sub])
         if rows:
             return _to_user(rows[0])
         if email:
-            # Same address as an existing account (e.g. Google): link rather than duplicate.
-            rows = self._query(
-                "UPDATE users SET apple_sub = %s WHERE lower(email) = lower(%s) RETURNING *",
-                [apple_sub, email],
-            )
+            rows = self._query("SELECT * FROM users WHERE lower(email) = lower(%s)", [email])
             if rows:
+                existing = rows[0]
+                if existing.get("apple_sub") and existing["apple_sub"] != apple_sub:
+                    raise DuplicateEmailError(EMAIL_IN_USE)
+                rows = self._query(
+                    "UPDATE users SET apple_sub = %s WHERE id = %s RETURNING *",
+                    [apple_sub, existing["id"]],
+                )
                 return _to_user(rows[0])
-        rows = self._query(
-            "INSERT INTO users (apple_sub, email, name) VALUES (%s, %s, %s) RETURNING *",
-            [apple_sub, email, name],
-        )
-        return _to_user(rows[0])
+        try:
+            rows = self._query(
+                "INSERT INTO users (apple_sub, email, name) VALUES (%s, %s, %s) RETURNING *",
+                [apple_sub, email, name],
+            )
+            return _to_user(rows[0])
+        except UniqueViolation:
+            raise DuplicateEmailError(EMAIL_IN_USE)
 
     def save_login_code(self, identifier: str, code_hash: str, ttl_seconds: int) -> None:
         self._execute(

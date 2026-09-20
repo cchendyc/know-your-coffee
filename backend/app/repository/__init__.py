@@ -6,6 +6,14 @@ from typing import Any, Protocol
 from .. import settings
 from ..models import Chain, CoffeeShop, NewShop, Report, ShopClaim, ShopPhoto, User
 
+EMAIL_IN_USE = (
+    "This email is already used by another account. Sign in with the method you used first."
+)
+
+
+class DuplicateEmailError(Exception):
+    """Sign-in would attach an email that already belongs to a different account."""
+
 
 class Repository(Protocol):
     def list_shops(self, filter: dict, user_id: str | None = None) -> tuple[list[CoffeeShop], int]: ...
