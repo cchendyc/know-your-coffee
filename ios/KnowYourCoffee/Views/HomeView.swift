@@ -2,9 +2,14 @@ import SwiftUI
 
 struct HomeView: View {
     @State private var store = ShopStore()
+    @State private var auth = AuthStore.shared
     @State private var selectedShop: CoffeeShop?
-    @State private var showSettings = false
+    @State private var showProfile = false
+    @State private var showAddShop = false
+    @State private var searchExpanded = false
     @FocusState private var searchFocused: Bool
+    // Detail zooms out of the tapped card (matched transition source).
+    @Namespace private var zoomNamespace
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -15,7 +20,7 @@ struct HomeView: View {
                 if let message = store.errorMessage {
                     errorBanner(message)
                 } else if store.viewMode == .list {
-                    shopList
+                    feed
                 } else {
                     ShopMapView(shops: store.shops) { selectedShop = $0 }
                         .ignoresSafeArea(edges: .bottom)
@@ -23,75 +28,143 @@ struct HomeView: View {
             }
 
             modeToggle
+            addButton
         }
         .task { store.reload() }
-        .onChange(of: store.shops) { if selectedShop == nil { selectedShop = store.shops.first } } // TEMP screenshot
-        .sheet(item: $selectedShop) { shop in
-            ShopDetailView(summary: shop)
-                .presentationDetents([.medium, .large])
-                .presentationBackground(Color.cream50)
+        .fullScreenCover(item: $selectedShop) { shop in
+            ShopDetailView(summary: shop) { store.patch($0) }
+                .navigationTransition(.zoom(sourceID: shop.id, in: zoomNamespace))
         }
-        .sheet(isPresented: $showSettings) {
-            SettingsView { store.reload() }
-                .presentationDetents([.medium])
+        .sheet(isPresented: $showProfile) {
+            ProfileView { store.reload() }
+        }
+        .sheet(isPresented: $showAddShop) {
+            AddShopView { added in
+                showAddShop = false
+                store.reload()
+                selectedShop = added
+            }
         }
     }
 
-    // MARK: Header
+    // MARK: Header — profile left, tabs centered, search right. The search
+    // icon expands into a full-width bar in place, xiaohongshu-style.
 
     private var header: some View {
         VStack(spacing: 12) {
-            HStack(spacing: 10) {
-                Image(systemName: "cup.and.saucer.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(Color.cream50)
-                    .frame(width: 40, height: 40)
-                    .background(Color.espresso700, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("Know Your Coffee")
-                        .font(.system(.headline, design: .rounded, weight: .bold))
-                        .foregroundStyle(Color.espresso900)
-                    Text("coffee snobs")
-                        .font(.caption)
-                        .foregroundStyle(Color.espresso500)
-                }
-
-                Spacer()
-
-                Button {
-                    showSettings = true
-                } label: {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundStyle(Color.espresso500)
-                        .frame(width: 36, height: 36)
-                        .background(.white, in: Circle())
-                        .shadow(color: .espresso900.opacity(0.06), radius: 4, y: 1)
+            ZStack {
+                if searchExpanded {
+                    expandedSearchRow
+                        .transition(.opacity)
+                } else {
+                    collapsedHeaderRow
+                        .transition(.opacity)
                 }
             }
-
-            searchField
+            .animation(.snappy(duration: 0.22), value: searchExpanded)
             machineChips
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
-        .background(
-            Color.cream50
-                .opacity(0.95)
-                .shadow(color: .espresso900.opacity(0.05), radius: 6, y: 3)
-                .ignoresSafeArea(edges: .top)
-        )
+        .padding(.horizontal, 14)
+        .padding(.top, 6)
+        .padding(.bottom, 10)
         .zIndex(1)
     }
 
-    private var searchField: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(Color.espresso500)
+    private var collapsedHeaderRow: some View {
+        HStack(spacing: 12) {
+            Button {
+                showProfile = true
+            } label: {
+                profileIcon
+            }
 
-            TextField("Search anything, roaster, machine, city…", text: $store.draft)
+            Spacer()
+            listTabs
+            Spacer()
+
+            Button {
+                searchExpanded = true
+                searchFocused = true
+            } label: {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 19, weight: .medium))
+                    .foregroundStyle(Color.espresso700)
+            }
+            // A committed search keeps a small badge so active filtering stays visible.
+            .overlay(alignment: .topTrailing) {
+                if !store.draft.isEmpty {
+                    Circle().fill(Color.crema500).frame(width: 7, height: 7).offset(x: 3, y: -2)
+                }
+            }
+        }
+        .frame(height: 34)
+    }
+
+    @ViewBuilder
+    private var profileIcon: some View {
+        if let picture = auth.user?.picture, let url = URL(string: picture) {
+            AsyncImage(url: url) { phase in
+                if case .success(let image) = phase {
+                    image.resizable().scaledToFill()
+                } else {
+                    Image(systemName: "person.crop.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundStyle(Color.espresso500)
+                }
+            }
+            .frame(width: 28, height: 28)
+            .clipShape(Circle())
+        } else {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 19, weight: .medium))
+                .foregroundStyle(Color.espresso700)
+        }
+    }
+
+    private var expandedSearchRow: some View {
+        HStack(spacing: 10) {
+            searchField
+            Button("Cancel") {
+                store.draft = ""
+                store.clearSearchIfEmpty()
+                searchFocused = false
+                searchExpanded = false
+            }
+            .font(.subheadline)
+            .foregroundStyle(Color.espresso500)
+        }
+        .frame(height: 34)
+    }
+
+    // Text tabs with an underline indicator, xiaohongshu-style.
+    private var listTabs: some View {
+        HStack(spacing: 22) {
+            ForEach(ShopStore.ListFilter.allCases, id: \.self) { filter in
+                Button {
+                    withAnimation(.snappy(duration: 0.2)) { store.list = filter }
+                } label: {
+                    VStack(spacing: 4) {
+                        Text(filter.label)
+                            .font(.system(size: 16, weight: store.list == filter ? .bold : .regular))
+                            .foregroundStyle(store.list == filter ? Color.espresso900 : Color.espresso500.opacity(0.7))
+                        Capsule()
+                            .fill(store.list == filter ? Color.crema500 : .clear)
+                            .frame(width: 18, height: 3)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(Color.espresso500.opacity(0.55))
+
+            TextField("La Marzocco, Ethiopia, Oakland…", text: $store.draft)
+                .font(.subheadline)
                 .focused($searchFocused)
                 .submitLabel(.search)
                 .autocorrectionDisabled()
@@ -104,23 +177,20 @@ struct HomeView: View {
                     store.clearSearchIfEmpty()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(Color.espresso500.opacity(0.5))
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color.espresso500.opacity(0.35))
                 }
             }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(searchFocused ? Color.crema400 : Color.cream200, lineWidth: 1)
-        )
+        .frame(height: 34)
+        .background(Color.espresso900.opacity(searchFocused ? 0.07 : 0.05), in: Capsule())
     }
 
     private var machineChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                chip(label: "Any machine", isOn: store.machine == nil) {
+            HStack(spacing: 8) {
+                chip(label: "All machines", isOn: store.machine == nil) {
                     store.machine = nil
                 }
                 ForEach(MachineBrand.allCases.filter { $0 != .unknown && $0 != .other }) { brand in
@@ -129,79 +199,110 @@ struct HomeView: View {
                     }
                 }
             }
+            .padding(.horizontal, 14)
         }
-        .scrollClipDisabled()
+        .padding(.horizontal, -14)
     }
 
     private func chip(label: String, isOn: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label)
-                .font(.footnote.weight(.medium))
+                .font(.caption.weight(isOn ? .semibold : .medium))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
-                .background(isOn ? Color.espresso700 : .white, in: Capsule())
-                .foregroundStyle(isOn ? Color.cream50 : Color.espresso500)
-                .overlay(Capsule().strokeBorder(isOn ? .clear : Color.cream200, lineWidth: 1))
+                .background(
+                    isOn ? Color.espresso900 : Color.espresso900.opacity(0.05),
+                    in: Capsule()
+                )
+                .foregroundStyle(isOn ? Color.cream50 : Color.espresso700)
         }
         .buttonStyle(.plain)
     }
 
-    // MARK: List
+    // MARK: Feed — two-column staggered grid, xiaohongshu-style.
 
-    private var shopList: some View {
-        ScrollView {
-            LazyVStack(spacing: 14) {
-                HStack {
-                    Text(countLine)
-                        .font(.footnote)
-                        .foregroundStyle(Color.espresso500)
-                    Spacer()
-                }
-                .padding(.top, 4)
-
+    private var feed: some View {
+        // Wide photos otherwise push their column past half the screen;
+        // masonry only works with hard column widths.
+        GeometryReader { geo in
+            let columnWidth = (geo.size.width - 12 * 2 - 10) / 2
+            ScrollView {
                 if store.isLoading && store.shops.isEmpty {
-                    ForEach(0..<4, id: \.self) { _ in
-                        ShopCardPlaceholder()
-                    }
+                    masonry(
+                        left: { placeholderColumn([160, 210, 130], width: columnWidth) },
+                        right: { placeholderColumn([220, 140, 180], width: columnWidth) }
+                    )
                 } else if store.shops.isEmpty {
                     emptyState
+                        .padding(.horizontal, 16)
+                        .padding(.top, 40)
                 } else {
-                    ForEach(store.shops) { shop in
-                        Button {
-                            selectedShop = shop
-                        } label: {
-                            ShopCardView(shop: shop)
-                        }
-                        .buttonStyle(.plain)
-                        .onAppear { store.loadMoreIfNeeded(current: shop) }
-                    }
+                    masonry(
+                        left: { feedColumn(stride: 0, width: columnWidth) },
+                        right: { feedColumn(stride: 1, width: columnWidth) }
+                    )
                     if store.hasMore {
                         ProgressView()
                             .padding(.vertical, 16)
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 90) // clears the floating toggle
+            .scrollDismissesKeyboard(.immediately)
+            .refreshable { store.reload() }
         }
-        .scrollDismissesKeyboard(.immediately)
-        .refreshable { store.reload() }
     }
 
-    private var countLine: String {
-        if store.isLoading { return "Searching…" }
-        return "\(store.total) shop\(store.total == 1 ? "" : "s") in the Bay Area"
+    private func masonry(
+        @ViewBuilder left: () -> some View,
+        @ViewBuilder right: () -> some View
+    ) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            LazyVStack(spacing: 10) { left() }
+            LazyVStack(spacing: 10) { right() }
+        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 90) // clears the floating toggle
+    }
+
+    private func feedColumn(stride: Int, width: CGFloat) -> some View {
+        ForEach(columnShops(stride: stride)) { shop in
+            Button {
+                selectedShop = shop
+            } label: {
+                ShopCardView(shop: shop, width: width)
+            }
+            .buttonStyle(.plain)
+            .matchedTransitionSource(id: shop.id, in: zoomNamespace)
+            .onAppear { store.loadMoreIfNeeded(current: shop) }
+        }
+    }
+
+    private func columnShops(stride: Int) -> [CoffeeShop] {
+        store.shops.enumerated()
+            .filter { $0.offset % 2 == stride }
+            .map(\.element)
+    }
+
+    private func placeholderColumn(_ heights: [CGFloat], width: CGFloat) -> some View {
+        ForEach(heights, id: \.self) { height in
+            ShopCardPlaceholder(height: height, width: width)
+        }
     }
 
     private var emptyState: some View {
         VStack(spacing: 8) {
-            Image(systemName: "cup.and.saucer")
+            Image(systemName: store.list == .all ? "cup.and.saucer" : "bookmark")
                 .font(.system(size: 32))
                 .foregroundStyle(Color.espresso500.opacity(0.5))
-            Text("No shops match. Try a different search or clear the filters.")
-                .font(.footnote)
-                .foregroundStyle(Color.espresso500)
-                .multilineTextAlignment(.center)
+            Text(
+                store.list == .all
+                    ? "No shops match. Try a different search or clear the filters."
+                    : "Nothing here yet. Saved and been lists sync once sign-in lands in the app — track shops on the web for now."
+            )
+            .font(.footnote)
+            .foregroundStyle(Color.espresso500)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 24)
         }
         .padding(.vertical, 48)
         .frame(maxWidth: .infinity)
@@ -229,7 +330,28 @@ struct HomeView: View {
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
-    // MARK: Mode toggle
+    // MARK: Floating controls
+
+    private var addButton: some View {
+        HStack {
+            Spacer()
+            Button {
+                showAddShop = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(Color.cream50)
+                    .frame(width: 48, height: 48)
+                    .background(Color.espresso700, in: Circle())
+                    // The ring keeps the dark circle from melting into dark photos.
+                    .overlay(Circle().strokeBorder(Color.cream50.opacity(0.85), lineWidth: 1.5))
+                    .shadow(color: .black.opacity(0.30), radius: 14, y: 5)
+                    .shadow(color: .black.opacity(0.14), radius: 3, y: 1)
+            }
+            .padding(.trailing, 16)
+            .padding(.bottom, 12)
+        }
+    }
 
     private var modeToggle: some View {
         HStack(spacing: 2) {
@@ -239,7 +361,7 @@ struct HomeView: View {
                 } label: {
                     Label(
                         mode == .list ? "List" : "Map",
-                        systemImage: mode == .list ? "list.bullet" : "map"
+                        systemImage: mode == .list ? "square.grid.2x2" : "map"
                     )
                     .font(.footnote.weight(.semibold))
                     .padding(.horizontal, 16)
@@ -255,7 +377,11 @@ struct HomeView: View {
         }
         .padding(3)
         .background(.white, in: Capsule())
-        .shadow(color: .espresso900.opacity(0.15), radius: 10, y: 4)
+        .overlay(Capsule().strokeBorder(Color.espresso900.opacity(0.08), lineWidth: 0.5))
+        // Small y-offsets: the pill sits near the screen bottom, so a big
+        // downward shadow falls off-screen. Keep the halo around the pill.
+        .shadow(color: .black.opacity(0.28), radius: 16, y: 5)
+        .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
         .padding(.bottom, 12)
     }
 }

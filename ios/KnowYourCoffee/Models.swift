@@ -190,37 +190,37 @@ struct Chain: Codable, Hashable {
 }
 
 struct CoffeeShop: Codable, Identifiable, Hashable {
-    let id: String
-    let name: String
-    let address: String
-    let city: String
-    let lat: Double
-    let lng: Double
-    let machine: MachineBrand
-    let machineModel: String?
-    let machines: [Machine]
-    let beanSource: BeanSource
-    let roaster: String?
-    let beanOrigins: [String]
-    let coffees: [Coffee]
-    let grinders: [String]
-    let drinks: [DrinkItem]
-    let milkBrands: [String]
-    let vibe: String?
-    let dogFriendly: Bool?
-    let wifi: Bool?
-    let outdoorSeating: Bool?
-    let photoUrl: String?
-    let website: String?
-    let savedByMe: Bool
-    let beenByMe: Bool
-    let updatedAt: String
+    var id: String
+    var name: String
+    var address: String
+    var city: String
+    var lat: Double
+    var lng: Double
+    var machine: MachineBrand
+    var machineModel: String?
+    var machines: [Machine]
+    var beanSource: BeanSource
+    var roaster: String?
+    var beanOrigins: [String]
+    var coffees: [Coffee]
+    var grinders: [String]
+    var drinks: [DrinkItem]
+    var milkBrands: [String]
+    var vibe: String?
+    var dogFriendly: Bool?
+    var wifi: Bool?
+    var outdoorSeating: Bool?
+    var photoUrl: String?
+    var website: String?
+    var savedByMe: Bool
+    var beenByMe: Bool
+    var updatedAt: String
     // Present only in the full shop(id:) payload.
-    let photos: [ShopPhoto]?
-    let photoCount: Int?
-    let reports: [Report]?
-    let reportCount: Int?
-    let chain: Chain?
+    var photos: [ShopPhoto]?
+    var photoCount: Int?
+    var reports: [Report]?
+    var reportCount: Int?
+    var chain: Chain?
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: lat, longitude: lng)
@@ -243,6 +243,57 @@ struct CoffeeShop: Codable, Identifiable, Hashable {
 struct ShopPage: Codable {
     let shops: [CoffeeShop]
     let total: Int
+}
+
+struct User: Codable, Hashable {
+    let id: String
+    let name: String
+    let email: String? // nil for phone-only accounts
+    let phone: String?
+    let picture: String?
+    var savedCount: Int?
+    var beenCount: Int?
+
+    /// Email or phone, whichever the account signs in with.
+    var contactLine: String? { email ?? phone }
+}
+
+struct AuthPayload: Codable {
+    let token: String
+    let user: User
+}
+
+struct ShopClaim: Codable, Identifiable, Hashable {
+    struct ShopRef: Codable, Hashable {
+        let id: String
+        let name: String
+        let city: String
+    }
+
+    let id: String
+    let status: String // PENDING / APPROVED / REJECTED
+    let note: String?
+    let createdAt: String
+    let shop: ShopRef
+}
+
+struct PlaceSuggestion: Codable, Identifiable, Hashable {
+    let placeId: String
+    let name: String
+    let address: String
+
+    var id: String { placeId }
+}
+
+struct PlacePreview: Codable {
+    let placeId: String
+    let name: String
+    let address: String
+    let city: String
+    let photoUrl: String?
+    let website: String?
+    let isCoffeeShop: Bool
+    let existing: CoffeeShop?
 }
 
 enum RelativeDate {

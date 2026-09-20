@@ -22,6 +22,24 @@ final class ShopStore {
         didSet { reload() }
     }
 
+    enum ListFilter: String, CaseIterable {
+        case all, saved, been
+
+        var label: String {
+            switch self {
+            case .all: "All"
+            case .saved: "Saved"
+            case .been: "Been"
+            }
+        }
+    }
+
+    // Saved/been come back empty until the app has sign-in; the feed shows
+    // an explanatory empty state instead of hiding the tabs.
+    var list: ListFilter = .all {
+        didSet { if list != oldValue { reload() } }
+    }
+
     var viewMode: ViewMode = .list {
         // The map needs every match; the list paginates.
         didSet { if viewMode != oldValue { reload() } }
@@ -50,6 +68,13 @@ final class ShopStore {
         }
     }
 
+    // Swap one shop in place after a save/been toggle so the feed stays honest.
+    func patch(_ updated: CoffeeShop) {
+        if let index = shops.firstIndex(where: { $0.id == updated.id }) {
+            shops[index] = updated
+        }
+    }
+
     func reload() {
         loadTask?.cancel()
         isLoading = true
@@ -58,6 +83,8 @@ final class ShopStore {
                 let page = try await CoffeeAPI.fetchShops(
                     search: search,
                     machine: machine,
+                    saved: list == .saved,
+                    been: list == .been,
                     limit: viewMode == .map ? mapLimit : pageSize,
                     offset: 0
                 )
@@ -76,8 +103,11 @@ final class ShopStore {
     }
 
     // Next page, appended. The guard makes repeat sentinel hits no-ops.
+    // Any of the last 4 triggers: the feed splits into two columns, so the
+    // strict last item may sit in a column the user isn't scrolling past.
     func loadMoreIfNeeded(current shop: CoffeeShop) {
-        guard hasMore, !isLoading, !isLoadingMore, shop.id == shops.last?.id else { return }
+        guard hasMore, !isLoading, !isLoadingMore,
+              shops.suffix(4).contains(where: { $0.id == shop.id }) else { return }
         isLoadingMore = true
         Task {
             defer { isLoadingMore = false }
@@ -85,6 +115,8 @@ final class ShopStore {
                 let page = try await CoffeeAPI.fetchShops(
                     search: search,
                     machine: machine,
+                    saved: list == .saved,
+                    been: list == .been,
                     limit: pageSize,
                     offset: shops.count
                 )
