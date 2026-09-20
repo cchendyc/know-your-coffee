@@ -12,6 +12,7 @@ import {
 } from '../api'
 import { downscaleImage } from '../image'
 import {
+  AMENITIES,
   BEAN_ORIGINS,
   BEAN_SOURCES,
   BEAN_SOURCE_LABELS,
@@ -22,6 +23,7 @@ import {
   MILK_BRANDS,
   PHOTO_KINDS,
   PHOTO_KIND_LABELS,
+  type AmenityKey,
 } from '../labels'
 
 const inputCls =
@@ -83,6 +85,11 @@ export function ReportForm({ shop, onDone, onCancel }: { shop: CoffeeShop; onDon
   const [parsingMenu, setParsingMenu] = useState(false)
   const [milkBrands, setMilkBrands] = useState<string[]>([])
   const [customMilk, setCustomMilk] = useState('')
+  const [amenities, setAmenities] = useState<Record<AmenityKey, boolean | null>>({
+    dogFriendly: null,
+    wifi: null,
+    outdoorSeating: null,
+  })
   const [photos, setPhotos] = useState<{ kind: PhotoKind; data: string }[]>([])
   const [photoKind, setPhotoKind] = useState<PhotoKind>('VIBE')
   const [note, setNote] = useState('')
@@ -191,6 +198,9 @@ export function ReportForm({ shop, onDone, onCancel }: { shop: CoffeeShop; onDon
         grinders: grinderList.length ? grinderList : null,
         drinks: drinkList.length ? drinkList : null,
         milkBrands: milk.length ? milk : null,
+        dogFriendly: amenities.dogFriendly,
+        wifi: amenities.wifi,
+        outdoorSeating: amenities.outdoorSeating,
         note: note.trim() || null,
         source: usedPhoto ? 'PHOTO' : 'TEXT',
       })
@@ -211,6 +221,7 @@ export function ReportForm({ shop, onDone, onCancel }: { shop: CoffeeShop; onDon
     allGrinders().length ||
     cleanDrinks().length ||
     allMilkBrands().length ||
+    Object.values(amenities).some((v) => v !== null) ||
     photos.length ||
     note.trim()
 
@@ -365,6 +376,36 @@ export function ReportForm({ shop, onDone, onCancel }: { shop: CoffeeShop; onDon
           placeholder="Other milk brands (comma separated)"
           className={inputCls}
         />
+      </div>
+
+      <div className="space-y-1.5">
+        <p className="text-xs font-medium text-espresso-500">Good to know</p>
+        <div className="space-y-1">
+          {AMENITIES.map((a) => (
+            <div key={a.key} className="flex items-center justify-between gap-2">
+              <span className="text-sm">{a.label}</span>
+              <div className="flex gap-1">
+                {([true, false] as const).map((v) => (
+                  <button
+                    key={String(v)}
+                    type="button"
+                    onClick={() =>
+                      // Tapping the active answer clears it back to unknown.
+                      setAmenities((prev) => ({ ...prev, [a.key]: prev[a.key] === v ? null : v }))
+                    }
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                      amenities[a.key] === v
+                        ? 'bg-espresso-700 text-cream-50'
+                        : 'border border-cream-200 text-espresso-500 hover:border-crema-400'
+                    }`}
+                  >
+                    {v ? 'Yes' : 'No'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="space-y-1.5">

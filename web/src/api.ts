@@ -40,6 +40,9 @@ export interface Report {
   grinders: string[] | null
   drinks: DrinkItem[] | null
   milkBrands: string[] | null
+  dogFriendly: boolean | null
+  wifi: boolean | null
+  outdoorSeating: boolean | null
   note: string | null
   source: 'TEXT' | 'PHOTO'
   reporter: { name: string; picture: string | null } | null
@@ -69,6 +72,9 @@ export interface CoffeeShop {
   drinks: DrinkItem[]
   milkBrands: string[]
   vibe: string | null
+  dogFriendly: boolean | null
+  wifi: boolean | null
+  outdoorSeating: boolean | null
   photoUrl: string | null
   website: string | null
   savedByMe: boolean
@@ -95,6 +101,9 @@ export interface ReportInput {
   grinders?: string[] | null
   drinks?: DrinkItem[] | null
   milkBrands?: string[] | null
+  dogFriendly?: boolean | null
+  wifi?: boolean | null
+  outdoorSeating?: boolean | null
   note?: string | null
   source: 'TEXT' | 'PHOTO'
 }
@@ -134,7 +143,7 @@ async function gql<T>(query: string, variables?: Record<string, unknown>): Promi
 const SHOP_FIELDS = `
   id name address city lat lng
   machine machineModel beanSource roaster beanOrigins grinders drinks { name price }
-  milkBrands vibe photoUrl website savedByMe beenByMe updatedAt
+  milkBrands vibe dogFriendly wifi outdoorSeating photoUrl website savedByMe beenByMe updatedAt
 `
 
 export interface ShopPage {
@@ -182,7 +191,7 @@ export function fetchShop(id: string) {
         photos { id kind data createdAt uploader { name picture } }
         reports {
           id machine machineModel beanSource roaster beanOrigins grinders drinks { name price }
-          milkBrands note source createdAt reporter { name picture }
+          milkBrands dogFriendly wifi outdoorSeating note source createdAt reporter { name picture }
         }
       }
     }`,

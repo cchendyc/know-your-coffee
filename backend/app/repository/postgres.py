@@ -31,6 +31,9 @@ def _to_shop(r: dict) -> CoffeeShop:
         "drinks": r["drinks"],
         "milkBrands": r["milk_brands"],
         "vibe": r["vibe"],
+        "dogFriendly": r["dog_friendly"],
+        "wifi": r["wifi"],
+        "outdoorSeating": r["outdoor_seating"],
         "photoUrl": r["photo_url"],
         "website": r["website"],
         "savedByMe": bool(r.get("saved_by_me")),
@@ -51,6 +54,9 @@ def _to_report(r: dict) -> Report:
         "grinders": r["grinders"],
         "drinks": r["drinks"],
         "milkBrands": r["milk_brands"],
+        "dogFriendly": r["dog_friendly"],
+        "wifi": r["wifi"],
+        "outdoorSeating": r["outdoor_seating"],
         "note": r["note"],
         "source": r["source"],
         "reporter": {"name": r["reporter_name"], "picture": r["reporter_picture"]} if r.get("reporter_name") else None,
@@ -75,7 +81,7 @@ _SEARCHABLE = """(name ILIKE %(q)s OR city ILIKE %(q)s OR address ILIKE %(q)s OR
 
 # Completeness-weighted rank: known machine dominates (it is the app's core
 # data point), then other filled fields, then recency. Name last keeps offset
-# pagination stable within equal ranks.
+# pagination stable within equal ranks. Amenities count when known either way.
 _RANK = """
   (machine <> 'UNKNOWN')::int * 8
   + (machine_model IS NOT NULL)::int * 2
@@ -84,6 +90,10 @@ _RANK = """
   + (cardinality(grinders) > 0)::int
   + (jsonb_array_length(COALESCE(drinks, '[]'::jsonb)) > 0)::int
   + (cardinality(milk_brands) > 0)::int
+  + (vibe IS NOT NULL)::int
+  + (dog_friendly IS NOT NULL)::int
+  + (wifi IS NOT NULL)::int
+  + (outdoor_seating IS NOT NULL)::int
   DESC, updated_at DESC, name ASC
 """
 
@@ -197,15 +207,20 @@ class PostgresRepository:
             "grinders": report.get("grinders"),
             "drinks": Json(report["drinks"]) if report.get("drinks") is not None else None,
             "milk_brands": report.get("milkBrands"),
+            "dog_friendly": report.get("dogFriendly"),
+            "wifi": report.get("wifi"),
+            "outdoor_seating": report.get("outdoorSeating"),
             "note": report.get("note"),
             "source": report.get("source") or "TEXT",
             "user_id": report.get("userId"),
         }
         rows = self._query(
             """INSERT INTO reports (shop_id, machine, machine_model, bean_source, roaster,
-                                    bean_origins, grinders, drinks, milk_brands, note, source, user_id)
+                                    bean_origins, grinders, drinks, milk_brands,
+                                    dog_friendly, wifi, outdoor_seating, note, source, user_id)
                VALUES (%(shop_id)s, %(machine)s, %(machine_model)s, %(bean_source)s, %(roaster)s,
-                       %(bean_origins)s, %(grinders)s, %(drinks)s, %(milk_brands)s, %(note)s,
+                       %(bean_origins)s, %(grinders)s, %(drinks)s, %(milk_brands)s,
+                       %(dog_friendly)s, %(wifi)s, %(outdoor_seating)s, %(note)s,
                        %(source)s, %(user_id)s)
                RETURNING *, NULL AS reporter_name, NULL AS reporter_picture""",
             params,
@@ -221,6 +236,9 @@ class PostgresRepository:
                  grinders = COALESCE(%(grinders)s::text[], grinders),
                  drinks = COALESCE(%(drinks)s::jsonb, drinks),
                  milk_brands = COALESCE(%(milk_brands)s::text[], milk_brands),
+                 dog_friendly = COALESCE(%(dog_friendly)s, dog_friendly),
+                 wifi = COALESCE(%(wifi)s, wifi),
+                 outdoor_seating = COALESCE(%(outdoor_seating)s, outdoor_seating),
                  updated_at = now()
                WHERE id = %(shop_id)s""",
             params,
@@ -240,12 +258,20 @@ class PostgresRepository:
                 continue
             rows = self._query(
                 """INSERT INTO shops (name, address, city, lat, lng, machine, machine_model, bean_source,
-                                      roaster, bean_origins, grinders, drinks, milk_brands, vibe, photo_url, website)
+                                      roaster, bean_origins, grinders, drinks, milk_brands, vibe, photo_url,
+                                      website, dog_friendly, wifi, outdoor_seating)
                    VALUES (%(name)s, %(address)s, %(city)s, %(lat)s, %(lng)s, %(machine)s, %(machineModel)s,
                            %(beanSource)s, %(roaster)s, %(beanOrigins)s, %(grinders)s, %(drinks)s,
-                           %(milkBrands)s, %(vibe)s, %(photoUrl)s, %(website)s)
+                           %(milkBrands)s, %(vibe)s, %(photoUrl)s, %(website)s, %(dogFriendly)s,
+                           %(wifi)s, %(outdoorSeating)s)
                    RETURNING *""",
-                {**s, "drinks": Json(s["drinks"])},
+                {
+                    "dogFriendly": None,
+                    "wifi": None,
+                    "outdoorSeating": None,
+                    **s,
+                    "drinks": Json(s["drinks"]),
+                },
             )
             result.append(_to_shop(rows[0]))
         return result
@@ -265,6 +291,9 @@ class PostgresRepository:
                  milk_brands = CASE WHEN milk_brands = '{}' AND %(milk_brands)s::text[] IS NOT NULL
                                     THEN %(milk_brands)s::text[] ELSE milk_brands END,
                  vibe = COALESCE(vibe, %(vibe)s),
+                 dog_friendly = COALESCE(dog_friendly, %(dog_friendly)s),
+                 wifi = COALESCE(wifi, %(wifi)s),
+                 outdoor_seating = COALESCE(outdoor_seating, %(outdoor_seating)s),
                  updated_at = now()
                WHERE id = %(id)s""",
             {
@@ -275,6 +304,9 @@ class PostgresRepository:
                 "roaster": patch.get("roaster"),
                 "milk_brands": milk,
                 "vibe": patch.get("vibe"),
+                "dog_friendly": patch.get("dogFriendly"),
+                "wifi": patch.get("wifi"),
+                "outdoor_seating": patch.get("outdoorSeating"),
             },
         )
 

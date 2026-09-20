@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { fetchShop, type CoffeeShop, type User } from '../api'
-import { BEAN_SOURCE_LABELS, MACHINE_LABELS } from '../labels'
+import { AMENITIES, BEAN_SOURCE_LABELS, MACHINE_LABELS } from '../labels'
 import { ReportList } from './ReportList'
 import { SaveBeenButtons } from './SaveBeen'
 import { ShopExpanded } from './ShopExpanded'
@@ -126,6 +126,9 @@ export function ShopDrawer({
                 {shop.beanOrigins.length > 0 && <InfoRow label="Bean origins" value={shop.beanOrigins.join(', ')} />}
                 {shop.grinders.length > 0 && <InfoRow label="Grinders" value={shop.grinders.join(', ')} />}
                 <InfoRow label="Milk" value={shop.milkBrands.length ? shop.milkBrands.join(', ') : 'Unknown'} />
+                {AMENITIES.filter((a) => shop[a.key] !== null).map((a) => (
+                  <InfoRow key={a.key} label={a.label} value={shop[a.key] ? 'Yes' : 'No'} />
+                ))}
               </dl>
 
               {shop.drinks.length > 0 && (

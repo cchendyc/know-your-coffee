@@ -53,6 +53,26 @@ MILK_BRAND_PATTERNS = [
 IN_HOUSE = re.compile(r"roast(s|ed|ing)? ((their|its) own|in[- ]?house|on[- ]?site)|house[- ]roasted", re.I)
 ROASTER_SUFFIX = re.compile(r"\s*(coffee\s*)?(roasters?|roastery|roasting)( co\.?| company)?\s*$", re.I)
 
+# Amenities: a negative mention ("no wifi") is data too, and beats a positive
+# one because reviewers complain more precisely than they praise.
+AMENITY_PATTERNS = [
+    (
+        "dogFriendly",
+        re.compile(r"no dogs|dogs? (are )?not (allowed|welcome)", re.I),
+        re.compile(r"dog[- ]friendly|dogs? (are )?(allowed|welcome)|pup[- ]?friendly|brought (my|our) dog", re.I),
+    ),
+    (
+        "wifi",
+        re.compile(r"no (free )?wi[- ]?fi|wi[- ]?fi (is )?(off|disabled|not available)|without wi[- ]?fi", re.I),
+        re.compile(r"\bwi[- ]?fi\b", re.I),
+    ),
+    (
+        "outdoorSeating",
+        re.compile(r"no (outdoor|outside|patio) seating", re.I),
+        re.compile(r"outdoor seating|patio|parklet|sidewalk (tables?|seating)|seating outside", re.I),
+    ),
+]
+
 
 def extract(shop_name: str, texts: list[str], summary: str | None) -> dict:
     all_text = "\n".join(texts)
@@ -79,6 +99,12 @@ def extract(shop_name: str, texts: list[str], summary: str | None) -> dict:
     if milk:
         patch["milkBrands"] = milk
 
+    for field, negative, positive in AMENITY_PATTERNS:
+        if negative.search(all_text):
+            patch[field] = False
+        elif positive.search(all_text):
+            patch[field] = True
+
     if summary:
         patch["vibe"] = summary[:200]
     return patch
@@ -88,7 +114,16 @@ async def main() -> None:
     max_shops = int(sys.argv[1]) if len(sys.argv) > 1 else None
     repo = create_repository()
     shops, _total = repo.list_shops({"limit": 10_000})
-    shops = [s for s in shops if s["machine"] == "UNKNOWN" or not s["roaster"] or not s["vibe"]]
+    shops = [
+        s
+        for s in shops
+        if s["machine"] == "UNKNOWN"
+        or not s["roaster"]
+        or not s["vibe"]
+        or s["dogFriendly"] is None
+        or s["wifi"] is None
+        or s["outdoorSeating"] is None
+    ]
     print(f"{len(shops)} shops need enrichment; processing up to {max_shops or 'all'}")
 
     enriched = skipped = failed = 0

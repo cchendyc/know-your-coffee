@@ -1,5 +1,5 @@
 import type { CoffeeShop, User } from '../api'
-import { BEAN_SOURCE_LABELS, MACHINE_LABELS } from '../labels'
+import { AMENITIES, BEAN_SOURCE_LABELS, MACHINE_LABELS } from '../labels'
 import { SaveBeenButtons } from './SaveBeen'
 
 export function ShopCard({
@@ -66,11 +66,23 @@ export function ShopCard({
         </span>
       </div>
 
-      {shop.milkBrands.length > 0 && (
+      {(shop.milkBrands.length > 0 || AMENITIES.some((a) => shop[a.key] !== null)) && (
         <div className="flex flex-wrap gap-1">
           {shop.milkBrands.map((b) => (
             <span key={b} className="rounded-full border border-cream-200 px-2 py-0.5 text-[11px] text-espresso-500">
               {b}
+            </span>
+          ))}
+          {AMENITIES.filter((a) => shop[a.key] !== null).map((a) => (
+            <span
+              key={a.key}
+              className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                shop[a.key]
+                  ? 'border-crema-400/60 bg-crema-400/10 text-espresso-700'
+                  : 'border-cream-200 text-espresso-500'
+              }`}
+            >
+              {shop[a.key] ? a.label : a.no}
             </span>
           ))}
         </div>

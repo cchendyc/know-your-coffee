@@ -69,6 +69,12 @@ type CoffeeShop {
   milkBrands: [String!]!
   "Short summary of the shop's atmosphere, extracted from public reviews."
   vibe: String
+  "Null means unknown."
+  dogFriendly: Boolean
+  "Null means unknown."
+  wifi: Boolean
+  "Null means unknown."
+  outdoorSeating: Boolean
   photoUrl: String
   "The shop's own website."
   website: String
@@ -120,6 +126,9 @@ type Report {
   grinders: [String!]
   drinks: [DrinkItem!]
   milkBrands: [String!]
+  dogFriendly: Boolean
+  wifi: Boolean
+  outdoorSeating: Boolean
   note: String
   source: ReportSource!
   reporter: Reporter
@@ -181,6 +190,9 @@ input ReportInput {
   grinders: [String!]
   drinks: [DrinkInput!]
   milkBrands: [String!]
+  dogFriendly: Boolean
+  wifi: Boolean
+  outdoorSeating: Boolean
   note: String
   source: ReportSource = TEXT
 }

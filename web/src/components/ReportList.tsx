@@ -1,5 +1,5 @@
 import type { Report } from '../api'
-import { MACHINE_LABELS } from '../labels'
+import { AMENITIES, MACHINE_LABELS } from '../labels'
 
 export function ReportList({ reports }: { reports: Report[] }) {
   if (reports.length === 0) {
@@ -27,6 +27,7 @@ export function ReportList({ reports }: { reports: Report[] }) {
                   .map((d) => (d.price != null ? `${d.name} $${d.price.toFixed(2)}` : d.name))
                   .join(', ')}`,
               r.milkBrands?.length && `Milk: ${r.milkBrands.join(', ')}`,
+              ...AMENITIES.map((a) => r[a.key] !== null && (r[a.key] ? a.label : a.no)),
               r.note,
             ]
               .filter(Boolean)

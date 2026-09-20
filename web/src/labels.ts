@@ -78,3 +78,12 @@ export const DRINKS = [
 
 export const MACHINE_BRANDS = Object.keys(MACHINE_LABELS) as MachineBrand[]
 export const BEAN_SOURCES = Object.keys(BEAN_SOURCE_LABELS) as BeanSource[]
+
+// Tri-state shop amenities (true / false / null = unknown).
+export const AMENITIES = [
+  { key: 'dogFriendly', label: 'Dog friendly', no: 'No dogs' },
+  { key: 'wifi', label: 'Wi-Fi', no: 'No Wi-Fi' },
+  { key: 'outdoorSeating', label: 'Outdoor seating', no: 'No outdoor seating' },
+] as const
+
+export type AmenityKey = (typeof AMENITIES)[number]['key']

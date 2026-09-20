@@ -45,6 +45,11 @@ def _rank(shop: CoffeeShop) -> int:
         + (1 if shop["grinders"] else 0)
         + (1 if shop["drinks"] else 0)
         + (1 if shop["milkBrands"] else 0)
+        + (1 if shop["vibe"] else 0)
+        # Amenities count when known either way; a "no dogs" answer is still data.
+        + (1 if shop["dogFriendly"] is not None else 0)
+        + (1 if shop["wifi"] is not None else 0)
+        + (1 if shop["outdoorSeating"] is not None else 0)
     )
 
 
@@ -98,6 +103,9 @@ class MemoryRepository:
             "grinders": report.get("grinders"),
             "drinks": report.get("drinks"),
             "milkBrands": report.get("milkBrands"),
+            "dogFriendly": report.get("dogFriendly"),
+            "wifi": report.get("wifi"),
+            "outdoorSeating": report.get("outdoorSeating"),
             "note": report.get("note"),
             "source": report.get("source") or "TEXT",
             "reporter": {"name": user["name"], "picture": user["picture"]} if user else None,
@@ -117,6 +125,9 @@ class MemoryRepository:
                 ("grinders", "grinders"),
                 ("drinks", "drinks"),
                 ("milkBrands", "milkBrands"),
+                ("dogFriendly", "dogFriendly"),
+                ("wifi", "wifi"),
+                ("outdoorSeating", "outdoorSeating"),
             ]:
                 if stored.get(report_key) is not None:
                     shop[shop_key] = stored[report_key]  # type: ignore[literal-required]
@@ -135,6 +146,9 @@ class MemoryRepository:
                 result.append(existing)
                 continue
             shop: CoffeeShop = {
+                "dogFriendly": None,
+                "wifi": None,
+                "outdoorSeating": None,
                 **incoming,
                 "id": str(uuid4()),
                 "savedByMe": False,
@@ -161,6 +175,9 @@ class MemoryRepository:
             shop["milkBrands"] = patch["milkBrands"]
         if shop["vibe"] is None and patch.get("vibe"):
             shop["vibe"] = patch["vibe"]
+        for key in ("dogFriendly", "wifi", "outdoorSeating"):
+            if shop[key] is None and patch.get(key) is not None:  # type: ignore[literal-required]
+                shop[key] = patch[key]  # type: ignore[literal-required]
         shop["updatedAt"] = _now()
 
     def set_shop_meta(self, shop_id: str, meta: dict) -> None:

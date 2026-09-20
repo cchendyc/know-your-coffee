@@ -1,6 +1,6 @@
 """Domain models. Dicts use camelCase keys so they map 1:1 onto schema.graphql."""
 
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 MACHINE_BRANDS = [
     "LA_MARZOCCO",
@@ -49,6 +49,9 @@ class CoffeeShop(TypedDict):
     drinks: list[DrinkItem]
     milkBrands: list[str]
     vibe: str | None
+    dogFriendly: bool | None
+    wifi: bool | None
+    outdoorSeating: bool | None
     photoUrl: str | None
     website: str | None
     savedByMe: bool
@@ -74,6 +77,9 @@ class NewShop(TypedDict):
     vibe: str | None
     photoUrl: str | None
     website: str | None
+    dogFriendly: NotRequired[bool | None]
+    wifi: NotRequired[bool | None]
+    outdoorSeating: NotRequired[bool | None]
 
 
 class Report(TypedDict):
@@ -87,6 +93,9 @@ class Report(TypedDict):
     grinders: list[str] | None
     drinks: list[DrinkItem] | None
     milkBrands: list[str] | None
+    dogFriendly: bool | None
+    wifi: bool | None
+    outdoorSeating: bool | None
     note: str | None
     source: str
     reporter: Reporter | None
