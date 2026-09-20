@@ -57,7 +57,12 @@ export function ShopCard({
           {shop.machineModel ? ` · ${shop.machineModel}` : ''}
         </span>
         <span className="rounded-full bg-crema-400/25 px-2.5 py-1 text-xs font-medium text-espresso-700">
-          {shop.roaster ? `${shop.roaster} beans` : BEAN_SOURCE_LABELS[shop.beanSource]}
+          {/* In-house roasters would just repeat the shop name as "<name> beans". */}
+          {shop.beanSource === 'IN_HOUSE_ROAST'
+            ? BEAN_SOURCE_LABELS.IN_HOUSE_ROAST
+            : shop.roaster
+              ? `${shop.roaster} beans`
+              : BEAN_SOURCE_LABELS[shop.beanSource]}
         </span>
       </div>
 
