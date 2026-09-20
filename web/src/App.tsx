@@ -17,6 +17,13 @@ export default function App() {
   const [view, setView] = useState<'list' | 'map'>('list')
   const [user, setUser] = useState<User | null>(loadStoredUser)
   const [adding, setAdding] = useState(false)
+
+  // api.ts clears the stored login when the server rejects the session token.
+  useEffect(() => {
+    const onExpired = () => setUser(null)
+    window.addEventListener('kyc:session-expired', onExpired)
+    return () => window.removeEventListener('kyc:session-expired', onExpired)
+  }, [])
   const [refresh, setRefresh] = useState(0)
   const [list, setList] = useState<'all' | 'saved' | 'been'>('all')
   const [total, setTotal] = useState(0)

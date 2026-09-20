@@ -116,7 +116,18 @@ async function gql<T>(query: string, variables?: Record<string, unknown>): Promi
     body: JSON.stringify({ query, variables }),
   })
   const json = (await res.json()) as { data?: T; errors?: { message: string }[] }
-  if (json.errors?.length) throw new Error(json.errors[0].message)
+  if (json.errors?.length) {
+    const message = json.errors[0].message
+    // Session token no longer valid (e.g. server restart): drop the stale
+    // login instead of showing a signed-in header that can't do anything.
+    if (token && message.includes('Sign in with Google')) {
+      localStorage.removeItem(TOKEN_KEY)
+      localStorage.removeItem(USER_KEY)
+      window.dispatchEvent(new Event('kyc:session-expired'))
+      throw new Error('Your session expired. Please sign in again (top right).')
+    }
+    throw new Error(message)
+  }
   return json.data as T
 }
 
