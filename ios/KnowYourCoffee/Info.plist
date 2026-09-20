@@ -8,5 +8,10 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<!-- iOS OAuth client ID from the Google Cloud project (bundle id
+	     com.knowyourcoffee.app). Empty disables in-app Google sign-in.
+	     The same value goes in the backend env as GOOGLE_OAUTH_IOS_CLIENT_ID. -->
+	<key>GoogleOAuthClientID</key>
+	<string>468965480395-el9e0porpnrf8c4qjdg3n81uqgpstbtj.apps.googleusercontent.com</string>
 </dict>
 </plist>
