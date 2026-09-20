@@ -73,6 +73,20 @@ _SEARCHABLE = """(name ILIKE %(q)s OR city ILIKE %(q)s OR address ILIKE %(q)s OR
   OR machine_model ILIKE %(q)s OR array_to_string(bean_origins, ' ') ILIKE %(q)s
   OR array_to_string(grinders, ' ') ILIKE %(q)s)"""
 
+# Completeness-weighted rank: known machine dominates (it is the app's core
+# data point), then other filled fields, then recency. Name last keeps offset
+# pagination stable within equal ranks.
+_RANK = """
+  (machine <> 'UNKNOWN')::int * 8
+  + (machine_model IS NOT NULL)::int * 2
+  + (bean_source <> 'UNKNOWN')::int * 2
+  + (roaster IS NOT NULL)::int * 2
+  + (cardinality(grinders) > 0)::int
+  + (jsonb_array_length(COALESCE(drinks, '[]'::jsonb)) > 0)::int
+  + (cardinality(milk_brands) > 0)::int
+  DESC, updated_at DESC, name ASC
+"""
+
 # Sources format addresses differently ("7th St" vs "Seventh Street"), so
 # imports dedup by normalized name within ~300m. Prefix match catches suffix
 # variants like "Crema Coffee Roasting Company".
@@ -138,7 +152,7 @@ class PostgresRepository:
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         rows = self._query(
             f"""SELECT {select}, count(*) OVER() AS total FROM shops s {join} {where}
-                ORDER BY name ASC LIMIT %(limit)s OFFSET %(offset)s""",
+                ORDER BY {_RANK} LIMIT %(limit)s OFFSET %(offset)s""",
             params,
         )
         total = rows[0]["total"] if rows else 0

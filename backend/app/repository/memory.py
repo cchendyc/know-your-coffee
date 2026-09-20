@@ -35,6 +35,19 @@ def _matches(shop: CoffeeShop, filter: dict) -> bool:
     return True
 
 
+def _rank(shop: CoffeeShop) -> int:
+    """Mirrors _RANK in postgres.py: known machine dominates, then other filled fields."""
+    return (
+        (8 if shop["machine"] != "UNKNOWN" else 0)
+        + (2 if shop["machineModel"] else 0)
+        + (2 if shop["beanSource"] != "UNKNOWN" else 0)
+        + (2 if shop["roaster"] else 0)
+        + (1 if shop["grinders"] else 0)
+        + (1 if shop["drinks"] else 0)
+        + (1 if shop["milkBrands"] else 0)
+    )
+
+
 class MemoryRepository:
     def __init__(self):
         self._shops: dict[str, CoffeeShop] = {}
@@ -54,7 +67,10 @@ class MemoryRepository:
             shops = [s for s in shops if s["savedByMe"]]
         if filter.get("been"):
             shops = [s for s in shops if s["beenByMe"]]
+        # Stable multi-pass sort: name asc, then recency desc, then rank desc.
         shops.sort(key=lambda s: s["name"])
+        shops.sort(key=lambda s: s["updatedAt"], reverse=True)
+        shops.sort(key=_rank, reverse=True)
         offset = filter.get("offset") or 0
         limit = filter.get("limit") or 24
         return shops[offset : offset + limit], len(shops)
