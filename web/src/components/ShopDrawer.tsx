@@ -1,0 +1,203 @@
+import { useCallback, useEffect, useState } from 'react'
+import { fetchShop, type CoffeeShop, type User } from '../api'
+import { BEAN_SOURCE_LABELS, MACHINE_LABELS } from '../labels'
+import { ReportForm } from './ReportForm'
+import { ReportList } from './ReportList'
+import { SaveBeenButtons } from './SaveBeen'
+import { ShopExpanded } from './ShopExpanded'
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-4 py-2.5">
+      <dt className="text-xs font-medium tracking-wide text-espresso-500 uppercase">{label}</dt>
+      <dd className="text-right text-sm font-medium">{value}</dd>
+    </div>
+  )
+}
+
+export function ShopDrawer({
+  shopId,
+  user,
+  onShopChanged,
+  onClose,
+}: {
+  shopId: string
+  user: User | null
+  onShopChanged: (shop: CoffeeShop) => void
+  onClose: () => void
+}) {
+  const [shop, setShop] = useState<CoffeeShop | null>(null)
+  const [reporting, setReporting] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+
+  const load = useCallback(() => {
+    fetchShop(shopId).then(setShop)
+  }, [shopId])
+
+  // Keep drawer state and the main list in sync after a save/been toggle.
+  const onStatusChanged = (updated: CoffeeShop) => {
+    setShop((prev) => (prev ? { ...prev, savedByMe: updated.savedByMe, beenByMe: updated.beenByMe } : prev))
+    onShopChanged(updated)
+  }
+
+  useEffect(load, [load])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div className="fixed inset-0 z-[1000]">
+      <div className="absolute inset-0 bg-espresso-900/40 backdrop-blur-[2px]" onClick={onClose} />
+      <aside className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col overflow-y-auto bg-cream-50 shadow-2xl">
+        {!shop ? (
+          <p className="p-6 text-sm text-espresso-500">Loading…</p>
+        ) : (
+          <>
+            <div className="sticky top-0 border-b border-cream-200 bg-cream-50/95 px-6 py-5 backdrop-blur">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-bold tracking-tight">{shop.name}</h2>
+                  <p className="mt-1 text-sm text-espresso-500">
+                    {shop.address}, {shop.city}
+                  </p>
+                </div>
+                <button
+                  onClick={onClose}
+                  aria-label="Close"
+                  className="rounded-full p-2 text-espresso-500 transition hover:bg-cream-100 hover:text-espresso-900"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="size-5">
+                    <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <div className="flex gap-4">
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${shop.name} ${shop.address} ${shop.city}`)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs font-medium text-crema-500 hover:underline"
+                  >
+                    Open in Google Maps
+                  </a>
+                  {shop.website && (
+                    <a
+                      href={shop.website}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs font-medium text-crema-500 hover:underline"
+                    >
+                      Shop website ↗
+                    </a>
+                  )}
+                </div>
+                {user && <SaveBeenButtons shop={shop} user={user} onChanged={onStatusChanged} />}
+              </div>
+            </div>
+
+            <div className="px-6 py-4">
+              {shop.photoUrl && (
+                <img src={shop.photoUrl} alt={shop.name} className="mb-4 h-44 w-full rounded-2xl object-cover" />
+              )}
+              {shop.vibe && <p className="mb-4 text-sm text-espresso-500 italic">“{shop.vibe}”</p>}
+              <dl className="divide-y divide-cream-200 rounded-2xl border border-cream-200 bg-white px-4">
+                <InfoRow
+                  label="Machine"
+                  value={`${MACHINE_LABELS[shop.machine]}${shop.machineModel ? ` ${shop.machineModel}` : ''}`}
+                />
+                <InfoRow label="Beans" value={BEAN_SOURCE_LABELS[shop.beanSource]} />
+                {shop.roaster && <InfoRow label="Roaster" value={shop.roaster} />}
+                {shop.beanOrigins.length > 0 && <InfoRow label="Bean origins" value={shop.beanOrigins.join(', ')} />}
+                {shop.grinders.length > 0 && <InfoRow label="Grinders" value={shop.grinders.join(', ')} />}
+                <InfoRow label="Milk" value={shop.milkBrands.length ? shop.milkBrands.join(', ') : 'Unknown'} />
+              </dl>
+
+              {shop.drinks.length > 0 && (
+                <div className="mt-4 rounded-2xl border border-cream-200 bg-white px-4 py-3">
+                  <h3 className="text-xs font-semibold tracking-wide text-espresso-500 uppercase">Drinks</h3>
+                  <ul className="mt-1 divide-y divide-cream-200">
+                    {shop.drinks.map((d) => (
+                      <li key={d.name} className="flex items-center justify-between py-1.5 text-sm">
+                        <span>{d.name}</span>
+                        {d.price != null && <span className="font-medium text-espresso-500">${d.price.toFixed(2)}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {shop.photos.length > 0 && (
+                <button onClick={() => setExpanded(true)} className="mt-4 block w-full text-left">
+                  <h3 className="text-xs font-semibold tracking-wide text-espresso-500 uppercase">
+                    Community photos · {shop.photos.length}
+                  </h3>
+                  <div className="mt-2 flex gap-2 overflow-hidden">
+                    {shop.photos.slice(0, 4).map((p) => (
+                      <img key={p.id} src={p.data} alt="" className="size-20 shrink-0 rounded-xl object-cover" />
+                    ))}
+                    {shop.photos.length > 4 && (
+                      <span className="flex size-20 shrink-0 items-center justify-center rounded-xl bg-cream-100 text-xs font-semibold text-espresso-500">
+                        +{shop.photos.length - 4}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              )}
+
+              <button
+                onClick={() => setExpanded(true)}
+                className="mt-4 w-full rounded-2xl border border-cream-200 bg-white py-2.5 text-sm font-medium text-espresso-700 transition hover:border-crema-400"
+              >
+                Expand: all photos & reports
+              </button>
+
+              {!reporting && user && (
+                <button
+                  onClick={() => setReporting(true)}
+                  className="mt-4 w-full rounded-2xl bg-espresso-700 py-3 text-sm font-semibold text-cream-50 transition hover:bg-espresso-900"
+                >
+                  Report an update
+                </button>
+              )}
+              {!user && (
+                <p className="mt-4 rounded-2xl border border-dashed border-crema-400 bg-crema-400/10 px-4 py-3 text-center text-sm text-espresso-700">
+                  Sign in with Google (top right) to report updates, add photos, and keep lists.
+                </p>
+              )}
+
+              {reporting && (
+                <div className="mt-4">
+                  <ReportForm
+                    shop={shop}
+                    onDone={() => {
+                      setReporting(false)
+                      load()
+                    }}
+                    onCancel={() => setReporting(false)}
+                  />
+                </div>
+              )}
+
+              <h3 className="mt-6 text-xs font-semibold tracking-wide text-espresso-500 uppercase">
+                Recent reports
+              </h3>
+              <ReportList reports={shop.reports.slice(0, 3)} />
+              {shop.reports.length > 3 && (
+                <button onClick={() => setExpanded(true)} className="mt-2 text-xs font-medium text-crema-500 hover:underline">
+                  See all {shop.reports.length} reports
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </aside>
+      {expanded && shop && (
+        <ShopExpanded shop={shop} user={user} onChanged={onStatusChanged} onClose={() => setExpanded(false)} />
+      )}
+    </div>
+  )
+}

@@ -1,0 +1,187 @@
+"""In-memory repository for local development without a database."""
+
+from datetime import datetime, timezone
+from typing import Any
+from uuid import uuid4
+
+from ..models import CoffeeShop, NewShop, Report, ShopPhoto, User
+from .util import is_same_shop
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _matches(shop: CoffeeShop, filter: dict) -> bool:
+    if filter.get("machine") and shop["machine"] != filter["machine"]:
+        return False
+    if filter.get("city") and shop["city"].lower() != filter["city"].lower():
+        return False
+    if filter.get("search"):
+        haystack = " ".join(
+            [
+                shop["name"],
+                shop["city"],
+                shop["address"],
+                shop["roaster"] or "",
+                shop["machine"],
+                shop["machineModel"] or "",
+                *shop["beanOrigins"],
+                *shop["grinders"],
+            ]
+        ).lower()
+        if filter["search"].lower() not in haystack:
+            return False
+    return True
+
+
+class MemoryRepository:
+    def __init__(self):
+        self._shops: dict[str, CoffeeShop] = {}
+        self._reports: dict[str, list[Report]] = {}
+        self._users: dict[str, User] = {}
+        self._photos: dict[str, list[ShopPhoto]] = {}
+        self._statuses: dict[tuple[str, str], dict] = {}  # (user_id, shop_id)
+
+    def _with_flags(self, shop: CoffeeShop, user_id: str | None) -> CoffeeShop:
+        status = self._statuses.get((user_id, shop["id"])) if user_id else None
+        return {**shop, "savedByMe": bool(status and status["saved"]), "beenByMe": bool(status and status["been"])}
+
+    def list_shops(self, filter: dict, user_id: str | None = None) -> tuple[list[CoffeeShop], int]:
+        shops = [self._with_flags(s, user_id) for s in self._shops.values()]
+        shops = [s for s in shops if _matches(s, filter)]
+        if filter.get("saved"):
+            shops = [s for s in shops if s["savedByMe"]]
+        if filter.get("been"):
+            shops = [s for s in shops if s["beenByMe"]]
+        shops.sort(key=lambda s: s["name"])
+        offset = filter.get("offset") or 0
+        limit = filter.get("limit") or 24
+        return shops[offset : offset + limit], len(shops)
+
+    def get_shop(self, shop_id: str, user_id: str | None = None) -> CoffeeShop | None:
+        shop = self._shops.get(shop_id)
+        return self._with_flags(shop, user_id) if shop else None
+
+    def list_cities(self) -> list[str]:
+        return sorted({s["city"] for s in self._shops.values()})
+
+    def list_reports(self, shop_id: str) -> list[Report]:
+        return list(reversed(self._reports.get(shop_id, [])))
+
+    def add_report(self, report: dict) -> Report:
+        user = self._users.get(report.get("userId") or "")
+        stored: Report = {
+            "id": str(uuid4()),
+            "shopId": report["shopId"],
+            "machine": report.get("machine"),
+            "machineModel": report.get("machineModel"),
+            "beanSource": report.get("beanSource"),
+            "roaster": report.get("roaster"),
+            "beanOrigins": report.get("beanOrigins"),
+            "grinders": report.get("grinders"),
+            "drinks": report.get("drinks"),
+            "milkBrands": report.get("milkBrands"),
+            "note": report.get("note"),
+            "source": report.get("source") or "TEXT",
+            "reporter": {"name": user["name"], "picture": user["picture"]} if user else None,
+            "createdAt": _now(),
+        }
+        self._reports.setdefault(report["shopId"], []).append(stored)
+
+        # Latest report wins: fold non-null fields into the shop record.
+        shop = self._shops.get(report["shopId"])
+        if shop:
+            for report_key, shop_key in [
+                ("machine", "machine"),
+                ("machineModel", "machineModel"),
+                ("beanSource", "beanSource"),
+                ("roaster", "roaster"),
+                ("beanOrigins", "beanOrigins"),
+                ("grinders", "grinders"),
+                ("drinks", "drinks"),
+                ("milkBrands", "milkBrands"),
+            ]:
+                if stored.get(report_key) is not None:
+                    shop[shop_key] = stored[report_key]  # type: ignore[literal-required]
+            shop["updatedAt"] = stored["createdAt"]
+        return stored
+
+    def upsert_shops(self, shops: list[NewShop]) -> list[CoffeeShop]:
+        result: list[CoffeeShop] = []
+        for incoming in shops:
+            existing = next((s for s in self._shops.values() if is_same_shop(s, incoming)), None)
+            if existing:
+                result.append(existing)
+                continue
+            shop: CoffeeShop = {
+                **incoming,
+                "id": str(uuid4()),
+                "savedByMe": False,
+                "beenByMe": False,
+                "updatedAt": _now(),
+            }
+            self._shops[shop["id"]] = shop
+            result.append(shop)
+        return result
+
+    def enrich_shop(self, shop_id: str, patch: dict) -> None:
+        shop = self._shops.get(shop_id)
+        if not shop:
+            return
+        if shop["machine"] == "UNKNOWN" and patch.get("machine"):
+            shop["machine"] = patch["machine"]
+        if shop["machineModel"] is None and patch.get("machineModel"):
+            shop["machineModel"] = patch["machineModel"]
+        if shop["beanSource"] == "UNKNOWN" and patch.get("beanSource"):
+            shop["beanSource"] = patch["beanSource"]
+        if shop["roaster"] is None and patch.get("roaster"):
+            shop["roaster"] = patch["roaster"]
+        if not shop["milkBrands"] and patch.get("milkBrands"):
+            shop["milkBrands"] = patch["milkBrands"]
+        if shop["vibe"] is None and patch.get("vibe"):
+            shop["vibe"] = patch["vibe"]
+        shop["updatedAt"] = _now()
+
+    def set_shop_meta(self, shop_id: str, meta: dict) -> None:
+        shop = self._shops.get(shop_id)
+        if shop:
+            shop["photoUrl"] = meta.get("photoUrl") or shop["photoUrl"]
+            shop["website"] = meta.get("website") or shop["website"]
+
+    def upsert_user(self, user: dict) -> User:
+        existing = next((u for u in self._users.values() if u["googleSub"] == user["googleSub"]), None)
+        record: User = {**user, "id": existing["id"] if existing else str(uuid4())}
+        self._users[record["id"]] = record
+        return record
+
+    def set_shop_status(self, user_id: str, shop_id: str, saved: bool | None, been: bool | None) -> None:
+        key = (user_id, shop_id)
+        current = self._statuses.get(key, {"saved": False, "been": False})
+        self._statuses[key] = {
+            "saved": current["saved"] if saved is None else saved,
+            "been": current["been"] if been is None else been,
+        }
+
+    def user_stats(self, user_id: str) -> dict[str, Any]:
+        mine = [s for (uid, _), s in self._statuses.items() if uid == user_id]
+        return {"saved": sum(s["saved"] for s in mine), "been": sum(s["been"] for s in mine)}
+
+    def list_photos(self, shop_id: str) -> list[ShopPhoto]:
+        return list(reversed(self._photos.get(shop_id, [])))
+
+    def add_photos(self, shop_id: str, user_id: str | None, photos: list[dict]) -> list[ShopPhoto]:
+        user = self._users.get(user_id or "")
+        added: list[ShopPhoto] = [
+            {
+                "id": str(uuid4()),
+                "shopId": shop_id,
+                "kind": p["kind"],
+                "data": p["data"],
+                "uploader": {"name": user["name"], "picture": user["picture"]} if user else None,
+                "createdAt": _now(),
+            }
+            for p in photos
+        ]
+        self._photos.setdefault(shop_id, []).extend(added)
+        return added

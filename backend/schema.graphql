@@ -1,0 +1,199 @@
+enum MachineBrand {
+  LA_MARZOCCO
+  SLAYER
+  SYNESSO
+  KEES_VAN_DER_WESTEN
+  VICTORIA_ARDUINO
+  NUOVA_SIMONELLI
+  MODBAR
+  ROCKET
+  RANCILIO
+  BREVILLE
+  DECENT
+  OTHER
+  UNKNOWN
+}
+
+enum BeanSource {
+  IN_HOUSE_ROAST
+  LOCAL_ROASTER
+  NATIONAL_ROASTER
+  MULTI_ROASTER
+  UNKNOWN
+}
+
+enum ReportSource {
+  TEXT
+  PHOTO
+}
+
+"What a community photo shows, so galleries can be grouped by section."
+enum PhotoKind {
+  MACHINE
+  BEANS
+  DRINKS
+  MENU
+  VIBE
+  OTHER
+}
+
+"A menu item, e.g. matcha latte at 6.50."
+type DrinkItem {
+  name: String!
+  price: Float
+}
+
+input DrinkInput {
+  name: String!
+  price: Float
+}
+
+type CoffeeShop {
+  id: ID!
+  name: String!
+  address: String!
+  city: String!
+  lat: Float!
+  lng: Float!
+  machine: MachineBrand!
+  machineModel: String
+  beanSource: BeanSource!
+  roaster: String
+  "Bean origins, e.g. Single origin, Seasonal, Ethiopia, Brazil."
+  beanOrigins: [String!]!
+  "Grinders in use, e.g. Mahlkonig EK43."
+  grinders: [String!]!
+  "Menu drinks with prices where known."
+  drinks: [DrinkItem!]!
+  "Milk brands served, e.g. Straus, Oatly."
+  milkBrands: [String!]!
+  "Short summary of the shop's atmosphere, extracted from public reviews."
+  vibe: String
+  photoUrl: String
+  "The shop's own website."
+  website: String
+  "True when the signed-in viewer bookmarked this shop."
+  savedByMe: Boolean!
+  "True when the signed-in viewer marked this shop as visited."
+  beenByMe: Boolean!
+  "Community photos, newest first."
+  photos: [ShopPhoto!]!
+  reports: [Report!]!
+  updatedAt: String!
+}
+
+"A page of shops plus the total match count, for offset pagination."
+type ShopPage {
+  shops: [CoffeeShop!]!
+  total: Int!
+}
+
+type User {
+  id: ID!
+  name: String!
+  email: String!
+  picture: String
+  "Shops on the viewer's saved list."
+  savedCount: Int!
+  "Shops on the viewer's been list."
+  beenCount: Int!
+}
+
+type Reporter {
+  name: String!
+  picture: String
+}
+
+type AuthPayload {
+  token: String!
+  user: User!
+}
+
+type Report {
+  id: ID!
+  shopId: ID!
+  machine: MachineBrand
+  machineModel: String
+  beanSource: BeanSource
+  roaster: String
+  beanOrigins: [String!]
+  grinders: [String!]
+  drinks: [DrinkItem!]
+  milkBrands: [String!]
+  note: String
+  source: ReportSource!
+  reporter: Reporter
+  createdAt: String!
+}
+
+type ShopPhoto {
+  id: ID!
+  kind: PhotoKind!
+  "Data URL of the image."
+  data: String!
+  uploader: Reporter
+  createdAt: String!
+}
+
+input PhotoInput {
+  kind: PhotoKind!
+  "Data URL; clients should downscale to ~1000px before upload."
+  data: String!
+}
+
+type MachineGuess {
+  machine: MachineBrand!
+  machineModel: String
+  confidence: Float!
+  notes: String
+}
+
+input ReportInput {
+  shopId: ID!
+  machine: MachineBrand
+  machineModel: String
+  beanSource: BeanSource
+  roaster: String
+  beanOrigins: [String!]
+  grinders: [String!]
+  drinks: [DrinkInput!]
+  milkBrands: [String!]
+  note: String
+  source: ReportSource = TEXT
+}
+
+type Query {
+  shops(
+    search: String
+    machine: MachineBrand
+    city: String
+    saved: Boolean
+    been: Boolean
+    limit: Int! = 24
+    offset: Int! = 0
+  ): ShopPage!
+  shop(id: ID!): CoffeeShop
+  cities: [String!]!
+  me: User
+}
+
+type Mutation {
+  "Exchange a Google ID token for a session token. Requires GOOGLE_OAUTH_CLIENT_ID on the server."
+  signInWithGoogle(idToken: String!): AuthPayload!
+  "Add a coffee shop; the address is resolved via Google Places. Requires sign-in and GOOGLE_PLACES_API_KEY."
+  addShop(name: String!, address: String!, city: String!): CoffeeShop!
+  "Submit a community report. Requires sign-in."
+  submitReport(input: ReportInput!): Report!
+  "Bookmark (saved) or mark visited (been). Omitted flags are left unchanged. Requires sign-in."
+  setShopStatus(shopId: ID!, saved: Boolean, been: Boolean): CoffeeShop!
+  "Attach community photos to a shop, grouped by what they show. Requires sign-in."
+  addShopPhotos(shopId: ID!, photos: [PhotoInput!]!): [ShopPhoto!]!
+  "Identify an espresso machine from a base64-encoded photo. Requires GEMINI_API_KEY on the server."
+  identifyMachine(imageBase64: String!): MachineGuess!
+  "Extract drinks and prices from a base64-encoded menu photo. Requires GEMINI_API_KEY on the server."
+  parseMenu(imageBase64: String!): [DrinkItem!]!
+  "Import coffee shops near a location from Yelp. Requires YELP_API_KEY on the server."
+  importShopsFromYelp(location: String! = "San Francisco, CA"): [CoffeeShop!]!
+  "Import coffee shops near a location from Google Places. Requires GOOGLE_PLACES_API_KEY on the server."
+  importShopsFromGoogle(location: String! = "San Francisco, CA"): [CoffeeShop!]!
+}

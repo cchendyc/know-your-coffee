@@ -1,0 +1,24 @@
+# Render blueprint for the GraphQL API (free plan).
+# Migrations are NOT run here; apply them from your machine:
+#   cd backend && .venv/bin/alembic upgrade head
+services:
+  - type: web
+    name: know-your-coffee-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: GOOGLE_PLACES_API_KEY
+        sync: false
+      - key: YELP_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
