@@ -1,5 +1,6 @@
 """Google Places: shop import, geocoding, photos, websites, and reviews."""
 
+import re
 from typing import TypedDict
 
 import httpx
@@ -17,6 +18,15 @@ _BAY_AREA_BIAS = {
         "high": {"latitude": 38.7, "longitude": -121.2},
     }
 }
+
+# Places types that count as a coffee shop. Roasters sometimes get tagged as
+# plain stores, so a coffee-ish name also passes.
+_COFFEE_TYPES = {"coffee_shop", "cafe", "espresso_bar", "tea_house", "bakery"}
+_COFFEE_NAME = re.compile(r"coffee|caf[eé]|espresso|roast|kaffee|kissaten", re.I)
+
+
+def _is_coffee_shop(name: str, types: list[str]) -> bool:
+    return bool(_COFFEE_TYPES.intersection(types)) or bool(_COFFEE_NAME.search(name))
 
 
 def _component(place: dict, kind: str) -> str | None:
@@ -89,7 +99,7 @@ async def place_preview(place_id: str) -> dict | None:
             f"https://places.googleapis.com/v1/places/{place_id}",
             headers={
                 "x-goog-api-key": settings.GOOGLE_PLACES_API_KEY,
-                "x-goog-fieldmask": "id,displayName,formattedAddress,addressComponents,location,photos,websiteUri",
+                "x-goog-fieldmask": "id,displayName,formattedAddress,addressComponents,location,photos,websiteUri,types",
             },
         )
     if res.status_code != 200:
@@ -100,6 +110,7 @@ async def place_preview(place_id: str) -> dict | None:
     return {
         "placeId": p["id"],
         "name": p["displayName"]["text"],
+        "isCoffeeShop": _is_coffee_shop(p["displayName"]["text"], p.get("types") or []),
         "address": street or (p.get("formattedAddress", "").split(",")[0]),
         "city": _component(p, "locality") or _component(p, "sublocality") or "",
         "lat": p["location"]["latitude"],
@@ -113,6 +124,8 @@ async def new_shop_from_place(place_id: str) -> NewShop | None:
     preview = await place_preview(place_id)
     if not preview:
         return None
+    if not preview["isCoffeeShop"]:
+        raise GraphQLError("That's not a coffee shop, duh. Drink more coffee.")
     return {
         **_empty_shop_fields(),
         "name": preview["name"],

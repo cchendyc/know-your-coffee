@@ -148,6 +148,12 @@ export function AddShopModal({
           </p>
         )}
 
+        {preview && !preview.isCoffeeShop && !preview.existing && (
+          <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            That's not a coffee shop, duh. Drink more coffee.
+          </p>
+        )}
+
         {error && <p className="text-xs text-red-600">{error}</p>}
 
         {preview?.existing ? (
@@ -160,7 +166,7 @@ export function AddShopModal({
         ) : (
           <button
             onClick={confirm}
-            disabled={!user || !preview || saving || loadingPreview}
+            disabled={!user || !preview || !preview.isCoffeeShop || saving || loadingPreview}
             className="w-full rounded-xl bg-espresso-700 py-2.5 text-sm font-semibold text-cream-50 transition hover:bg-espresso-900 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {saving ? 'Adding…' : preview ? `Add ${preview.name}` : 'Pick a shop above'}

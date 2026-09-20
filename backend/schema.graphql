@@ -165,6 +165,8 @@ type PlacePreview {
   lng: Float!
   photoUrl: String
   website: String
+  "False when Google says this place is not a coffee shop; adding it is rejected."
+  isCoffeeShop: Boolean!
   "The already-listed shop matching this place, if any — open it instead of creating a duplicate."
   existing: CoffeeShop
 }
