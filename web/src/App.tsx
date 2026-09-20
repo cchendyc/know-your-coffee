@@ -27,26 +27,17 @@ export default function App() {
   const [refresh, setRefresh] = useState(0)
   const [list, setList] = useState<'all' | 'saved' | 'been'>('all')
   const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
+  const loadingMore = useRef(false)
 
   const PAGE_SIZE = 24
+  const filter = { search, machine, saved: list === 'saved', been: list === 'been' }
 
-  useEffect(() => {
-    setPage(1)
-  }, [search, machine, list, view])
-
+  // First page (debounced); filter or view changes start over.
   useEffect(() => {
     const t = setTimeout(() => {
       setLoading(true)
       // The map needs every match; the list paginates.
-      fetchShops({
-        search,
-        machine,
-        saved: list === 'saved',
-        been: list === 'been',
-        limit: view === 'map' ? 1000 : PAGE_SIZE * page,
-        offset: 0,
-      })
+      fetchShops({ ...filter, limit: view === 'map' ? 1000 : PAGE_SIZE, offset: 0 })
         .then((res) => {
           setShops(res.shops)
           setTotal(res.total)
@@ -56,7 +47,23 @@ export default function App() {
         .finally(() => setLoading(false))
     }, 200)
     return () => clearTimeout(t)
-  }, [search, machine, refresh, list, view, page])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, machine, refresh, list, view])
+
+  // Next batch, appended. The ref guard makes repeat sentinel hits no-ops.
+  const loadMore = () => {
+    if (loading || loadingMore.current) return
+    loadingMore.current = true
+    fetchShops({ ...filter, limit: PAGE_SIZE, offset: shops.length })
+      .then((res) => {
+        setShops((prev) => [...prev, ...res.shops])
+        setTotal(res.total)
+      })
+      .catch((e: Error) => setError(e.message))
+      .finally(() => {
+        loadingMore.current = false
+      })
+  }
 
   // Patch one shop in place after a save/been toggle, keeping list filters honest.
   const onShopChanged = (updated: CoffeeShop) => {
@@ -189,8 +196,8 @@ export default function App() {
                 ))}
               </div>
             )}
-            {view === 'list' && shops.length < total && (
-              <LoadMoreSentinel loading={loading} onVisible={() => setPage((p) => p + 1)}>
+            {view === 'list' && !loading && shops.length < total && (
+              <LoadMoreSentinel loading={loading} onVisible={loadMore}>
                 Loading more… ({shops.length} of {total})
               </LoadMoreSentinel>
             )}
