@@ -210,6 +210,7 @@ export interface PlacePreview {
   lng: number
   photoUrl: string | null
   website: string | null
+  existing: CoffeeShop | null
 }
 
 export function searchPlaces(query: string) {
@@ -222,7 +223,10 @@ export function searchPlaces(query: string) {
 export function fetchPlacePreview(placeId: string) {
   return gql<{ placePreview: PlacePreview | null }>(
     `query PlacePreview($placeId: ID!) {
-      placePreview(placeId: $placeId) { placeId name address city lat lng photoUrl website }
+      placePreview(placeId: $placeId) {
+        placeId name address city lat lng photoUrl website
+        existing { ${SHOP_FIELDS} }
+      }
     }`,
     { placeId },
   ).then((d) => d.placePreview)

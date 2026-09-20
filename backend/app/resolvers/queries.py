@@ -40,7 +40,15 @@ async def resolve_search_places(_, info, query):
 
 @query.field("placePreview")
 async def resolve_place_preview(_, info, placeId):
-    return await place_preview(placeId)
+    preview = await place_preview(placeId)
+    if not preview:
+        return None
+    repo = info.context["repo"]
+    user = info.context["user"]
+    existing = repo.find_matching_shop(preview["name"], preview["lat"], preview["lng"])
+    if existing and user:
+        existing = repo.get_shop(existing["id"], user["id"])
+    return {**preview, "existing": existing}
 
 
 @coffee_shop.field("reports")

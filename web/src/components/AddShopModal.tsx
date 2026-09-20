@@ -138,15 +138,31 @@ export function AddShopModal({
           </div>
         )}
 
+        {preview?.existing && (
+          <p className="rounded-xl border border-crema-400 bg-crema-400/10 px-3 py-2 text-xs text-espresso-700">
+            <span className="font-semibold">{preview.existing.name}</span> is already on the map — no need to add it
+            again.
+          </p>
+        )}
+
         {error && <p className="text-xs text-red-600">{error}</p>}
 
-        <button
-          onClick={confirm}
-          disabled={!user || !preview || saving || loadingPreview}
-          className="w-full rounded-xl bg-espresso-700 py-2.5 text-sm font-semibold text-cream-50 transition hover:bg-espresso-900 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {saving ? 'Adding…' : preview ? `Add ${preview.name}` : 'Pick a shop above'}
-        </button>
+        {preview?.existing ? (
+          <button
+            onClick={() => onAdded(preview.existing!.id)}
+            className="w-full rounded-xl bg-espresso-700 py-2.5 text-sm font-semibold text-cream-50 transition hover:bg-espresso-900"
+          >
+            Open {preview.existing.name}
+          </button>
+        ) : (
+          <button
+            onClick={confirm}
+            disabled={!user || !preview || saving || loadingPreview}
+            className="w-full rounded-xl bg-espresso-700 py-2.5 text-sm font-semibold text-cream-50 transition hover:bg-espresso-900 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {saving ? 'Adding…' : preview ? `Add ${preview.name}` : 'Pick a shop above'}
+          </button>
+        )}
       </div>
     </div>
   )

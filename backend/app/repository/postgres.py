@@ -213,12 +213,16 @@ class PostgresRepository:
         )
         return _to_report(rows[0])
 
+    def find_matching_shop(self, name: str, lat: float, lng: float) -> CoffeeShop | None:
+        rows = self._query(_UPSERT_MATCH, {"name": name, "lat": lat, "lng": lng})
+        return _to_shop(rows[0]) if rows else None
+
     def upsert_shops(self, shops: list[NewShop]) -> list[CoffeeShop]:
         result: list[CoffeeShop] = []
         for s in shops:
-            existing = self._query(_UPSERT_MATCH, {"name": s["name"], "lat": s["lat"], "lng": s["lng"]})
+            existing = self.find_matching_shop(s["name"], s["lat"], s["lng"])
             if existing:
-                result.append(_to_shop(existing[0]))
+                result.append(existing)
                 continue
             rows = self._query(
                 """INSERT INTO shops (name, address, city, lat, lng, machine, machine_model, bean_source,

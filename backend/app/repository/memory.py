@@ -107,6 +107,10 @@ class MemoryRepository:
             shop["updatedAt"] = stored["createdAt"]
         return stored
 
+    def find_matching_shop(self, name: str, lat: float, lng: float) -> CoffeeShop | None:
+        probe = {"name": name, "lat": lat, "lng": lng}
+        return next((s for s in self._shops.values() if is_same_shop(s, probe)), None)
+
     def upsert_shops(self, shops: list[NewShop]) -> list[CoffeeShop]:
         result: list[CoffeeShop] = []
         for incoming in shops:
