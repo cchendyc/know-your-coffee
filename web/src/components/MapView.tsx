@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { MapContainer, Marker, TileLayer, Tooltip, useMap } from 'react-leaflet'
-import { divIcon, latLngBounds } from 'leaflet'
+import MarkerClusterGroup from 'react-leaflet-cluster'
+import { divIcon, latLngBounds, point, type MarkerCluster } from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { CoffeeShop } from '../api'
 import { MACHINE_LABELS } from '../labels'
@@ -15,8 +16,17 @@ function markerIcon(shop: CoffeeShop) {
   return divIcon({
     className: '',
     html: `<span class="${classes}"></span>`,
-    iconSize: [18, 18],
-    iconAnchor: [9, 9],
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+  })
+}
+
+function clusterIcon(cluster: MarkerCluster) {
+  return divIcon({
+    className: '',
+    html: `<span class="shop-cluster">${cluster.getChildCount()}</span>`,
+    iconSize: point(32, 32),
+    iconAnchor: point(16, 16),
   })
 }
 
@@ -44,13 +54,13 @@ export function MapView({
       {showLegend && (
         <div className="absolute right-3 bottom-3 z-[500] flex flex-col gap-1 rounded-xl bg-white/90 px-3 py-2 text-xs shadow backdrop-blur">
           <span className="flex items-center gap-2">
-            <span className="shop-marker !static" /> Shop
+            <span className="shop-marker !static shrink-0" /> Shop
           </span>
           <span className="flex items-center gap-2">
-            <span className="shop-marker is-saved !static" /> Saved
+            <span className="shop-marker is-saved !static shrink-0" /> Saved
           </span>
           <span className="flex items-center gap-2">
-            <span className="shop-marker is-been !static" /> Been
+            <span className="shop-marker is-been !static shrink-0" /> Been
           </span>
         </div>
       )}
@@ -62,21 +72,28 @@ export function MapView({
           maxZoom={18}
         />
         <FitToShops shops={shops} />
-        {shops.map((shop) => (
-          <Marker
-            key={`${shop.id}-${shop.savedByMe}-${shop.beenByMe}`}
-            position={[shop.lat, shop.lng]}
-            icon={markerIcon(shop)}
-            eventHandlers={{ click: () => onSelect(shop.id) }}
-          >
-            <Tooltip direction="top" offset={[0, -8]}>
-              <span className="font-semibold">{shop.name}</span>
-              {shop.machine !== 'UNKNOWN' && <span> · {MACHINE_LABELS[shop.machine]}</span>}
-              {shop.savedByMe && <span> · saved</span>}
-              {shop.beenByMe && <span> · been</span>}
-            </Tooltip>
-          </Marker>
-        ))}
+        <MarkerClusterGroup
+          iconCreateFunction={clusterIcon}
+          maxClusterRadius={28}
+          showCoverageOnHover={false}
+          spiderfyDistanceMultiplier={1.6}
+        >
+          {shops.map((shop) => (
+            <Marker
+              key={`${shop.id}-${shop.savedByMe}-${shop.beenByMe}`}
+              position={[shop.lat, shop.lng]}
+              icon={markerIcon(shop)}
+              eventHandlers={{ click: () => onSelect(shop.id) }}
+            >
+              <Tooltip direction="top" offset={[0, -7]}>
+                <span className="font-semibold">{shop.name}</span>
+                {shop.machine !== 'UNKNOWN' && <span> · {MACHINE_LABELS[shop.machine]}</span>}
+                {shop.savedByMe && <span> · saved</span>}
+                {shop.beenByMe && <span> · been</span>}
+              </Tooltip>
+            </Marker>
+          ))}
+        </MarkerClusterGroup>
       </MapContainer>
     </div>
   )
