@@ -28,7 +28,8 @@ export function AddShopModal({
 
   // Debounced type-ahead against Google Places (via our API).
   useEffect(() => {
-    if (preview) return // done searching once a place is picked
+    // Picking a place sets the input text; don't search again until the user edits it.
+    if (preview || loadingPreview) return
     const q = query.trim()
     latestQuery.current = q
     if (q.length < 3) {
@@ -45,10 +46,12 @@ export function AddShopModal({
         .finally(() => setSearching(false))
     }, 350)
     return () => clearTimeout(t)
-  }, [query, preview])
+  }, [query, preview, loadingPreview])
 
   const pick = async (s: PlaceSuggestion) => {
+    latestQuery.current = '' // discard any in-flight search results
     setSuggestions([])
+    setSearching(false)
     setQuery(s.name)
     setLoadingPreview(true)
     setError(null)
