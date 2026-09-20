@@ -1,6 +1,7 @@
 from ariadne import ObjectType, QueryType
 
 from ..services.google import place_preview, search_places
+from ..services.nlsearch import parse_search
 
 query = QueryType()
 coffee_shop = ObjectType("CoffeeShop")
@@ -9,10 +10,26 @@ user_type = ObjectType("User")
 
 
 @query.field("shops")
-def resolve_shops(_, info, **filter):
+async def resolve_shops(_, info, **filter):
     repo = info.context["repo"]
     user = info.context["user"]
-    shops, total = repo.list_shops(filter, user["id"] if user else None)
+    user_id = user["id"] if user else None
+    shops, total = repo.list_shops(filter, user_id)
+
+    # Lexical search first; only a query it can't satisfy costs an LLM call.
+    search = (filter.get("search") or "").strip()
+    if total == 0 and search:
+        parsed = await parse_search(search)
+        if parsed:
+            retry = {
+                **filter,
+                "machine": filter.get("machine") or parsed["machine"],
+                "city": parsed["city"] or filter.get("city"),
+                "search": " ".join(parsed["terms"]),
+            }
+            if not retry["search"]:
+                retry.pop("search")
+            shops, total = repo.list_shops(retry, user_id)
     return {"shops": shops, "total": total}
 
 

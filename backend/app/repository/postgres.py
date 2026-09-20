@@ -8,7 +8,7 @@ from psycopg.types.json import Json
 from psycopg_pool import ConnectionPool
 
 from ..models import Chain, CoffeeShop, NewShop, Report, ShopPhoto, User
-from .util import brand_name, cluster_shops, norm_coffees, slugify_brand
+from .util import brand_name, cluster_shops, norm_coffees, split_search, slugify_brand
 
 
 def _iso(dt: datetime) -> str:
@@ -81,14 +81,26 @@ def _to_photo(r: dict) -> ShopPhoto:
     }
 
 
+# One search token; list_shops instantiates it per token (q0, q1, …) so a
+# free-form query like "gesha in oakland" ANDs across fields.
 _SEARCHABLE = """(name ILIKE %(q)s OR city ILIKE %(q)s OR address ILIKE %(q)s OR roaster ILIKE %(q)s
-  OR machine_model ILIKE %(q)s OR array_to_string(bean_origins, ' ') ILIKE %(q)s
+  OR machine::text ILIKE %(q)s OR machine_model ILIKE %(q)s
+  OR array_to_string(bean_origins, ' ') ILIKE %(q)s
   OR array_to_string(grinders, ' ') ILIKE %(q)s
-  OR EXISTS (SELECT 1 FROM jsonb_array_elements(machines) m WHERE m->>'model' ILIKE %(q)s)
+  OR array_to_string(milk_brands, ' ') ILIKE %(q)s
+  OR vibe ILIKE %(q)s
+  OR EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(drinks, '[]'::jsonb)) d WHERE d->>'name' ILIKE %(q)s)
+  OR EXISTS (SELECT 1 FROM jsonb_array_elements(machines) m
+             WHERE m->>'brand' ILIKE %(q)s OR m->>'model' ILIKE %(q)s)
   OR EXISTS (SELECT 1 FROM jsonb_array_elements(coffees) c
              WHERE c->>'name' ILIKE %(q)s OR c->>'roaster' ILIKE %(q)s
+                OR c->>'fermentation' ILIKE %(q)s
                 OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(c->'origins', '[]'::jsonb)) o
-                           WHERE o ILIKE %(q)s)))"""
+                           WHERE o ILIKE %(q)s)
+                OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(c->'varieties', '[]'::jsonb)) v
+                           WHERE v ILIKE %(q)s)
+                OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(c->'tastingNotes', '[]'::jsonb)) t
+                           WHERE t ILIKE %(q)s)))"""
 
 # Completeness-weighted rank: known machine dominates (it is the app's core
 # data point), then other filled fields, then recency. Name last keeps offset
@@ -171,8 +183,13 @@ class PostgresRepository:
         if filter.get("been") and user_id:
             conditions.append("us.been = true")
         if filter.get("search"):
-            conditions.append(_SEARCHABLE)
-            params["q"] = f"%{filter['search']}%"
+            tokens, amenities = split_search(filter["search"])
+            for i, token in enumerate(tokens):
+                conditions.append(_SEARCHABLE.replace("%(q)s", f"%(q{i})s"))
+                params[f"q{i}"] = f"%{token}%"
+            for key, col in (("dogFriendly", "dog_friendly"), ("wifi", "wifi"), ("outdoorSeating", "outdoor_seating")):
+                if amenities.get(key):
+                    conditions.append(f"{col} = true")
         if filter.get("chainId"):
             conditions.append("s.chain_id = %(chain_id)s")
             params["chain_id"] = filter["chainId"]

@@ -24,6 +24,46 @@ def norm_coffees(raw: list[dict] | None) -> list[Coffee]:
         for c in (raw or [])
     ]
 
+# Filler words in natural queries like "i want gesha coffee". Coffee-domain
+# words match nearly every row, so they carry no signal either.
+_STOPWORDS = {
+    "i", "a", "an", "the", "and", "or", "in", "on", "for", "me", "my", "some", "any",
+    "good", "best", "really", "something", "anything",
+    "want", "wants", "need", "needs", "like", "with", "that", "has", "have",
+    "made", "make", "makes", "using", "use", "uses", "get", "find", "show", "looking", "look",
+    "serve", "serves", "serving", "served", "near", "nearby",
+    "coffee", "cafe", "shop", "shops", "place", "places", "espresso", "drink", "drinks",
+    # Carriers for amenity/milk phrases: "dog friendly", "outdoor seating", "oat milk".
+    "friendly", "seating", "milk",
+}
+
+# Boolean amenities have no text to match; these tokens become filters.
+_AMENITY_TOKENS = {
+    "dog": "dogFriendly", "dogs": "dogFriendly", "pet": "dogFriendly", "pets": "dogFriendly",
+    "pup": "dogFriendly", "puppy": "dogFriendly",
+    "wifi": "wifi", "internet": "wifi", "laptop": "wifi",
+    "outdoor": "outdoorSeating", "outdoors": "outdoorSeating", "outside": "outdoorSeating",
+    "patio": "outdoorSeating", "terrace": "outdoorSeating",
+}
+
+
+def split_search(query: str) -> tuple[list[str], dict[str, bool]]:
+    """Splits a free-form query into text tokens that must all match and
+    amenity requirements ("dog friendly" -> dogFriendly=True). Falls back to
+    every word when the query is nothing but stopwords."""
+    words = [w for w in re.split(r"[^a-z0-9]+", query.lower()) if w]
+    tokens: list[str] = []
+    amenities: dict[str, bool] = {}
+    for w in words:
+        if w in _AMENITY_TOKENS:
+            amenities[_AMENITY_TOKENS[w]] = True
+        elif w not in _STOPWORDS:
+            tokens.append(w)
+    if not tokens and not amenities:
+        tokens = words
+    return tokens, amenities
+
+
 _ALNUM = set("abcdefghijklmnopqrstuvwxyz0123456789")
 _LOCATION_SPLIT = re.compile(r"\s+[-–—|@]\s+")
 _TRAILING_PAREN = re.compile(r"\s*\([^)]*\)\s*$")

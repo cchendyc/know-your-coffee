@@ -64,6 +64,9 @@ function MachineFilter({
 }
 
 export default function App() {
+  // draft is what's being typed; search only commits on Enter, since the
+  // backend may spend an LLM call understanding a free-form query.
+  const [draft, setDraft] = useState('')
   const [search, setSearch] = useState('')
   const [machine, setMachine] = useState<MachineBrand | ''>('')
   const [shops, setShops] = useState<CoffeeShop[]>([])
@@ -151,7 +154,13 @@ export default function App() {
 
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
         <div className="flex flex-col gap-3 sm:flex-row">
-          <div className="relative flex-1">
+          <form
+            className="relative flex-1"
+            onSubmit={(e) => {
+              e.preventDefault()
+              setSearch(draft.trim())
+            }}
+          >
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -163,12 +172,21 @@ export default function App() {
               <path d="m20 20-3.5-3.5" strokeLinecap="round" />
             </svg>
             <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search shops, roasters, machines, cities…"
-              className="w-full rounded-2xl border border-cream-200 bg-white py-3 pr-4 pl-12 text-sm shadow-sm outline-none placeholder:text-espresso-500/60 focus:border-crema-400 focus:ring-2 focus:ring-crema-400/40"
+              value={draft}
+              onChange={(e) => {
+                setDraft(e.target.value)
+                // Clearing the box resets results without an extra Enter.
+                if (!e.target.value.trim()) setSearch('')
+              }}
+              placeholder="Search anything, roaster, machine, city…"
+              className="w-full rounded-2xl border border-cream-200 bg-white py-3 pr-16 pl-12 text-sm shadow-sm outline-none placeholder:text-espresso-500/60 focus:border-crema-400 focus:ring-2 focus:ring-crema-400/40"
             />
-          </div>
+            {draft.trim() !== search && (
+              <span className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 rounded border border-cream-200 bg-cream-100 px-1.5 py-0.5 text-[10px] font-medium text-espresso-500">
+                ⏎ Enter
+              </span>
+            )}
+          </form>
           <MachineFilter value={machine} onChange={setMachine} />
         </div>
 

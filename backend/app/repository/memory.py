@@ -5,7 +5,7 @@ from typing import Any
 from uuid import uuid4
 
 from ..models import Chain, CoffeeShop, NewShop, Report, ShopPhoto, User
-from .util import brand_name, cluster_shops, is_same_shop, norm_coffees, slugify_brand
+from .util import brand_name, cluster_shops, is_same_shop, norm_coffees, split_search, slugify_brand
 
 
 def _now() -> str:
@@ -30,16 +30,27 @@ def _matches(shop: CoffeeShop, filter: dict) -> bool:
                 shop["roaster"] or "",
                 shop["machine"],
                 shop["machineModel"] or "",
+                shop["vibe"] or "",
                 *shop["beanOrigins"],
                 *shop["grinders"],
+                *shop["milkBrands"],
+                *[d["name"] for d in shop["drinks"]],
+                *[m.get("brand") or "" for m in shop["machines"]],
                 *[m.get("model") or "" for m in shop["machines"]],
                 *[c.get("name") or "" for c in shop["coffees"]],
                 *[c.get("roaster") or "" for c in shop["coffees"]],
+                *[c.get("fermentation") or "" for c in shop["coffees"]],
                 *[o for c in shop["coffees"] for o in c.get("origins") or []],
+                *[v for c in shop["coffees"] for v in c.get("varieties") or []],
+                *[t for c in shop["coffees"] for t in c.get("tastingNotes") or []],
             ]
         ).lower()
-        if filter["search"].lower() not in haystack:
+        tokens, amenities = split_search(filter["search"])
+        if not all(token in haystack for token in tokens):
             return False
+        for key in amenities:
+            if shop.get(key) is not True:
+                return False
     if filter.get("chainId") and shop.get("chainId") != filter["chainId"]:
         return False
     return True
