@@ -103,7 +103,7 @@ export const TOKEN_KEY = 'kyc_token'
 export const USER_KEY = 'kyc_user'
 
 // In production the API lives on another host (e.g. Render); locally Vite proxies /graphql.
-const API_URL = (import.meta.env.VITE_API_URL as string | undefined) || '/graphql'
+const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.trim() || '/graphql'
 
 async function gql<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
   const token = localStorage.getItem(TOKEN_KEY)

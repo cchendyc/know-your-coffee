@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchMyStats, signInWithGoogle, TOKEN_KEY, USER_KEY, type User } from '../api'
 
-const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
+// trim(): a trailing newline pasted into the env/CI variable makes Google
+// reject the client ID with "invalid_client: The OAuth client was not found".
+const CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim()
 
 declare global {
   interface Window {
