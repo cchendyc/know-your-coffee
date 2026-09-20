@@ -236,7 +236,13 @@ export default function App() {
       )}
 
       {selectedId && (
-        <ShopDrawer shopId={selectedId} user={user} onShopChanged={onShopChanged} onClose={() => setSelectedId(null)} />
+        <ShopDrawer
+          shopId={selectedId}
+          initialShop={shops.find((s) => s.id === selectedId)}
+          user={user}
+          onShopChanged={onShopChanged}
+          onClose={() => setSelectedId(null)}
+        />
       )}
     </div>
   )

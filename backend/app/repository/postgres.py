@@ -7,7 +7,8 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Json
 from psycopg_pool import ConnectionPool
 
-from ..models import CoffeeShop, NewShop, Report, ShopPhoto, User
+from ..models import Chain, CoffeeShop, NewShop, Report, ShopPhoto, User
+from .util import brand_name, cluster_shops, slugify_brand
 
 
 def _iso(dt: datetime) -> str:
@@ -22,6 +23,7 @@ def _to_shop(r: dict) -> CoffeeShop:
         "city": r["city"],
         "lat": r["lat"],
         "lng": r["lng"],
+        "chainId": str(r["chain_id"]) if r.get("chain_id") else None,
         "machine": r["machine"],
         "machineModel": r["machine_model"],
         "beanSource": r["bean_source"],
@@ -158,6 +160,9 @@ class PostgresRepository:
         if filter.get("search"):
             conditions.append(_SEARCHABLE)
             params["q"] = f"%{filter['search']}%"
+        if filter.get("chainId"):
+            conditions.append("s.chain_id = %(chain_id)s")
+            params["chain_id"] = filter["chainId"]
 
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         rows = self._query(
@@ -187,14 +192,17 @@ class PostgresRepository:
     def list_cities(self) -> list[str]:
         return [r["city"] for r in self._query("SELECT DISTINCT city FROM shops ORDER BY city ASC")]
 
-    def list_reports(self, shop_id: str) -> list[Report]:
+    def list_reports(self, shop_id: str, limit: int | None = None) -> list[Report]:
         rows = self._query(
             """SELECT r.*, u.name AS reporter_name, u.picture AS reporter_picture
                FROM reports r LEFT JOIN users u ON u.id = r.user_id
-               WHERE r.shop_id = %s ORDER BY r.created_at DESC""",
-            [shop_id],
+               WHERE r.shop_id = %(shop_id)s ORDER BY r.created_at DESC LIMIT %(limit)s""",
+            {"shop_id": shop_id, "limit": limit},
         )
         return [_to_report(r) for r in rows]
+
+    def count_reports(self, shop_id: str) -> int:
+        return self._query("SELECT count(*) AS n FROM reports WHERE shop_id = %s", [shop_id])[0]["n"]
 
     def add_report(self, report: dict) -> Report:
         params = {
@@ -274,7 +282,8 @@ class PostgresRepository:
                 },
             )
             result.append(_to_shop(rows[0]))
-        return result
+        self.relink_chains()
+        return [self.get_shop(s["id"]) or s for s in result]
 
     def enrich_shop(self, shop_id: str, patch: dict) -> None:
         """Review-derived data. Only fills fields that are still UNKNOWN/null/empty,
@@ -315,6 +324,8 @@ class PostgresRepository:
             "UPDATE shops SET photo_url = COALESCE(%s, photo_url), website = COALESCE(%s, website) WHERE id = %s",
             [meta.get("photoUrl"), meta.get("website"), shop_id],
         )
+        if meta.get("website"):
+            self.relink_chains()
 
     def upsert_user(self, user: dict) -> User:
         rows = self._query(
@@ -352,14 +363,17 @@ class PostgresRepository:
         )
         return {"saved": rows[0]["saved"], "been": rows[0]["been"]} if rows else {"saved": 0, "been": 0}
 
-    def list_photos(self, shop_id: str) -> list[ShopPhoto]:
+    def list_photos(self, shop_id: str, limit: int | None = None) -> list[ShopPhoto]:
         rows = self._query(
             """SELECT p.*, u.name AS uploader_name, u.picture AS uploader_picture
                FROM shop_photos p LEFT JOIN users u ON u.id = p.user_id
-               WHERE p.shop_id = %s ORDER BY p.created_at DESC""",
-            [shop_id],
+               WHERE p.shop_id = %(shop_id)s ORDER BY p.created_at DESC LIMIT %(limit)s""",
+            {"shop_id": shop_id, "limit": limit},
         )
         return [_to_photo(r) for r in rows]
+
+    def count_photos(self, shop_id: str) -> int:
+        return self._query("SELECT count(*) AS n FROM shop_photos WHERE shop_id = %s", [shop_id])[0]["n"]
 
     def add_photos(self, shop_id: str, user_id: str | None, photos: list[dict]) -> list[ShopPhoto]:
         added: list[ShopPhoto] = []
@@ -372,3 +386,66 @@ class PostgresRepository:
             )
             added.append(_to_photo(rows[0]))
         return added
+
+    def get_chain(self, chain_id: str) -> Chain | None:
+        rows = self._query("SELECT id, name, slug, website FROM chains WHERE id = %s", [chain_id])
+        if not rows:
+            return None
+        r = rows[0]
+        return {"id": str(r["id"]), "name": r["name"], "slug": r["slug"], "website": r["website"]}
+
+    def list_chain_shops(self, chain_id: str, user_id: str | None = None) -> list[CoffeeShop]:
+        if user_id:
+            rows = self._query(
+                """SELECT s.*, us.saved AS saved_by_me, us.been AS been_by_me
+                   FROM shops s LEFT JOIN user_shops us ON us.shop_id = s.id AND us.user_id = %s
+                   WHERE s.chain_id = %s ORDER BY s.city ASC, s.name ASC""",
+                [user_id, chain_id],
+            )
+        else:
+            rows = self._query(
+                "SELECT * FROM shops WHERE chain_id = %s ORDER BY city ASC, name ASC",
+                [chain_id],
+            )
+        return [_to_shop(r) for r in rows]
+
+    def relink_chains(self) -> int:
+        rows = self._query("SELECT id, name, website, chain_id FROM shops")
+        clusters = cluster_shops(rows)
+        assigned = 0
+        keep: list[str] = []
+        with self._pool.connection() as conn:
+            for members in clusters:
+                existing = [str(m["chain_id"]) for m in members if m.get("chain_id")]
+                name = min((brand_name(m["name"]) for m in members), key=len)
+                slug = slugify_brand(name)
+                website = next((m["website"] for m in members if m.get("website")), None)
+                if existing:
+                    chain_id = existing[0]
+                    conn.execute(
+                        "UPDATE chains SET name = %s, website = COALESCE(%s, website) WHERE id = %s",
+                        [name, website, chain_id],
+                    )
+                else:
+                    row = conn.execute(
+                        """INSERT INTO chains (name, slug, website) VALUES (%s, %s, %s)
+                           ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name,
+                             website = COALESCE(EXCLUDED.website, chains.website)
+                           RETURNING id""",
+                        [name, slug, website],
+                    ).fetchone()
+                    chain_id = str(row["id"])
+                ids = [str(m["id"]) for m in members]
+                conn.execute("UPDATE shops SET chain_id = %s WHERE id = ANY(%s::uuid[])", [chain_id, ids])
+                keep.append(chain_id)
+                assigned += len(members)
+            if keep:
+                conn.execute(
+                    "UPDATE shops SET chain_id = NULL WHERE chain_id IS NOT NULL AND NOT (chain_id = ANY(%s::uuid[]))",
+                    [keep],
+                )
+                conn.execute("DELETE FROM chains WHERE NOT (id = ANY(%s::uuid[]))", [keep])
+            else:
+                conn.execute("UPDATE shops SET chain_id = NULL WHERE chain_id IS NOT NULL")
+                conn.execute("DELETE FROM chains")
+        return assigned

@@ -4,6 +4,7 @@ from ..services.google import place_preview, search_places
 
 query = QueryType()
 coffee_shop = ObjectType("CoffeeShop")
+chain_type = ObjectType("Chain")
 user_type = ObjectType("User")
 
 
@@ -52,13 +53,23 @@ async def resolve_place_preview(_, info, placeId):
 
 
 @coffee_shop.field("reports")
-def resolve_reports(shop, info):
-    return info.context["repo"].list_reports(shop["id"])
+def resolve_reports(shop, info, limit=None):
+    return info.context["repo"].list_reports(shop["id"], limit)
+
+
+@coffee_shop.field("reportCount")
+def resolve_report_count(shop, info):
+    return info.context["repo"].count_reports(shop["id"])
 
 
 @coffee_shop.field("photos")
-def resolve_photos(shop, info):
-    return info.context["repo"].list_photos(shop["id"])
+def resolve_photos(shop, info, limit=None):
+    return info.context["repo"].list_photos(shop["id"], limit)
+
+
+@coffee_shop.field("photoCount")
+def resolve_photo_count(shop, info):
+    return info.context["repo"].count_photos(shop["id"])
 
 
 # Saved/been counts are only meaningful for the session user (me / auth payload).

@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from ..models import CoffeeShop, NewShop, Report, ShopPhoto, User
-from .util import is_same_shop
+from ..models import Chain, CoffeeShop, NewShop, Report, ShopPhoto, User
+from .util import brand_name, cluster_shops, is_same_shop, slugify_brand
 
 
 def _now() -> str:
@@ -32,6 +32,8 @@ def _matches(shop: CoffeeShop, filter: dict) -> bool:
         ).lower()
         if filter["search"].lower() not in haystack:
             return False
+    if filter.get("chainId") and shop.get("chainId") != filter["chainId"]:
+        return False
     return True
 
 
@@ -56,6 +58,7 @@ def _rank(shop: CoffeeShop) -> int:
 class MemoryRepository:
     def __init__(self):
         self._shops: dict[str, CoffeeShop] = {}
+        self._chains: dict[str, Chain] = {}
         self._reports: dict[str, list[Report]] = {}
         self._users: dict[str, User] = {}
         self._photos: dict[str, list[ShopPhoto]] = {}
@@ -87,8 +90,12 @@ class MemoryRepository:
     def list_cities(self) -> list[str]:
         return sorted({s["city"] for s in self._shops.values()})
 
-    def list_reports(self, shop_id: str) -> list[Report]:
-        return list(reversed(self._reports.get(shop_id, [])))
+    def list_reports(self, shop_id: str, limit: int | None = None) -> list[Report]:
+        reports = list(reversed(self._reports.get(shop_id, [])))
+        return reports[:limit] if limit else reports
+
+    def count_reports(self, shop_id: str) -> int:
+        return len(self._reports.get(shop_id, []))
 
     def add_report(self, report: dict) -> Report:
         user = self._users.get(report.get("userId") or "")
@@ -151,13 +158,15 @@ class MemoryRepository:
                 "outdoorSeating": None,
                 **incoming,
                 "id": str(uuid4()),
+                "chainId": None,
                 "savedByMe": False,
                 "beenByMe": False,
                 "updatedAt": _now(),
             }
             self._shops[shop["id"]] = shop
             result.append(shop)
-        return result
+        self.relink_chains()
+        return [self.get_shop(s["id"]) or s for s in result]
 
     def enrich_shop(self, shop_id: str, patch: dict) -> None:
         shop = self._shops.get(shop_id)
@@ -185,6 +194,8 @@ class MemoryRepository:
         if shop:
             shop["photoUrl"] = meta.get("photoUrl") or shop["photoUrl"]
             shop["website"] = meta.get("website") or shop["website"]
+            if meta.get("website"):
+                self.relink_chains()
 
     def upsert_user(self, user: dict) -> User:
         existing = next((u for u in self._users.values() if u["googleSub"] == user["googleSub"]), None)
@@ -204,8 +215,12 @@ class MemoryRepository:
         mine = [s for (uid, _), s in self._statuses.items() if uid == user_id]
         return {"saved": sum(s["saved"] for s in mine), "been": sum(s["been"] for s in mine)}
 
-    def list_photos(self, shop_id: str) -> list[ShopPhoto]:
-        return list(reversed(self._photos.get(shop_id, [])))
+    def list_photos(self, shop_id: str, limit: int | None = None) -> list[ShopPhoto]:
+        photos = list(reversed(self._photos.get(shop_id, [])))
+        return photos[:limit] if limit else photos
+
+    def count_photos(self, shop_id: str) -> int:
+        return len(self._photos.get(shop_id, []))
 
     def add_photos(self, shop_id: str, user_id: str | None, photos: list[dict]) -> list[ShopPhoto]:
         user = self._users.get(user_id or "")
@@ -222,3 +237,45 @@ class MemoryRepository:
         ]
         self._photos.setdefault(shop_id, []).extend(added)
         return added
+
+    def get_chain(self, chain_id: str) -> Chain | None:
+        return self._chains.get(chain_id)
+
+    def list_chain_shops(self, chain_id: str, user_id: str | None = None) -> list[CoffeeShop]:
+        shops = [self._with_flags(s, user_id) for s in self._shops.values() if s.get("chainId") == chain_id]
+        shops.sort(key=lambda s: (s["city"], s["name"]))
+        return shops
+
+    def relink_chains(self) -> int:
+        clusters = cluster_shops(list(self._shops.values()))
+        keep: set[str] = set()
+        assigned = 0
+        by_slug = {c["slug"]: c for c in self._chains.values()}
+        for members in clusters:
+            existing_ids = [m["chainId"] for m in members if m.get("chainId")]
+            name = min((brand_name(m["name"]) for m in members), key=len)
+            slug = slugify_brand(name)
+            website = next((m.get("website") for m in members if m.get("website")), None)
+            if existing_ids and existing_ids[0] in self._chains:
+                chain_id = existing_ids[0]
+                chain = self._chains[chain_id]
+                chain["name"] = name
+                chain["website"] = website or chain["website"]
+            elif slug in by_slug:
+                chain_id = by_slug[slug]["id"]
+                self._chains[chain_id]["name"] = name
+                self._chains[chain_id]["website"] = website or self._chains[chain_id]["website"]
+            else:
+                chain_id = str(uuid4())
+                record: Chain = {"id": chain_id, "name": name, "slug": slug, "website": website}
+                self._chains[chain_id] = record
+                by_slug[slug] = record
+            for member in members:
+                member["chainId"] = chain_id
+            keep.add(chain_id)
+            assigned += len(members)
+        for shop in self._shops.values():
+            if shop.get("chainId") and shop["chainId"] not in keep:
+                shop["chainId"] = None
+        self._chains = {cid: c for cid, c in self._chains.items() if cid in keep}
+        return assigned

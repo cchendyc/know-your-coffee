@@ -16,16 +16,20 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 
 export function ShopDrawer({
   shopId,
+  initialShop,
   user,
   onShopChanged,
   onClose,
 }: {
   shopId: string
+  // The list's copy of this shop, so the drawer paints instantly.
+  initialShop?: CoffeeShop
   user: User | null
   onShopChanged: (shop: CoffeeShop) => void
   onClose: () => void
 }) {
-  const [shop, setShop] = useState<CoffeeShop | null>(null)
+  // Paint immediately from the list's copy; photos/reports hydrate from fetchShop.
+  const [shop, setShop] = useState<CoffeeShop | null>(initialShop ?? null)
   const [expanded, setExpanded] = useState(false)
   // "Report an update" opens the full page with the form already showing.
   const [reportOnExpand, setReportOnExpand] = useState(false)
@@ -40,7 +44,12 @@ export function ShopDrawer({
     onShopChanged(updated)
   }
 
-  useEffect(load, [load])
+  useEffect(() => {
+    // Selecting another shop while open: repaint from its list copy, not the old shop.
+    setShop((prev) => (prev?.id === shopId ? prev : (initialShop ?? null)))
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load, shopId])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -145,18 +154,25 @@ export function ShopDrawer({
                 </div>
               )}
 
-              {shop.photos.length > 0 && (
+              {!shop.photos && (
+                <div className="mt-4 flex gap-2">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="size-20 animate-pulse rounded-xl bg-cream-100" />
+                  ))}
+                </div>
+              )}
+              {shop.photos && shop.photos.length > 0 && (
                 <button onClick={() => setExpanded(true)} className="mt-4 block w-full text-left">
                   <h3 className="text-xs font-semibold tracking-wide text-espresso-500 uppercase">
-                    Community photos · {shop.photos.length}
+                    Community photos · {shop.photoCount}
                   </h3>
                   <div className="mt-2 flex gap-2 overflow-hidden">
-                    {shop.photos.slice(0, 4).map((p) => (
+                    {shop.photos.map((p) => (
                       <img key={p.id} src={p.data} alt="" className="size-20 shrink-0 rounded-xl object-cover" />
                     ))}
-                    {shop.photos.length > 4 && (
+                    {(shop.photoCount ?? 0) > 4 && (
                       <span className="flex size-20 shrink-0 items-center justify-center rounded-xl bg-cream-100 text-xs font-semibold text-espresso-500">
-                        +{shop.photos.length - 4}
+                        +{(shop.photoCount ?? 0) - 4}
                       </span>
                     )}
                   </div>
@@ -182,11 +198,20 @@ export function ShopDrawer({
               <h3 className="mt-6 text-xs font-semibold tracking-wide text-espresso-500 uppercase">
                 Recent reports
               </h3>
-              <ReportList reports={shop.reports.slice(0, 3)} />
-              {shop.reports.length > 3 && (
-                <button onClick={() => setExpanded(true)} className="mt-2 text-xs font-medium text-crema-500 hover:underline">
-                  See all {shop.reports.length} reports
-                </button>
+              {shop.reports ? (
+                <>
+                  <ReportList reports={shop.reports} />
+                  {(shop.reportCount ?? 0) > 3 && (
+                    <button
+                      onClick={() => setExpanded(true)}
+                      className="mt-2 text-xs font-medium text-crema-500 hover:underline"
+                    >
+                      See all {shop.reportCount} reports
+                    </button>
+                  )}
+                </>
+              ) : (
+                <div className="mt-2 h-16 animate-pulse rounded-2xl bg-cream-100" />
               )}
             </div>
           </>

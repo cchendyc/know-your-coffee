@@ -78,14 +78,28 @@ type CoffeeShop {
   photoUrl: String
   "The shop's own website."
   website: String
+  "Set when this location belongs to a multi-shop brand."
+  chain: Chain
   "True when the signed-in viewer bookmarked this shop."
   savedByMe: Boolean!
   "True when the signed-in viewer marked this shop as visited."
   beenByMe: Boolean!
-  "Community photos, newest first."
-  photos: [ShopPhoto!]!
-  reports: [Report!]!
+  "Community photos, newest first. Photos carry full image data; request only as many as you render."
+  photos(limit: Int): [ShopPhoto!]!
+  photoCount: Int!
+  "Community reports, newest first."
+  reports(limit: Int): [Report!]!
+  reportCount: Int!
   updatedAt: String!
+}
+
+"A multi-location brand. Equipment and menu stay on each CoffeeShop."
+type Chain {
+  id: ID!
+  name: String!
+  slug: String!
+  website: String
+  shops: [CoffeeShop!]!
 }
 
 "A page of shops plus the total match count, for offset pagination."

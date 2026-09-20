@@ -80,8 +80,12 @@ export interface CoffeeShop {
   savedByMe: boolean
   beenByMe: boolean
   updatedAt: string
-  photos: ShopPhoto[]
-  reports: Report[]
+  // Present only after fetchShop: a preview slice plus totals. The list
+  // query skips them entirely — photos are full base64 payloads.
+  photos?: ShopPhoto[]
+  photoCount?: number
+  reports?: Report[]
+  reportCount?: number
 }
 
 export interface MachineGuess {
@@ -183,16 +187,34 @@ export function fetchMyStats() {
   ).then((d) => d.me)
 }
 
+const REPORT_FIELDS = `
+  id machine machineModel beanSource roaster beanOrigins grinders drinks { name price }
+  milkBrands dogFriendly wifi outdoorSeating note source createdAt reporter { name picture }
+`
+
+// Drawer payload: just enough photos for the preview strip and the 3 shown
+// reports. Full galleries come from fetchShopDetails when expanding.
 export function fetchShop(id: string) {
   return gql<{ shop: CoffeeShop | null }>(
     `query Shop($id: ID!) {
       shop(id: $id) {
         ${SHOP_FIELDS}
+        photoCount
+        reportCount
+        photos(limit: 4) { id kind data createdAt uploader { name picture } }
+        reports(limit: 3) { ${REPORT_FIELDS} }
+      }
+    }`,
+    { id },
+  ).then((d) => d.shop)
+}
+
+export function fetchShopDetails(id: string) {
+  return gql<{ shop: { photos: ShopPhoto[]; reports: Report[] } | null }>(
+    `query ShopDetails($id: ID!) {
+      shop(id: $id) {
         photos { id kind data createdAt uploader { name picture } }
-        reports {
-          id machine machineModel beanSource roaster beanOrigins grinders drinks { name price }
-          milkBrands dogFriendly wifi outdoorSeating note source createdAt reporter { name picture }
-        }
+        reports { ${REPORT_FIELDS} }
       }
     }`,
     { id },

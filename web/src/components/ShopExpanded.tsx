@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { CoffeeShop, PhotoKind, User } from '../api'
+import { fetchShopDetails, type CoffeeShop, type PhotoKind, type Report, type ShopPhoto, type User } from '../api'
 import { BEAN_SOURCE_LABELS, MACHINE_LABELS, PHOTO_KINDS, PHOTO_KIND_LABELS } from '../labels'
 import { ReportForm } from './ReportForm'
 import { ReportList } from './ReportList'
@@ -34,6 +34,25 @@ export function ShopExpanded({
   const [reporting, setReporting] = useState(initialReporting)
   const formRef = useRef<HTMLDivElement>(null)
 
+  // Start with the drawer's preview slice, then hydrate the full galleries.
+  const [photos, setPhotos] = useState<ShopPhoto[]>(shop.photos ?? [])
+  const [reports, setReports] = useState<Report[]>(shop.reports ?? [])
+  const [loadingDetails, setLoadingDetails] = useState(true)
+
+  const loadDetails = () => {
+    fetchShopDetails(shop.id)
+      .then((d) => {
+        if (d) {
+          setPhotos(d.photos)
+          setReports(d.reports)
+        }
+      })
+      .finally(() => setLoadingDetails(false))
+  }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(loadDetails, [shop.id])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', onKey)
@@ -44,8 +63,8 @@ export function ShopExpanded({
     if (reporting) formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [reporting])
 
-  const byKind = new Map<PhotoKind, typeof shop.photos>()
-  for (const photo of shop.photos) {
+  const byKind = new Map<PhotoKind, ShopPhoto[]>()
+  for (const photo of photos) {
     byKind.set(photo.kind, [...(byKind.get(photo.kind) ?? []), photo])
   }
 
@@ -122,6 +141,7 @@ export function ShopExpanded({
               onDone={() => {
                 setReporting(false)
                 onReload()
+                loadDetails()
               }}
               onCancel={() => setReporting(false)}
             />
@@ -143,7 +163,14 @@ export function ShopExpanded({
         )}
 
         <h3 className="mt-8 text-sm font-bold tracking-tight">Community photos</h3>
-        {shop.photos.length === 0 && (
+        {loadingDetails && photos.length === 0 && (
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-40 animate-pulse rounded-xl bg-cream-100" />
+            ))}
+          </div>
+        )}
+        {!loadingDetails && photos.length === 0 && (
           <p className="mt-1 text-sm text-espresso-500">No photos yet. Add some with “Report an update” above.</p>
         )}
         {PHOTO_KINDS.filter((k) => byKind.has(k)).map((kind) => (
@@ -165,9 +192,13 @@ export function ShopExpanded({
         ))}
 
         <h3 className="mt-8 text-sm font-bold tracking-tight">
-          All reports · {shop.reports.length}
+          All reports · {shop.reportCount ?? reports.length}
         </h3>
-        <ReportList reports={shop.reports} />
+        {loadingDetails && reports.length === 0 ? (
+          <div className="mt-2 h-16 animate-pulse rounded-2xl bg-cream-100" />
+        ) : (
+          <ReportList reports={reports} />
+        )}
       </div>
     </div>
   )
