@@ -5,7 +5,7 @@ from typing import Any
 from uuid import uuid4
 
 from ..models import Chain, CoffeeShop, NewShop, Report, ShopPhoto, User
-from .util import brand_name, cluster_shops, is_same_shop, slugify_brand
+from .util import brand_name, cluster_shops, is_same_shop, norm_coffees, slugify_brand
 
 
 def _now() -> str:
@@ -13,7 +13,11 @@ def _now() -> str:
 
 
 def _matches(shop: CoffeeShop, filter: dict) -> bool:
-    if filter.get("machine") and shop["machine"] != filter["machine"]:
+    if (
+        filter.get("machine")
+        and shop["machine"] != filter["machine"]
+        and not any(m["brand"] == filter["machine"] for m in shop["machines"])
+    ):
         return False
     if filter.get("city") and shop["city"].lower() != filter["city"].lower():
         return False
@@ -28,6 +32,10 @@ def _matches(shop: CoffeeShop, filter: dict) -> bool:
                 shop["machineModel"] or "",
                 *shop["beanOrigins"],
                 *shop["grinders"],
+                *[m.get("model") or "" for m in shop["machines"]],
+                *[c.get("name") or "" for c in shop["coffees"]],
+                *[c.get("roaster") or "" for c in shop["coffees"]],
+                *[o for c in shop["coffees"] for o in c.get("origins") or []],
             ]
         ).lower()
         if filter["search"].lower() not in haystack:
@@ -45,6 +53,7 @@ def _rank(shop: CoffeeShop) -> int:
         + (2 if shop["beanSource"] != "UNKNOWN" else 0)
         + (2 if shop["roaster"] else 0)
         + (1 if shop["grinders"] else 0)
+        + (1 if shop["coffees"] else 0)
         + (1 if shop["drinks"] else 0)
         + (1 if shop["milkBrands"] else 0)
         + (1 if shop["vibe"] else 0)
@@ -98,15 +107,21 @@ class MemoryRepository:
         return len(self._reports.get(shop_id, []))
 
     def add_report(self, report: dict) -> Report:
+        # The scalar primary mirrors the first machines entry.
+        machines = report.get("machines")
+        if machines and not report.get("machine"):
+            report = {**report, "machine": machines[0]["brand"], "machineModel": machines[0].get("model")}
         user = self._users.get(report.get("userId") or "")
         stored: Report = {
             "id": str(uuid4()),
             "shopId": report["shopId"],
             "machine": report.get("machine"),
             "machineModel": report.get("machineModel"),
+            "machines": [{"brand": m["brand"], "model": m.get("model")} for m in machines] if machines else None,
             "beanSource": report.get("beanSource"),
             "roaster": report.get("roaster"),
             "beanOrigins": report.get("beanOrigins"),
+            "coffees": norm_coffees(report["coffees"]) if report.get("coffees") is not None else None,
             "grinders": report.get("grinders"),
             "drinks": report.get("drinks"),
             "milkBrands": report.get("milkBrands"),
@@ -126,9 +141,11 @@ class MemoryRepository:
             for report_key, shop_key in [
                 ("machine", "machine"),
                 ("machineModel", "machineModel"),
+                ("machines", "machines"),
                 ("beanSource", "beanSource"),
                 ("roaster", "roaster"),
                 ("beanOrigins", "beanOrigins"),
+                ("coffees", "coffees"),
                 ("grinders", "grinders"),
                 ("drinks", "drinks"),
                 ("milkBrands", "milkBrands"),
@@ -156,6 +173,8 @@ class MemoryRepository:
                 "dogFriendly": None,
                 "wifi": None,
                 "outdoorSeating": None,
+                "coffees": [],
+                "machines": [],
                 **incoming,
                 "id": str(uuid4()),
                 "chainId": None,

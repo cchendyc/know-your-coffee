@@ -1,9 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
-import { fetchShop, type CoffeeShop, type User } from '../api'
-import { AMENITIES, BEAN_SOURCE_LABELS, machineDisplay } from '../labels'
-import { ChainLocations } from './ChainLocations'
-import { ReportList } from './ReportList'
-import { SaveBeenButtons } from './SaveBeen'
+import { useEffect, useState, type ReactNode } from 'react'
+import { fetchShopLite, setShopStatus, type CoffeeShop, type User } from '../api'
+import { AMENITIES, BEAN_SOURCE_LABELS, coffeeSummary, machineDisplay } from '../labels'
 import { ShopExpanded } from './ShopExpanded'
 
 function InfoRow({ label, value }: { label: string; value: string }) {
@@ -15,6 +12,48 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   )
 }
 
+// One icon-over-label action, Google Maps place-card style.
+function ActionButton({
+  label,
+  title,
+  active,
+  activeCls,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string
+  title?: string
+  active?: boolean
+  // Circle style when active, e.g. filled bookmark amber.
+  activeCls?: string
+  disabled?: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      title={title}
+      onClick={onClick}
+      className="flex flex-1 flex-col items-center gap-1 rounded-xl py-1.5 transition hover:bg-cream-100 disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      <span
+        className={`flex size-9 items-center justify-center rounded-full border transition ${
+          active ? (activeCls ?? '') : 'border-cream-200 bg-white text-espresso-500'
+        }`}
+      >
+        {children}
+      </span>
+      <span className={`text-[11px] font-medium ${active ? 'text-espresso-900' : 'text-espresso-500'}`}>{label}</span>
+    </button>
+  )
+}
+
+// Lean preview: paints from the list's copy with no fetch and no photos.
+// Photos, reports, and chain locations live in ShopExpanded, which fetches
+// them itself and hands the fresh shop back through onHydrated.
 export function ShopDrawer({
   shopId,
   initialShop,
@@ -31,25 +70,12 @@ export function ShopDrawer({
   onOpenShop: (id: string) => void
   onClose: () => void
 }) {
-  // Paint immediately from the list's copy; photos/reports hydrate from fetchShop.
   const [shop, setShop] = useState<CoffeeShop | null>(initialShop ?? null)
+  const [loadFailed, setLoadFailed] = useState(false)
   const [expanded, setExpanded] = useState(false)
-  // "Report an update" opens the full page with the form already showing.
+  // "Update" opens the full page with the form already showing.
   const [reportOnExpand, setReportOnExpand] = useState(false)
-
-  // null = loading, then success/failure. A failed hydration must stop the
-  // skeletons — otherwise they pulse forever over a shop with no photos.
-  const [hydrateFailed, setHydrateFailed] = useState(false)
-
-  const load = useCallback(() => {
-    setHydrateFailed(false)
-    fetchShop(shopId)
-      .then((full) => {
-        if (full) setShop(full)
-        else setHydrateFailed(true)
-      })
-      .catch(() => setHydrateFailed(true))
-  }, [shopId])
+  const [busy, setBusy] = useState(false)
 
   // Keep drawer state and the main list in sync after a save/been toggle.
   const onStatusChanged = (updated: CoffeeShop) => {
@@ -57,14 +83,34 @@ export function ShopDrawer({
     onShopChanged(updated)
   }
 
+  const toggleStatus = async (field: 'saved' | 'been') => {
+    if (!user || !shop || busy) return
+    setBusy(true)
+    try {
+      const updated = await setShopStatus(shop.id, {
+        [field]: field === 'saved' ? !shop.savedByMe : !shop.beenByMe,
+      })
+      onStatusChanged(updated)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   useEffect(() => {
-    // Selecting another shop while open: repaint from its list copy, not the old shop.
-    setShop((prev) => (prev?.id === shopId ? prev : (initialShop ?? null)))
     setExpanded(false)
     setReportOnExpand(false)
-    load()
+    setLoadFailed(false)
+    if (initialShop && initialShop.id === shopId) {
+      setShop(initialShop)
+      return
+    }
+    // Shop isn't in the loaded list (e.g. a chain location): one light fetch.
+    setShop(null)
+    fetchShopLite(shopId)
+      .then((s) => (s ? setShop(s) : setLoadFailed(true)))
+      .catch(() => setLoadFailed(true))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [load, shopId])
+  }, [shopId])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -77,7 +123,9 @@ export function ShopDrawer({
       <div className="absolute inset-0 bg-espresso-900/40 backdrop-blur-[2px]" onClick={onClose} />
       <aside className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col overflow-y-auto bg-cream-50 shadow-2xl">
         {!shop ? (
-          <p className="p-6 text-sm text-espresso-500">Loading…</p>
+          <p className="p-6 text-sm text-espresso-500">
+            {loadFailed ? "Couldn't load this shop." : 'Loading…'}
+          </p>
         ) : (
           <>
             <div className="sticky top-0 border-b border-cream-200 bg-cream-50/95 px-6 py-5 backdrop-blur">
@@ -110,41 +158,99 @@ export function ShopDrawer({
                   </button>
                 </div>
               </div>
-              <div className="mt-2 flex items-center justify-between gap-2">
-                <div className="flex gap-4">
+              <div className="mt-2 flex gap-4">
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${shop.name} ${shop.address} ${shop.city}`)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs font-medium text-crema-500 hover:underline"
+                >
+                  Open in Google Maps
+                </a>
+                {shop.website && (
                   <a
-                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${shop.name} ${shop.address} ${shop.city}`)}`}
+                    href={shop.website}
                     target="_blank"
                     rel="noreferrer"
                     className="text-xs font-medium text-crema-500 hover:underline"
                   >
-                    Open in Google Maps
+                    Shop website ↗
                   </a>
-                  {shop.website && (
-                    <a
-                      href={shop.website}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs font-medium text-crema-500 hover:underline"
-                    >
-                      Shop website ↗
-                    </a>
-                  )}
-                </div>
-                {user && <SaveBeenButtons shop={shop} user={user} onChanged={onStatusChanged} />}
+                )}
+              </div>
+
+              <div className="mt-3 flex items-start gap-1">
+                <ActionButton
+                  label={shop.savedByMe ? 'Saved' : 'Save'}
+                  title={user ? undefined : 'Sign in with Google to use lists'}
+                  active={shop.savedByMe}
+                  activeCls="border-transparent bg-crema-500 text-white"
+                  disabled={!user || busy}
+                  onClick={() => toggleStatus('saved')}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill={shop.savedByMe ? 'currentColor' : 'none'}
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className="size-4"
+                  >
+                    <path d="M6 4h12v17l-6-4-6 4V4Z" strokeLinejoin="round" />
+                  </svg>
+                </ActionButton>
+                <ActionButton
+                  label="Been"
+                  title={user ? undefined : 'Sign in with Google to use lists'}
+                  active={shop.beenByMe}
+                  activeCls="border-transparent bg-green-600 text-white"
+                  disabled={!user || busy}
+                  onClick={() => toggleStatus('been')}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" className="size-4">
+                    <path d="m5 12.5 4.5 4.5L19 7.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </ActionButton>
+                <ActionButton
+                  label="Update"
+                  title={user ? undefined : 'Sign in with Google to report updates'}
+                  active
+                  activeCls="border-transparent bg-espresso-700 text-cream-50"
+                  disabled={!user}
+                  onClick={() => {
+                    setReportOnExpand(true)
+                    setExpanded(true)
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="size-4">
+                    <path
+                      d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3ZM14.5 7.5l3 3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </ActionButton>
               </div>
             </div>
 
             <div className="px-6 py-4">
-              {shop.photoUrl && (
-                <img src={shop.photoUrl} alt={shop.name} className="mb-4 h-44 w-full rounded-2xl object-cover" />
-              )}
               {shop.vibe && <p className="mb-4 text-sm text-espresso-500 italic">“{shop.vibe}”</p>}
               <dl className="divide-y divide-cream-200 rounded-2xl border border-cream-200 bg-white px-4">
-                <InfoRow label="Machine" value={machineDisplay(shop.machine, shop.machineModel)} />
+                <InfoRow
+                  label={shop.machines.length > 1 ? 'Machines' : 'Machine'}
+                  value={
+                    shop.machines.length > 0
+                      ? shop.machines.map((m) => machineDisplay(m.brand, m.model)).join(' · ')
+                      : machineDisplay(shop.machine, shop.machineModel)
+                  }
+                />
                 <InfoRow label="Beans" value={BEAN_SOURCE_LABELS[shop.beanSource]} />
                 {shop.roaster && <InfoRow label="Roaster" value={shop.roaster} />}
-                {shop.beanOrigins.length > 0 && <InfoRow label="Bean origins" value={shop.beanOrigins.join(', ')} />}
+                {shop.coffees.map((c, i) => (
+                  <InfoRow key={i} label={i === 0 ? 'On bar' : ''} value={coffeeSummary(c)} />
+                ))}
+                {shop.coffees.length === 0 && shop.beanOrigins.length > 0 && (
+                  <InfoRow label="Bean origins" value={shop.beanOrigins.join(', ')} />
+                )}
                 {shop.grinders.length > 0 && <InfoRow label="Grinders" value={shop.grinders.join(', ')} />}
                 <InfoRow label="Milk" value={shop.milkBrands.length ? shop.milkBrands.join(', ') : 'Unknown'} />
                 {AMENITIES.filter((a) => shop[a.key] !== null).map((a) => (
@@ -166,74 +272,20 @@ export function ShopDrawer({
                 </div>
               )}
 
-              <ChainLocations shop={shop} onOpenShop={onOpenShop} />
+              <button
+                onClick={() => setExpanded(true)}
+                className="mt-4 flex w-full items-center justify-center gap-1 py-2 text-sm font-semibold text-crema-500 transition hover:text-espresso-700"
+              >
+                See photos, reports & full details
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="size-4">
+                  <path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
 
-              {!shop.photos && !hydrateFailed && (
-                <div className="mt-4 flex gap-2">
-                  {[0, 1, 2].map((i) => (
-                    <div key={i} className="size-20 animate-pulse rounded-xl bg-cream-100" />
-                  ))}
-                </div>
-              )}
-              {hydrateFailed && !shop.photos && (
-                <p className="mt-4 rounded-2xl border border-cream-200 bg-white px-4 py-3 text-xs text-espresso-500">
-                  Couldn't load photos and reports.{' '}
-                  <button onClick={load} className="font-medium text-crema-500 hover:underline">
-                    Retry
-                  </button>
-                </p>
-              )}
-              {shop.photos && shop.photos.length > 0 && (
-                <button onClick={() => setExpanded(true)} className="mt-4 block w-full text-left">
-                  <h3 className="text-xs font-semibold tracking-wide text-espresso-500 uppercase">
-                    Community photos · {shop.photoCount}
-                  </h3>
-                  <div className="mt-2 flex gap-2 overflow-hidden">
-                    {shop.photos.map((p) => (
-                      <img key={p.id} src={p.data} alt="" className="size-20 shrink-0 rounded-xl object-cover" />
-                    ))}
-                    {(shop.photoCount ?? 0) > 4 && (
-                      <span className="flex size-20 shrink-0 items-center justify-center rounded-xl bg-cream-100 text-xs font-semibold text-espresso-500">
-                        +{(shop.photoCount ?? 0) - 4}
-                      </span>
-                    )}
-                  </div>
-                </button>
-              )}
-
-              {user ? (
-                <button
-                  onClick={() => {
-                    setReportOnExpand(true)
-                    setExpanded(true)
-                  }}
-                  className="mt-4 w-full rounded-2xl bg-espresso-700 py-3 text-sm font-semibold text-cream-50 transition hover:bg-espresso-900"
-                >
-                  Report an update
-                </button>
-              ) : (
-                <p className="mt-4 rounded-2xl border border-dashed border-crema-400 bg-crema-400/10 px-4 py-3 text-center text-sm text-espresso-700">
+              {!user && (
+                <p className="mt-2 rounded-2xl border border-dashed border-crema-400 bg-crema-400/10 px-4 py-3 text-center text-sm text-espresso-700">
                   Sign in with Google (top right) to report updates, add photos, and keep lists.
                 </p>
-              )}
-
-              <h3 className="mt-6 text-xs font-semibold tracking-wide text-espresso-500 uppercase">
-                Recent reports
-              </h3>
-              {shop.reports ? (
-                <>
-                  <ReportList reports={shop.reports} />
-                  {(shop.reportCount ?? 0) > 3 && (
-                    <button
-                      onClick={() => setExpanded(true)}
-                      className="mt-2 text-xs font-medium text-crema-500 hover:underline"
-                    >
-                      See all {shop.reportCount} reports
-                    </button>
-                  )}
-                </>
-              ) : hydrateFailed ? null : (
-                <div className="mt-2 h-16 animate-pulse rounded-2xl bg-cream-100" />
               )}
             </div>
           </>
@@ -245,7 +297,7 @@ export function ShopDrawer({
           user={user}
           initialReporting={reportOnExpand}
           onChanged={onStatusChanged}
-          onReload={load}
+          onHydrated={setShop}
           onOpenShop={onOpenShop}
           onClose={() => {
             setExpanded(false)

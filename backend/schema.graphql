@@ -16,16 +16,74 @@ enum MachineBrand {
 }
 
 enum BeanSource {
+  "The shop roasts its own beans (roaster-retailer)."
   IN_HOUSE_ROAST
+  "Wholesale account with a local or regional roaster."
   LOCAL_ROASTER
+  "Wholesale account with a nationally distributed roaster."
   NATIONAL_ROASTER
+  "Rotating selection from multiple roasters."
   MULTI_ROASTER
+  "Roasted by a third party under the shop's own brand."
+  PRIVATE_LABEL
+  "Bulk pre-roasted commercial-grade coffee from a foodservice distributor."
+  DISTRIBUTOR
   UNKNOWN
 }
 
 enum ReportSource {
   TEXT
   PHOTO
+}
+
+enum CoffeeType {
+  SINGLE_ORIGIN
+  BLEND
+}
+
+"Primary post-harvest route. Fermentation styles layer on top, see Coffee.fermentation."
+enum CoffeeProcess {
+  WASHED
+  NATURAL
+  HONEY
+  WET_HULLED
+  OTHER
+}
+
+enum RoastLevel {
+  LIGHT
+  MEDIUM
+  DARK
+}
+
+"One coffee on bar. Every field is optional; report what the bag shows."
+type Coffee {
+  "The roaster's name for it, e.g. Urcunina."
+  name: String
+  "Per-coffee roaster; matters for multi-roaster shops."
+  roaster: String
+  type: CoffeeType
+  "Origin countries; several for a blend."
+  origins: [String!]!
+  process: CoffeeProcess
+  "Free text; techniques outpace any fixed list. E.g. Anaerobic, Koji, Lactic."
+  fermentation: String
+  roastLevel: RoastLevel
+  "Plant varieties, e.g. Gesha, SL28, Bourbon."
+  varieties: [String!]!
+  tastingNotes: [String!]!
+}
+
+input CoffeeInput {
+  name: String
+  roaster: String
+  type: CoffeeType
+  origins: [String!]
+  process: CoffeeProcess
+  fermentation: String
+  roastLevel: RoastLevel
+  varieties: [String!]
+  tastingNotes: [String!]
 }
 
 "What a community photo shows, so galleries can be grouped by section."
@@ -36,6 +94,17 @@ enum PhotoKind {
   MENU
   VIBE
   OTHER
+}
+
+"One espresso machine on the bar."
+type Machine {
+  brand: MachineBrand!
+  model: String
+}
+
+input MachineInput {
+  brand: MachineBrand!
+  model: String
 }
 
 "A menu item, e.g. matcha latte at 6.50."
@@ -56,12 +125,17 @@ type CoffeeShop {
   city: String!
   lat: Float!
   lng: Float!
+  "The primary machine; mirrors the first machines entry."
   machine: MachineBrand!
   machineModel: String
+  "All espresso machines on the bar."
+  machines: [Machine!]!
   beanSource: BeanSource!
   roaster: String
-  "Bean origins, e.g. Single origin, Seasonal, Ethiopia, Brazil."
+  "Bean origins, e.g. Single origin, Seasonal, Ethiopia, Brazil. Superseded by coffees."
   beanOrigins: [String!]!
+  "Coffees currently on bar, newest report wins."
+  coffees: [Coffee!]!
   "Grinders in use, e.g. Mahlkonig EK43."
   grinders: [String!]!
   "Menu drinks with prices where known."
@@ -135,9 +209,11 @@ type Report {
   shopId: ID!
   machine: MachineBrand
   machineModel: String
+  machines: [Machine!]
   beanSource: BeanSource
   roaster: String
   beanOrigins: [String!]
+  coffees: [Coffee!]
   grinders: [String!]
   drinks: [DrinkItem!]
   milkBrands: [String!]
@@ -197,11 +273,14 @@ type PlacePreview {
 
 input ReportInput {
   shopId: ID!
+  "Omit when machines is set; the primary is derived from its first entry."
   machine: MachineBrand
   machineModel: String
+  machines: [MachineInput!]
   beanSource: BeanSource
   roaster: String
   beanOrigins: [String!]
+  coffees: [CoffeeInput!]
   grinders: [String!]
   drinks: [DrinkInput!]
   milkBrands: [String!]

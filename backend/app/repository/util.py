@@ -3,6 +3,27 @@ import unicodedata
 from collections import defaultdict
 from urllib.parse import urlparse
 
+from ..models import Coffee
+
+
+def norm_coffees(raw: list[dict] | None) -> list[Coffee]:
+    """Coffee entries arrive sparse (jsonb or GraphQL input); fill the keys
+    the schema requires as non-null lists."""
+    return [
+        {
+            "name": c.get("name"),
+            "roaster": c.get("roaster"),
+            "type": c.get("type"),
+            "origins": c.get("origins") or [],
+            "process": c.get("process"),
+            "fermentation": c.get("fermentation"),
+            "roastLevel": c.get("roastLevel"),
+            "varieties": c.get("varieties") or [],
+            "tastingNotes": c.get("tastingNotes") or [],
+        }
+        for c in (raw or [])
+    ]
+
 _ALNUM = set("abcdefghijklmnopqrstuvwxyz0123456789")
 _LOCATION_SPLIT = re.compile(r"\s+[-–—|@]\s+")
 _TRAILING_PAREN = re.compile(r"\s*\([^)]*\)\s*$")

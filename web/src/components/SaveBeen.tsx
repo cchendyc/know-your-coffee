@@ -28,8 +28,10 @@ export function SaveBeenButtons({
     }
   }
 
+  // Compact active states fill the circle and glow; a color-only icon swap
+  // reads as unchanged at a glance.
   const base = compact
-    ? 'flex size-8 items-center justify-center rounded-full bg-white/90 shadow-sm backdrop-blur transition'
+    ? 'flex size-8 items-center justify-center rounded-full backdrop-blur transition'
     : 'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition'
   const title = user ? undefined : 'Sign in with Google to use lists'
 
@@ -47,10 +49,10 @@ export function SaveBeenButtons({
         className={`${base} ${
           shop.savedByMe
             ? compact
-              ? 'text-crema-500'
+              ? 'bg-crema-500 text-white shadow-[0_0_12px_3px] shadow-crema-500/70'
               : 'border-crema-400 bg-crema-400/20 text-espresso-700'
             : compact
-              ? 'text-espresso-500 hover:text-espresso-900'
+              ? 'bg-white/90 text-espresso-500 shadow-sm hover:text-espresso-900'
               : 'border-cream-200 text-espresso-500 hover:border-crema-400'
         } disabled:cursor-not-allowed disabled:opacity-50`}
       >
@@ -71,10 +73,10 @@ export function SaveBeenButtons({
         className={`${base} ${
           shop.beenByMe
             ? compact
-              ? 'text-green-700'
+              ? 'bg-green-600 text-white shadow-[0_0_12px_3px] shadow-green-500/70'
               : 'border-green-600/40 bg-green-600/10 text-green-800'
             : compact
-              ? 'text-espresso-500 hover:text-espresso-900'
+              ? 'bg-white/90 text-espresso-500 shadow-sm hover:text-espresso-900'
               : 'border-cream-200 text-espresso-500 hover:border-crema-400'
         } disabled:cursor-not-allowed disabled:opacity-50`}
       >

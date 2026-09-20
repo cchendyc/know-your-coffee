@@ -8,7 +8,7 @@ from psycopg.types.json import Json
 from psycopg_pool import ConnectionPool
 
 from ..models import Chain, CoffeeShop, NewShop, Report, ShopPhoto, User
-from .util import brand_name, cluster_shops, slugify_brand
+from .util import brand_name, cluster_shops, norm_coffees, slugify_brand
 
 
 def _iso(dt: datetime) -> str:
@@ -26,9 +26,11 @@ def _to_shop(r: dict) -> CoffeeShop:
         "chainId": str(r["chain_id"]) if r.get("chain_id") else None,
         "machine": r["machine"],
         "machineModel": r["machine_model"],
+        "machines": r["machines"] or [],
         "beanSource": r["bean_source"],
         "roaster": r["roaster"],
         "beanOrigins": r["bean_origins"],
+        "coffees": norm_coffees(r["coffees"]),
         "grinders": r["grinders"],
         "drinks": r["drinks"],
         "milkBrands": r["milk_brands"],
@@ -50,9 +52,11 @@ def _to_report(r: dict) -> Report:
         "shopId": str(r["shop_id"]),
         "machine": r["machine"],
         "machineModel": r["machine_model"],
+        "machines": r["machines"],
         "beanSource": r["bean_source"],
         "roaster": r["roaster"],
         "beanOrigins": r["bean_origins"],
+        "coffees": norm_coffees(r["coffees"]) if r["coffees"] is not None else None,
         "grinders": r["grinders"],
         "drinks": r["drinks"],
         "milkBrands": r["milk_brands"],
@@ -79,7 +83,12 @@ def _to_photo(r: dict) -> ShopPhoto:
 
 _SEARCHABLE = """(name ILIKE %(q)s OR city ILIKE %(q)s OR address ILIKE %(q)s OR roaster ILIKE %(q)s
   OR machine_model ILIKE %(q)s OR array_to_string(bean_origins, ' ') ILIKE %(q)s
-  OR array_to_string(grinders, ' ') ILIKE %(q)s)"""
+  OR array_to_string(grinders, ' ') ILIKE %(q)s
+  OR EXISTS (SELECT 1 FROM jsonb_array_elements(machines) m WHERE m->>'model' ILIKE %(q)s)
+  OR EXISTS (SELECT 1 FROM jsonb_array_elements(coffees) c
+             WHERE c->>'name' ILIKE %(q)s OR c->>'roaster' ILIKE %(q)s
+                OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(c->'origins', '[]'::jsonb)) o
+                           WHERE o ILIKE %(q)s)))"""
 
 # Completeness-weighted rank: known machine dominates (it is the app's core
 # data point), then other filled fields, then recency. Name last keeps offset
@@ -90,6 +99,7 @@ _RANK = """
   + (bean_source <> 'UNKNOWN')::int * 2
   + (roaster IS NOT NULL)::int * 2
   + (cardinality(grinders) > 0)::int
+  + (jsonb_array_length(coffees) > 0)::int
   + (jsonb_array_length(COALESCE(drinks, '[]'::jsonb)) > 0)::int
   + (cardinality(milk_brands) > 0)::int
   + (vibe IS NOT NULL)::int
@@ -148,8 +158,10 @@ class PostgresRepository:
         select = "s.*, us.saved AS saved_by_me, us.been AS been_by_me" if user_id else "s.*"
 
         if filter.get("machine"):
-            conditions.append("machine = %(machine)s")
+            # Match the primary or any machine on the bar.
+            conditions.append("(machine = %(machine)s OR machines @> %(machine_json)s)")
             params["machine"] = filter["machine"]
+            params["machine_json"] = Json([{"brand": filter["machine"]}])
         if filter.get("city"):
             conditions.append("city ILIKE %(city)s")
             params["city"] = filter["city"]
@@ -205,13 +217,19 @@ class PostgresRepository:
         return self._query("SELECT count(*) AS n FROM reports WHERE shop_id = %s", [shop_id])[0]["n"]
 
     def add_report(self, report: dict) -> Report:
+        # The scalar primary mirrors the first machines entry.
+        machines = report.get("machines")
+        if machines and not report.get("machine"):
+            report = {**report, "machine": machines[0]["brand"], "machineModel": machines[0].get("model")}
         params = {
             "shop_id": report["shopId"],
             "machine": report.get("machine"),
             "machine_model": report.get("machineModel"),
+            "machines": Json(machines) if machines is not None else None,
             "bean_source": report.get("beanSource"),
             "roaster": report.get("roaster"),
             "bean_origins": report.get("beanOrigins"),
+            "coffees": Json(report["coffees"]) if report.get("coffees") is not None else None,
             "grinders": report.get("grinders"),
             "drinks": Json(report["drinks"]) if report.get("drinks") is not None else None,
             "milk_brands": report.get("milkBrands"),
@@ -223,11 +241,11 @@ class PostgresRepository:
             "user_id": report.get("userId"),
         }
         rows = self._query(
-            """INSERT INTO reports (shop_id, machine, machine_model, bean_source, roaster,
-                                    bean_origins, grinders, drinks, milk_brands,
+            """INSERT INTO reports (shop_id, machine, machine_model, machines, bean_source, roaster,
+                                    bean_origins, coffees, grinders, drinks, milk_brands,
                                     dog_friendly, wifi, outdoor_seating, note, source, user_id)
-               VALUES (%(shop_id)s, %(machine)s, %(machine_model)s, %(bean_source)s, %(roaster)s,
-                       %(bean_origins)s, %(grinders)s, %(drinks)s, %(milk_brands)s,
+               VALUES (%(shop_id)s, %(machine)s, %(machine_model)s, %(machines)s, %(bean_source)s, %(roaster)s,
+                       %(bean_origins)s, %(coffees)s, %(grinders)s, %(drinks)s, %(milk_brands)s,
                        %(dog_friendly)s, %(wifi)s, %(outdoor_seating)s, %(note)s,
                        %(source)s, %(user_id)s)
                RETURNING *, NULL AS reporter_name, NULL AS reporter_picture""",
@@ -238,9 +256,11 @@ class PostgresRepository:
             """UPDATE shops SET
                  machine = COALESCE(%(machine)s, machine),
                  machine_model = COALESCE(%(machine_model)s, machine_model),
+                 machines = COALESCE(%(machines)s::jsonb, machines),
                  bean_source = COALESCE(%(bean_source)s, bean_source),
                  roaster = COALESCE(%(roaster)s, roaster),
                  bean_origins = COALESCE(%(bean_origins)s::text[], bean_origins),
+                 coffees = COALESCE(%(coffees)s::jsonb, coffees),
                  grinders = COALESCE(%(grinders)s::text[], grinders),
                  drinks = COALESCE(%(drinks)s::jsonb, drinks),
                  milk_brands = COALESCE(%(milk_brands)s::text[], milk_brands),
@@ -265,12 +285,12 @@ class PostgresRepository:
                 result.append(existing)
                 continue
             rows = self._query(
-                """INSERT INTO shops (name, address, city, lat, lng, machine, machine_model, bean_source,
-                                      roaster, bean_origins, grinders, drinks, milk_brands, vibe, photo_url,
+                """INSERT INTO shops (name, address, city, lat, lng, machine, machine_model, machines, bean_source,
+                                      roaster, bean_origins, coffees, grinders, drinks, milk_brands, vibe, photo_url,
                                       website, dog_friendly, wifi, outdoor_seating)
                    VALUES (%(name)s, %(address)s, %(city)s, %(lat)s, %(lng)s, %(machine)s, %(machineModel)s,
-                           %(beanSource)s, %(roaster)s, %(beanOrigins)s, %(grinders)s, %(drinks)s,
-                           %(milkBrands)s, %(vibe)s, %(photoUrl)s, %(website)s, %(dogFriendly)s,
+                           %(machines)s, %(beanSource)s, %(roaster)s, %(beanOrigins)s, %(coffees)s, %(grinders)s,
+                           %(drinks)s, %(milkBrands)s, %(vibe)s, %(photoUrl)s, %(website)s, %(dogFriendly)s,
                            %(wifi)s, %(outdoorSeating)s)
                    RETURNING *""",
                 {
@@ -279,6 +299,8 @@ class PostgresRepository:
                     "outdoorSeating": None,
                     **s,
                     "drinks": Json(s["drinks"]),
+                    "coffees": Json(s.get("coffees") or []),
+                    "machines": Json(s.get("machines") or []),
                 },
             )
             result.append(_to_shop(rows[0]))

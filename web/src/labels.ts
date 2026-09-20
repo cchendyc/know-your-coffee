@@ -1,4 +1,4 @@
-import type { BeanSource, MachineBrand, PhotoKind } from './api'
+import type { BeanSource, Coffee, CoffeeProcess, CoffeeType, MachineBrand, PhotoKind, RoastLevel } from './api'
 
 export const PHOTO_KIND_LABELS: Record<PhotoKind, string> = {
   MACHINE: 'Machine',
@@ -40,35 +40,90 @@ export const BEAN_SOURCE_LABELS: Record<BeanSource, string> = {
   LOCAL_ROASTER: 'Local roaster',
   NATIONAL_ROASTER: 'National roaster',
   MULTI_ROASTER: 'Multi-roaster',
+  PRIVATE_LABEL: 'Private label',
+  DISTRIBUTOR: 'Commercial distributor',
   UNKNOWN: 'Unknown',
 }
 
 // Common Bay Area milk brands, used for the filter and report suggestions.
 export const MILK_BRANDS = ['Straus', 'Clover', 'Oatly', 'Minor Figures', 'Califia Farms', 'Pacific', 'Milkadamia']
 
-// Suggestions for report chips; free text is always allowed alongside.
-export const BEAN_ORIGINS = [
-  'Single origin',
-  'Blend',
-  'Seasonal rotation',
-  'Ethiopia',
-  'Colombia',
-  'Brazil',
-  'Guatemala',
-  'Kenya',
-  'Indonesia',
+export const COFFEE_TYPE_LABELS: Record<CoffeeType, string> = {
+  SINGLE_ORIGIN: 'Single origin',
+  BLEND: 'Blend',
+}
+
+export const PROCESS_LABELS: Record<CoffeeProcess, string> = {
+  WASHED: 'Washed',
+  NATURAL: 'Natural',
+  HONEY: 'Honey',
+  WET_HULLED: 'Wet-hulled',
+  OTHER: 'Other',
+}
+
+// Fermentation is free text now; this maps legacy enum tokens for display.
+export const FERMENTATION_LABELS: Record<string, string> = {
+  ANAEROBIC: 'Anaerobic',
+  CARBONIC_MACERATION: 'Carbonic maceration',
+  CO_FERMENT: 'Co-ferment',
+  THERMAL_SHOCK: 'Thermal shock',
+  EXTENDED: 'Extended ferment',
+}
+
+// Typeahead suggestions for the report form; any text is allowed.
+export const FERMENTATION_SUGGESTIONS = [
+  'Anaerobic',
+  'Carbonic maceration',
+  'Co-ferment',
+  'Thermal shock',
+  'Extended ferment',
+  'Lactic',
+  'Koji',
+  'Yeast inoculated',
 ]
 
-export const GRINDERS = [
-  'Mahlkönig EK43',
-  'Mahlkönig E65S',
-  'Mythos One',
-  'Mazzer Robur',
-  'Mazzer Major',
-  'Ditting 807',
-  'Anfim Pratica',
-  'Weber EG-1',
-  'Fellow Ode',
+export const ROAST_LEVEL_LABELS: Record<RoastLevel, string> = {
+  LIGHT: 'Light',
+  MEDIUM: 'Medium',
+  DARK: 'Dark',
+}
+
+export const COFFEE_TYPES = Object.keys(COFFEE_TYPE_LABELS) as CoffeeType[]
+export const COFFEE_PROCESSES = Object.keys(PROCESS_LABELS) as CoffeeProcess[]
+export const ROAST_LEVELS = Object.keys(ROAST_LEVEL_LABELS) as RoastLevel[]
+
+// Suggestions for origin chips; free text is always allowed alongside.
+export const ORIGIN_COUNTRIES = ['Ethiopia', 'Colombia', 'Brazil', 'Guatemala', 'Kenya', 'Indonesia', 'Honduras', 'Peru']
+
+// One-line summary for compact views (drawer rows, report history).
+export function coffeeSummary(c: Coffee): string {
+  return [[c.roaster, c.name].filter(Boolean).join(' — ') || null, ...coffeePills(c)].filter(Boolean).join(' · ')
+}
+
+// Attribute pills for one coffee, in display order, skipping unknowns.
+export function coffeePills(c: Coffee): string[] {
+  return [
+    c.type && COFFEE_TYPE_LABELS[c.type],
+    ...c.origins,
+    c.process && PROCESS_LABELS[c.process],
+    c.fermentation && (FERMENTATION_LABELS[c.fermentation] ?? c.fermentation),
+    c.roastLevel && `${ROAST_LEVEL_LABELS[c.roastLevel]} roast`,
+    ...c.varieties,
+  ].filter((p): p is string => Boolean(p))
+}
+
+// Grinder brands for the report form; the model is free text alongside.
+export const GRINDER_BRANDS = [
+  'Mahlkönig',
+  'Mazzer',
+  'Victoria Arduino',
+  'Ditting',
+  'Anfim',
+  'Weber Workshops',
+  'Fellow',
+  'Eureka',
+  'Compak',
+  'Ceado',
 ]
 
 export const DRINKS = [

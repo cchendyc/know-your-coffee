@@ -19,9 +19,45 @@ MACHINE_BRANDS = [
     "UNKNOWN",
 ]
 
-BEAN_SOURCES = ["IN_HOUSE_ROAST", "LOCAL_ROASTER", "NATIONAL_ROASTER", "MULTI_ROASTER", "UNKNOWN"]
+BEAN_SOURCES = [
+    "IN_HOUSE_ROAST",
+    "LOCAL_ROASTER",
+    "NATIONAL_ROASTER",
+    "MULTI_ROASTER",
+    "PRIVATE_LABEL",
+    "DISTRIBUTOR",
+    "UNKNOWN",
+]
+
+COFFEE_TYPES = ["SINGLE_ORIGIN", "BLEND"]
+
+# Primary post-harvest route. Fermentation styles (anaerobic etc.) layer on
+# top of one of these; fermentation is free text since techniques outpace
+# any fixed list.
+COFFEE_PROCESSES = ["WASHED", "NATURAL", "HONEY", "WET_HULLED", "OTHER"]
+
+ROAST_LEVELS = ["LIGHT", "MEDIUM", "DARK"]
 
 PHOTO_KINDS = ["MACHINE", "BEANS", "DRINKS", "MENU", "VIBE", "OTHER"]
+
+
+# One espresso machine on the bar.
+class Machine(TypedDict):
+    brand: str
+    model: str | None
+
+
+# One coffee on bar. Stored sparse in jsonb; missing keys mean unknown.
+class Coffee(TypedDict):
+    name: str | None
+    roaster: str | None
+    type: str | None
+    origins: list[str]
+    process: str | None
+    fermentation: str | None
+    roastLevel: str | None
+    varieties: list[str]
+    tastingNotes: list[str]
 
 
 class DrinkItem(TypedDict):
@@ -51,9 +87,11 @@ class CoffeeShop(TypedDict):
     chainId: str | None
     machine: str
     machineModel: str | None
+    machines: list[Machine]
     beanSource: str
     roaster: str | None
     beanOrigins: list[str]
+    coffees: list[Coffee]
     grinders: list[str]
     drinks: list[DrinkItem]
     milkBrands: list[str]
@@ -89,6 +127,8 @@ class NewShop(TypedDict):
     dogFriendly: NotRequired[bool | None]
     wifi: NotRequired[bool | None]
     outdoorSeating: NotRequired[bool | None]
+    coffees: NotRequired[list[Coffee]]
+    machines: NotRequired[list[Machine]]
 
 
 class Report(TypedDict):
@@ -96,9 +136,11 @@ class Report(TypedDict):
     shopId: str
     machine: str | None
     machineModel: str | None
+    machines: list[Machine] | None
     beanSource: str | None
     roaster: str | None
     beanOrigins: list[str] | None
+    coffees: list[Coffee] | None
     grinders: list[str] | None
     drinks: list[DrinkItem] | None
     milkBrands: list[str] | None

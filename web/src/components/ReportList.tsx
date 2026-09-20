@@ -18,7 +18,11 @@ export function ReportList({ reports }: { reports: Report[] }) {
           </p>
           <p className="mt-1">
             {[
-              r.machine && `Machine: ${machineDisplay(r.machine, r.machineModel)}`,
+              r.machines?.length
+                ? `Machine${r.machines.length > 1 ? 's' : ''}: ${r.machines
+                    .map((m) => machineDisplay(m.brand, m.model))
+                    .join(', ')}`
+                : r.machine && `Machine: ${machineDisplay(r.machine, r.machineModel)}`,
               r.roaster && `Roaster: ${r.roaster}`,
               r.beanOrigins?.length && `Origins: ${r.beanOrigins.join(', ')}`,
               r.grinders?.length && `Grinders: ${r.grinders.join(', ')}`,

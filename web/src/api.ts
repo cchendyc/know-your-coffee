@@ -14,7 +14,14 @@ export type MachineBrand =
   | 'OTHER'
   | 'UNKNOWN'
 
-export type BeanSource = 'IN_HOUSE_ROAST' | 'LOCAL_ROASTER' | 'NATIONAL_ROASTER' | 'MULTI_ROASTER' | 'UNKNOWN'
+export type BeanSource =
+  | 'IN_HOUSE_ROAST'
+  | 'LOCAL_ROASTER'
+  | 'NATIONAL_ROASTER'
+  | 'MULTI_ROASTER'
+  | 'PRIVATE_LABEL'
+  | 'DISTRIBUTOR'
+  | 'UNKNOWN'
 
 export interface DrinkItem {
   name: string
@@ -22,6 +29,47 @@ export interface DrinkItem {
 }
 
 export type PhotoKind = 'MACHINE' | 'BEANS' | 'DRINKS' | 'MENU' | 'VIBE' | 'OTHER'
+
+// One espresso machine on the bar.
+export interface Machine {
+  brand: MachineBrand
+  model: string | null
+}
+
+export interface MachineInput {
+  brand: MachineBrand
+  model?: string | null
+}
+
+export type CoffeeType = 'SINGLE_ORIGIN' | 'BLEND'
+export type CoffeeProcess = 'WASHED' | 'NATURAL' | 'HONEY' | 'WET_HULLED' | 'OTHER'
+export type RoastLevel = 'LIGHT' | 'MEDIUM' | 'DARK'
+
+// One coffee on bar. Every field optional; report what the bag shows.
+export interface Coffee {
+  name: string | null
+  roaster: string | null
+  type: CoffeeType | null
+  origins: string[]
+  process: CoffeeProcess | null
+  // Free text; legacy rows hold enum tokens like ANAEROBIC.
+  fermentation: string | null
+  roastLevel: RoastLevel | null
+  varieties: string[]
+  tastingNotes: string[]
+}
+
+export interface CoffeeInput {
+  name?: string | null
+  roaster?: string | null
+  type?: CoffeeType | null
+  origins?: string[]
+  process?: CoffeeProcess | null
+  fermentation?: string | null
+  roastLevel?: RoastLevel | null
+  varieties?: string[]
+  tastingNotes?: string[]
+}
 
 export interface ShopPhoto {
   id: string
@@ -35,9 +83,11 @@ export interface Report {
   id: string
   machine: MachineBrand | null
   machineModel: string | null
+  machines: Machine[] | null
   beanSource: BeanSource | null
   roaster: string | null
   beanOrigins: string[] | null
+  coffees: Coffee[] | null
   grinders: string[] | null
   drinks: DrinkItem[] | null
   milkBrands: string[] | null
@@ -73,9 +123,11 @@ export interface CoffeeShop {
   lng: number
   machine: MachineBrand
   machineModel: string | null
+  machines: Machine[]
   beanSource: BeanSource
   roaster: string | null
   beanOrigins: string[]
+  coffees: Coffee[]
   grinders: string[]
   drinks: DrinkItem[]
   milkBrands: string[]
@@ -112,9 +164,11 @@ export interface ReportInput {
   shopId: string
   machine?: MachineBrand | null
   machineModel?: string | null
+  machines?: MachineInput[] | null
   beanSource?: BeanSource | null
   roaster?: string | null
   beanOrigins?: string[] | null
+  coffees?: CoffeeInput[] | null
   grinders?: string[] | null
   drinks?: DrinkItem[] | null
   milkBrands?: string[] | null
@@ -157,9 +211,13 @@ async function gql<T>(query: string, variables?: Record<string, unknown>): Promi
   return json.data as T
 }
 
+const COFFEE_FIELDS = `name roaster type origins process fermentation roastLevel varieties tastingNotes`
+
 const SHOP_FIELDS = `
   id name address city lat lng
-  machine machineModel beanSource roaster beanOrigins grinders drinks { name price }
+  machine machineModel machines { brand model }
+  beanSource roaster beanOrigins coffees { ${COFFEE_FIELDS} }
+  grinders drinks { name price }
   milkBrands vibe dogFriendly wifi outdoorSeating photoUrl website savedByMe beenByMe updatedAt
 `
 
@@ -201,12 +259,14 @@ export function fetchMyStats() {
 }
 
 const REPORT_FIELDS = `
-  id machine machineModel beanSource roaster beanOrigins grinders drinks { name price }
+  id machine machineModel machines { brand model }
+  beanSource roaster beanOrigins coffees { ${COFFEE_FIELDS} }
+  grinders drinks { name price }
   milkBrands dogFriendly wifi outdoorSeating note source createdAt reporter { name picture }
 `
 
-// Drawer payload: just enough photos for the preview strip and the 3 shown
-// reports. Full galleries come from fetchShopDetails when expanding.
+// Expanded-view payload: the full shop with all photos, reports, and chain.
+// The drawer never calls this — it paints from the list's copy.
 export function fetchShop(id: string) {
   return gql<{ shop: CoffeeShop | null }>(
     `query Shop($id: ID!) {
@@ -214,8 +274,8 @@ export function fetchShop(id: string) {
         ${SHOP_FIELDS}
         photoCount
         reportCount
-        photos(limit: 4) { id kind data createdAt uploader { name picture } }
-        reports(limit: 3) { ${REPORT_FIELDS} }
+        photos { id kind data createdAt uploader { name picture } }
+        reports { ${REPORT_FIELDS} }
         chain { id name shops { id name address city } }
       }
     }`,
@@ -223,14 +283,11 @@ export function fetchShop(id: string) {
   ).then((d) => d.shop)
 }
 
-export function fetchShopDetails(id: string) {
-  return gql<{ shop: { photos: ShopPhoto[]; reports: Report[] } | null }>(
-    `query ShopDetails($id: ID!) {
-      shop(id: $id) {
-        photos { id kind data createdAt uploader { name picture } }
-        reports { ${REPORT_FIELDS} }
-      }
-    }`,
+// Drawer fallback for shops missing from the loaded list (e.g. a chain
+// location): core fields only, no photo payloads.
+export function fetchShopLite(id: string) {
+  return gql<{ shop: CoffeeShop | null }>(
+    `query ShopLite($id: ID!) { shop(id: $id) { ${SHOP_FIELDS} } }`,
     { id },
   ).then((d) => d.shop)
 }
