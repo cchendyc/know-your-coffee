@@ -21,14 +21,18 @@ npm run dev        # http://localhost:5173
 
 The dev server proxies `/graphql` to `http://localhost:4000` — run the API alongside. For Google sign-in, copy `.env.example` to `.env.local` and set `VITE_GOOGLE_CLIENT_ID`.
 
-## Deploy (GitHub Pages)
+## Deploy (GitHub Pages → knowyourthings.top)
 
-`.github/workflows/deploy-web.yml` (repo root) builds and publishes on every push that touches `web/`. One-time setup:
+`.github/workflows/deploy-web.yml` builds on every push that touches `web/`. The published site is `https://knowyourthings.top` (`web/public/CNAME`).
 
-1. Settings → Pages → Source: **GitHub Actions**.
-2. Settings → Secrets and variables → Actions → **Variables**, add:
+One-time setup:
+
+1. Settings → Pages → Source: **GitHub Actions**. Custom domain: `knowyourthings.top`. Check **Enforce HTTPS** after DNS verifies.
+2. At the DNS host, keep existing MX/TXT (Resend). Do **not** CNAME the apex — that would break mail. Add:
+   - `A` `@` → `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153`
+   - `AAAA` `@` → `2606:50c0:8000::153`, `2606:50c0:8001::153`, `2606:50c0:8002::153`, `2606:50c0:8003::153`
+   - `CNAME` `www` → `cchendyc.github.io`
+3. Settings → Secrets and variables → Actions → **Variables**:
    - `VITE_API_URL` = `https://<your-render-service>.onrender.com/graphql`
    - `VITE_GOOGLE_CLIENT_ID` = your Google OAuth client ID
-3. **Google OAuth** ([console.cloud.google.com](https://console.cloud.google.com/apis/credentials)): add `https://<you>.github.io` to *Authorized JavaScript origins*.
-
-The site publishes to `https://<you>.github.io/<repo>/`.
+4. **Google OAuth** ([console.cloud.google.com](https://console.cloud.google.com/apis/credentials)): Authorized JavaScript origins must include `https://knowyourthings.top` and `http://localhost:5173`. Add `https://www.knowyourthings.top` if you use www.

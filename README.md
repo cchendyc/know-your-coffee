@@ -3,7 +3,7 @@
 Search, check, and report what Bay Area coffee shops run: espresso machine, grinder, beans and roaster, milk brands, and menu prices. Save shops, track where you've been, and share photos of the setup.
 
 - `backend/` — GraphQL API. Python + Ariadne (schema-first), Neon Postgres, Alembic migrations. Deploys to Render via `render.yaml`.
-- `web/` — React + Vite + Tailwind + Leaflet SPA. Deploys to GitHub Pages via `.github/workflows/deploy-web.yml`.
+- `web/` — React + Vite + Tailwind + Leaflet SPA. Deploys to GitHub Pages at [knowyourthings.top](https://knowyourthings.top).
 
 Setup, secrets, and deploy steps live in each folder's README: [backend](backend/README.md), [web](web/README.md).
 

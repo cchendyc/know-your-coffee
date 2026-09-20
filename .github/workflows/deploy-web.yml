@@ -26,7 +26,8 @@ jobs:
       - name: Build
         working-directory: web
         env:
-          BASE_PATH: /${{ github.event.repository.name }}/
+          # Custom domain serves at the site root (not /<repo>/ on github.io).
+          BASE_PATH: /
           # Repository variables: Settings -> Secrets and variables -> Actions -> Variables
           VITE_API_URL: ${{ vars.VITE_API_URL }}
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
