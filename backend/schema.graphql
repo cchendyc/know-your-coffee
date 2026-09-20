@@ -395,4 +395,6 @@ type Mutation {
   claimShop(shopId: ID!, note: String): ShopClaim!
   "Approve or reject a claim; approval sets the shop's owner. Requires ADMIN."
   resolveClaim(claimId: ID!, approve: Boolean!): ShopClaim!
+  "Remove a shop that is not a coffee shop. Cascades reports, photos, and claims. Requires ADMIN."
+  deleteShop(id: ID!): Boolean!
 }

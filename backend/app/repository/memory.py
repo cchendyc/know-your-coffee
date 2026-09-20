@@ -111,6 +111,16 @@ class MemoryRepository:
         shop = self._shops.get(shop_id)
         return self._with_flags(shop, user_id) if shop else None
 
+    def delete_shop(self, shop_id: str) -> bool:
+        if shop_id not in self._shops:
+            return False
+        del self._shops[shop_id]
+        self._reports.pop(shop_id, None)
+        self._photos.pop(shop_id, None)
+        self._statuses = {k: v for k, v in self._statuses.items() if k[1] != shop_id}
+        self._claims = {cid: c for cid, c in self._claims.items() if c["shopId"] != shop_id}
+        return True
+
     def list_cities(self) -> list[str]:
         return sorted({s["city"] for s in self._shops.values()})
 

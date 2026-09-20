@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { fetchShops, type CoffeeShop, type MachineBrand, type User } from './api'
+import { fetchMe, fetchShops, TOKEN_KEY, USER_KEY, type CoffeeShop, type MachineBrand, type User } from './api'
 import { MACHINE_BRANDS, MACHINE_LABELS } from './labels'
 import { ShopCard } from './components/ShopCard'
 import { ShopDrawer } from './components/ShopDrawer'
@@ -83,6 +83,18 @@ export default function App() {
     window.addEventListener('kyc:session-expired', onExpired)
     return () => window.removeEventListener('kyc:session-expired', onExpired)
   }, [])
+
+  // Refresh role and profile; localStorage may predate the role field.
+  useEffect(() => {
+    if (!localStorage.getItem(TOKEN_KEY)) return
+    fetchMe()
+      .then((me) => {
+        if (!me) return
+        localStorage.setItem(USER_KEY, JSON.stringify(me))
+        setUser(me)
+      })
+      .catch(() => undefined)
+  }, [])
   const [refresh, setRefresh] = useState(0)
   const [list, setList] = useState<'all' | 'saved' | 'been'>('all')
   const [total, setTotal] = useState(0)
@@ -133,17 +145,17 @@ export default function App() {
     )
   }
 
+  const onShopDeleted = (id: string) => {
+    setShops((prev) => prev.filter((s) => s.id !== id))
+    setTotal((n) => Math.max(0, n - 1))
+    setSelectedId(null)
+  }
+
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 border-b border-cream-200 bg-cream-50/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-4 sm:px-6">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-espresso-700 text-cream-50">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="size-6">
-              <path d="M4 8h12v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V8Z" />
-              <path d="M16 9h1.5a2.5 2.5 0 0 1 0 5H16" />
-              <path d="M8 3.5c0 1-1 1.5-1 2.5M12 3.5c0 1-1 1.5-1 2.5" strokeLinecap="round" />
-            </svg>
-          </div>
+          <img src="/icon-192.png" alt="Know Your Coffee" className="size-10 rounded-xl" />
           <div className="flex-1">
             <h1 className="text-lg font-bold tracking-tight">Know Your Coffee</h1>
             <p className="text-xs text-espresso-500">coffee snobs</p>
@@ -304,6 +316,7 @@ export default function App() {
           initialShop={shops.find((s) => s.id === selectedId)}
           user={user}
           onShopChanged={onShopChanged}
+          onShopDeleted={onShopDeleted}
           onOpenShop={setSelectedId}
           onClose={() => setSelectedId(null)}
         />

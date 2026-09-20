@@ -204,6 +204,7 @@ struct AddShopView: View {
             }
             .font(.caption)
             .foregroundStyle(Color.espresso500)
+            .frame(minHeight: 44)
         }
         .padding(14)
         .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))

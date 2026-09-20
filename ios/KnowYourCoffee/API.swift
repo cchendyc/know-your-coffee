@@ -133,7 +133,7 @@ enum CoffeeAPI {
 
     // MARK: Auth
 
-    private static let userFields = "id name email phone picture savedCount beenCount"
+    private static let userFields = "id name email phone picture role savedCount beenCount"
 
     static func signInWithGoogle(idToken: String) async throws -> AuthPayload {
         struct Payload: Decodable { let signInWithGoogle: AuthPayload }
@@ -228,6 +228,15 @@ enum CoffeeAPI {
         return try await execute(query, variables: [
             "shopId": shopID, "note": note?.isEmpty == false ? note : nil,
         ], as: Payload.self).claimShop
+    }
+
+    static func deleteShop(id: String) async throws {
+        struct Payload: Decodable { let deleteShop: Bool }
+        _ = try await execute(
+            "mutation DeleteShop($id: ID!) { deleteShop(id: $id) }",
+            variables: ["id": id],
+            as: Payload.self
+        )
     }
 
     static func fetchMyClaims() async throws -> [ShopClaim] {

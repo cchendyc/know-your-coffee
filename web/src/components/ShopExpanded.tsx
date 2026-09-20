@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { fetchShop, type CoffeeShop, type User } from '../api'
+import { deleteShop, fetchShop, isAdmin, type CoffeeShop, type User } from '../api'
 import { AMENITIES, BEAN_SOURCE_LABELS, coffeePills, machineDisplay, PHOTO_KIND_LABELS } from '../labels'
 import { ChainLocations } from './ChainLocations'
 import { QuickConfirm, buildConfirmFacts } from './QuickConfirm'
@@ -34,6 +34,7 @@ export function ShopExpanded({
   user,
   initialReporting = false,
   onChanged,
+  onDeleted,
   onHydrated,
   onOpenShop,
   onClose,
@@ -42,15 +43,18 @@ export function ShopExpanded({
   user: User | null
   initialReporting?: boolean
   onChanged: (shop: CoffeeShop) => void
+  onDeleted: (id: string) => void
   // Receives the fully-fetched shop (photos, reports, chain) so the drawer
   // underneath stays current without fetching anything itself.
   onHydrated: (shop: CoffeeShop) => void
   onOpenShop: (id: string) => void
   onClose: () => void
 }) {
-  const [modal, setModal] = useState<'none' | 'report' | 'confirm'>(initialReporting ? 'report' : 'none')
+  const [modal, setModal] = useState<'none' | 'report' | 'confirm' | 'delete'>(initialReporting ? 'report' : 'none')
   const [allDrinks, setAllDrinks] = useState(false)
   const [loadingDetails, setLoadingDetails] = useState(true)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   // The drawer's list copy has no photos/reports; they arrive via loadDetails.
   const photos = shop.photos ?? []
@@ -92,6 +96,19 @@ export function ShopExpanded({
     loadDetails()
   }
 
+  const removeShop = async () => {
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await deleteShop(shop.id)
+      onDeleted(shop.id)
+    } catch (e) {
+      setDeleteError((e as Error).message)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const canConfirm = buildConfirmFacts(shop).length > 0
   const drinksShown = allDrinks ? shop.drinks : shop.drinks.slice(0, 5)
 
@@ -115,6 +132,15 @@ export function ShopExpanded({
             </p>
           </div>
           <SaveBeenButtons shop={shop} user={user} onChanged={onChanged} />
+          {isAdmin(user) && (
+            <button
+              type="button"
+              onClick={() => setModal('delete')}
+              className="rounded-full px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-50"
+            >
+              Delete
+            </button>
+          )}
         </div>
       </div>
 
@@ -321,6 +347,33 @@ export function ShopExpanded({
             onCancel={() => setModal('none')}
             onChanged={() => setModal('report')}
           />
+        </Modal>
+      )}
+      {modal === 'delete' && (
+        <Modal onClose={() => setModal('none')}>
+          <h3 className="text-lg font-bold tracking-tight">Delete {shop.name}?</h3>
+          <p className="mt-2 text-sm text-espresso-500">
+            Use this for listings that aren’t coffee shops. Reports, photos, and claims go with it.
+          </p>
+          {deleteError && <p className="mt-2 text-sm text-red-700">{deleteError}</p>}
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              type="button"
+              disabled={deleting}
+              onClick={() => setModal('none')}
+              className="rounded-xl border border-cream-200 px-4 py-2 text-sm font-medium text-espresso-500"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={deleting}
+              onClick={() => void removeShop()}
+              className="rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50"
+            >
+              {deleting ? 'Deleting…' : 'Delete shop'}
+            </button>
+          </div>
         </Modal>
       )}
     </div>

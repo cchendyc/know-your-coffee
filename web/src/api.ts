@@ -100,12 +100,19 @@ export interface Report {
   createdAt: string
 }
 
+export type UserRole = 'USER' | 'ADMIN'
+
 export interface User {
   id: string
   name: string
   email: string | null // null for phone-only accounts
   phone: string | null
   picture: string | null
+  role?: UserRole
+}
+
+export function isAdmin(user: User | null | undefined): boolean {
+  return user?.role === 'ADMIN'
 }
 
 export interface ChainLocation {
@@ -253,6 +260,12 @@ export function fetchShops(filter: {
   ).then((d) => d.shops)
 }
 
+const USER_FIELDS = `id name email phone picture role`
+
+export function fetchMe() {
+  return gql<{ me: User | null }>(`query Me { me { ${USER_FIELDS} } }`).then((d) => d.me)
+}
+
 export function fetchMyStats() {
   return gql<{ me: { savedCount: number; beenCount: number } | null }>(
     `query MyStats { me { savedCount beenCount } }`,
@@ -303,7 +316,7 @@ export function submitReport(input: ReportInput) {
 export function signInWithGoogle(idToken: string) {
   return gql<{ signInWithGoogle: { token: string; user: User } }>(
     `mutation SignIn($idToken: String!) {
-      signInWithGoogle(idToken: $idToken) { token user { id name email phone picture } }
+      signInWithGoogle(idToken: $idToken) { token user { ${USER_FIELDS} } }
     }`,
     { idToken },
   ).then((d) => d.signInWithGoogle)
@@ -322,7 +335,7 @@ export function startEmailSignIn(email: string) {
 export function signInWithEmail(email: string, code: string) {
   return gql<{ signInWithEmail: { token: string; user: User } }>(
     `mutation EmailSignIn($email: String!, $code: String!) {
-      signInWithEmail(email: $email, code: $code) { token user { id name email phone picture } }
+      signInWithEmail(email: $email, code: $code) { token user { ${USER_FIELDS} } }
     }`,
     { email, code },
   ).then((d) => d.signInWithEmail)
@@ -409,4 +422,11 @@ export function parseMenu(imageBase64: string) {
     }`,
     { imageBase64 },
   ).then((d) => d.parseMenu)
+}
+
+export function deleteShop(id: string) {
+  return gql<{ deleteShop: boolean }>(
+    `mutation DeleteShop($id: ID!) { deleteShop(id: $id) }`,
+    { id },
+  ).then((d) => d.deleteShop)
 }

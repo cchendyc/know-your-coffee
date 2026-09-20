@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { fetchShopLite, setShopStatus, type CoffeeShop, type User } from '../api'
+import { deleteShop, fetchShopLite, isAdmin, setShopStatus, type CoffeeShop, type User } from '../api'
 import { AMENITIES, BEAN_SOURCE_LABELS, coffeeSummary, machineDisplay } from '../labels'
 import { ShopExpanded } from './ShopExpanded'
 
@@ -59,6 +59,7 @@ export function ShopDrawer({
   initialShop,
   user,
   onShopChanged,
+  onShopDeleted,
   onOpenShop,
   onClose,
 }: {
@@ -67,6 +68,7 @@ export function ShopDrawer({
   initialShop?: CoffeeShop
   user: User | null
   onShopChanged: (shop: CoffeeShop) => void
+  onShopDeleted: (id: string) => void
   onOpenShop: (id: string) => void
   onClose: () => void
 }) {
@@ -76,6 +78,8 @@ export function ShopDrawer({
   // "Update" opens the full page with the form already showing.
   const [reportOnExpand, setReportOnExpand] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   // Set when navigating between chain locations from the detail page, so
   // the new shop opens straight to its detail page too.
   const stayExpanded = useRef(false)
@@ -84,6 +88,21 @@ export function ShopDrawer({
   const onStatusChanged = (updated: CoffeeShop) => {
     setShop((prev) => (prev ? { ...prev, savedByMe: updated.savedByMe, beenByMe: updated.beenByMe } : prev))
     onShopChanged(updated)
+  }
+
+  const removeShop = async () => {
+    if (!shop || busy) return
+    setBusy(true)
+    setDeleteError(null)
+    try {
+      await deleteShop(shop.id)
+      onShopDeleted(shop.id)
+    } catch (e) {
+      setDeleteError((e as Error).message)
+      setConfirmDelete(false)
+    } finally {
+      setBusy(false)
+    }
   }
 
   const toggleStatus = async (field: 'saved' | 'been') => {
@@ -104,6 +123,8 @@ export function ShopDrawer({
     stayExpanded.current = false
     setReportOnExpand(false)
     setLoadFailed(false)
+    setConfirmDelete(false)
+    setDeleteError(null)
     if (initialShop && initialShop.id === shopId) {
       setShop(initialShop)
       return
@@ -291,6 +312,45 @@ export function ShopDrawer({
                   Sign in with Google (top right) to report updates, add photos, and keep lists.
                 </p>
               )}
+
+              {isAdmin(user) && (
+                <div className="mt-4 border-t border-cream-200 pt-4">
+                  {deleteError && <p className="mb-2 text-xs text-red-700">{deleteError}</p>}
+                  {confirmDelete ? (
+                    <div className="rounded-2xl border border-red-200 bg-red-50 p-3">
+                      <p className="text-sm text-espresso-900">
+                        Delete {shop.name}? Use this for listings that aren’t coffee shops. This cannot be undone.
+                      </p>
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void removeShop()}
+                          className="rounded-xl bg-red-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-800 disabled:opacity-50"
+                        >
+                          {busy ? 'Deleting…' : 'Delete shop'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => setConfirmDelete(false)}
+                          className="rounded-xl border border-cream-200 px-3 py-1.5 text-xs font-medium text-espresso-500"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDelete(true)}
+                      className="text-xs font-medium text-red-700 hover:underline"
+                    >
+                      Not a coffee shop? Delete
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </>
         )}
@@ -301,6 +361,7 @@ export function ShopDrawer({
           user={user}
           initialReporting={reportOnExpand}
           onChanged={onStatusChanged}
+          onDeleted={onShopDeleted}
           onHydrated={setShop}
           onOpenShop={(id) => {
             stayExpanded.current = true

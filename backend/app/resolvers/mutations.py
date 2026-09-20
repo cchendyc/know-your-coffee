@@ -253,3 +253,11 @@ def resolve_resolve_claim(_, info, claimId, approve):
     if not claim:
         raise GraphQLError(f"Claim {claimId} not found or already resolved.")
     return claim
+
+
+@mutation.field("deleteShop")
+def resolve_delete_shop(_, info, id):
+    require_admin(info)
+    if not info.context["repo"].delete_shop(id):
+        raise GraphQLError(f"Shop {id} not found")
+    return True

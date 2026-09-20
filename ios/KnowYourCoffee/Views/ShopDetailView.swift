@@ -8,6 +8,7 @@ import SwiftUI
 struct ShopDetailView: View {
     let summary: CoffeeShop
     var onShopChanged: (CoffeeShop) -> Void = { _ in }
+    var onDeleted: () -> Void = {}
 
     @State private var full: CoffeeShop?
     @State private var loadError: String?
@@ -15,6 +16,9 @@ struct ShopDetailView: View {
     @State private var showClaim = false
     @State private var needSignIn = false
     @State private var actionError: String?
+    @State private var confirmDelete = false
+    @State private var deleting = false
+    @State private var auth = AuthStore.shared
     @Environment(\.dismiss) private var dismiss
 
     private var shop: CoffeeShop { full ?? summary }
@@ -35,22 +39,14 @@ struct ShopDetailView: View {
                 Button {
                     dismiss()
                 } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Color.espresso900)
-                        .frame(width: 34, height: 34)
-                        .background(.regularMaterial, in: Circle())
+                    FloatingCircleIcon(symbol: "chevron.left")
                 }
-                .padding(.leading, 14)
+                .padding(.leading, 10)
             }
             .overlay(alignment: .topTrailing) {
-                HStack(spacing: 10) {
+                HStack(spacing: 2) {
                     ShareLink(item: shareText) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Color.espresso900)
-                            .frame(width: 34, height: 34)
-                            .background(.regularMaterial, in: Circle())
+                        FloatingCircleIcon(symbol: "square.and.arrow.up")
                     }
                     Menu {
                         Button {
@@ -58,15 +54,17 @@ struct ShopDetailView: View {
                         } label: {
                             Label("Claim this shop", systemImage: "checkmark.shield")
                         }
+                        if auth.user?.isAdmin == true {
+                            Divider()
+                            Button("Delete shop", systemImage: "trash", role: .destructive) {
+                                confirmDelete = true
+                            }
+                        }
                     } label: {
-                        Image(systemName: "ellipsis")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Color.espresso900)
-                            .frame(width: 34, height: 34)
-                            .background(.regularMaterial, in: Circle())
+                        FloatingCircleIcon(symbol: "ellipsis")
                     }
                 }
-                .padding(.trailing, 14)
+                .padding(.trailing, 10)
             }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: ChainLocation.self) { location in
@@ -97,6 +95,14 @@ struct ShopDetailView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(actionError ?? "")
+        }
+        .confirmationDialog("Delete this shop?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete shop", role: .destructive) {
+                Task { await deleteShop() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("\(shop.name) will be removed. Use this for listings that aren’t coffee shops.")
         }
     }
 
@@ -140,12 +146,40 @@ struct ShopDetailView: View {
             }
         }
     }
+
+    private func deleteShop() async {
+        guard !deleting else { return }
+        deleting = true
+        defer { deleting = false }
+        do {
+            try await CoffeeAPI.deleteShop(id: shop.id)
+            onDeleted()
+            dismiss()
+        } catch {
+            actionError = error.localizedDescription
+        }
+    }
 }
 
 struct ShopPageActions {
     let onToggleSaved: () -> Void
     let onToggleBeen: () -> Void
     let onUpdate: () -> Void
+}
+
+// 34pt visual circle inside a 44pt hit target (HIG minimum).
+struct FloatingCircleIcon: View {
+    let symbol: String
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(Color.espresso900)
+            .frame(width: 34, height: 34)
+            .background(.regularMaterial, in: Circle())
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
+    }
 }
 
 // The shared page content; also used for pushed chain locations.
@@ -221,6 +255,8 @@ struct ShopPageView: View {
                         .padding(.vertical, 6)
                         .background(Color.espresso700, in: Capsule())
                         .foregroundStyle(Color.cream50)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
 
@@ -231,6 +267,8 @@ struct ShopPageView: View {
                             .foregroundStyle(Color.espresso700)
                             .frame(width: 28, height: 28)
                             .background(Color.espresso900.opacity(0.06), in: Circle())
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                 }
             }
@@ -509,7 +547,8 @@ struct ShopPageView: View {
     @ViewBuilder
     private var actionBar: some View {
         if let actions {
-            HStack(spacing: 16) {
+            // The 44pt icon frames carry ~11pt of their own padding.
+            HStack(spacing: 2) {
                 Button(action: actions.onUpdate) {
                     HStack(spacing: 7) {
                         Image(systemName: "square.and.pencil")
@@ -519,11 +558,12 @@ struct ShopPageView: View {
                     }
                     .foregroundStyle(Color.espresso500.opacity(0.8))
                     .padding(.horizontal, 14)
-                    .frame(height: 38)
+                    .frame(height: 40)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.espresso900.opacity(0.05), in: Capsule())
                 }
                 .buttonStyle(.plain)
+                .padding(.trailing, 6)
 
                 barIcon(
                     symbol: shop.savedByMe ? "star.fill" : "star",
@@ -549,7 +589,7 @@ struct ShopPageView: View {
                 .font(.system(size: 22, weight: .medium, design: .rounded))
                 .contentTransition(.symbolEffect(.replace))
                 .foregroundStyle(tint)
-                .frame(width: 38, height: 38)
+                .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -598,7 +638,9 @@ private struct PhotoCarousel: View {
                 }
                 .tabViewStyle(.page(indexDisplayMode: items.count > 1 ? .automatic : .never))
                 .frame(height: 360)
-                .overlay(alignment: .topTrailing) {
+                // Bottom-trailing: the top corners hold the floating back and
+                // share buttons; the page dots sit bottom-center, clear of this.
+                .overlay(alignment: .bottomTrailing) {
                     if items.count > 1 {
                         Text("\(page + 1)/\(items.count)")
                             .font(.caption.weight(.semibold))
@@ -608,7 +650,7 @@ private struct PhotoCarousel: View {
                             .background(.black.opacity(0.45), in: Capsule())
                             .foregroundStyle(.white)
                             .padding(.trailing, 14)
-                            .padding(.top, 58) // clears the status bar; the image bleeds under it
+                            .padding(.bottom, 14)
                     }
                 }
             }

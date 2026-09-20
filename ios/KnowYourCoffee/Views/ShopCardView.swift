@@ -10,7 +10,7 @@ struct ShopCardView: View {
             photo
             VStack(alignment: .leading, spacing: 5) {
                 Text(shop.name)
-                    .font(.footnote.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.espresso900)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -78,12 +78,13 @@ struct ShopCardView: View {
         .overlay(alignment: .topTrailing) { statusBadge }
     }
 
+    // Same iconography as the detail action bar: star = saved, check = been.
     @ViewBuilder
     private var statusBadge: some View {
         if shop.savedByMe || shop.beenByMe {
-            Image(systemName: shop.savedByMe ? "bookmark.fill" : "checkmark")
+            Image(systemName: shop.savedByMe ? "star.fill" : "checkmark")
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(shop.savedByMe ? Color.savedGreen : Color.espresso700)
+                .foregroundStyle(shop.savedByMe ? Color.crema500 : Color.savedGreen)
                 .padding(6)
                 .background(.regularMaterial, in: Circle())
                 .padding(6)

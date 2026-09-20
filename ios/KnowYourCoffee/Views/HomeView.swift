@@ -30,10 +30,17 @@ struct HomeView: View {
             modeToggle
             addButton
         }
-        .task { store.reload() }
+        .task { store.reload(); await auth.refreshUser() }
         .fullScreenCover(item: $selectedShop) { shop in
-            ShopDetailView(summary: shop) { store.patch($0) }
-                .navigationTransition(.zoom(sourceID: shop.id, in: zoomNamespace))
+            ShopDetailView(
+                summary: shop,
+                onShopChanged: { store.patch($0) },
+                onDeleted: {
+                    store.remove(shop.id)
+                    selectedShop = nil
+                }
+            )
+            .navigationTransition(.zoom(sourceID: shop.id, in: zoomNamespace))
         }
         .sheet(isPresented: $showProfile) {
             ProfileView { store.reload() }
@@ -71,12 +78,17 @@ struct HomeView: View {
     }
 
     private var collapsedHeaderRow: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 0) {
+            // 44pt frames keep the HIG minimum hit target; alignment pins the
+            // small glyphs to the screen edges so the layout doesn't shift.
             Button {
                 showProfile = true
             } label: {
                 profileIcon
+                    .frame(width: 44, height: 44, alignment: .leading)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
 
             Spacer()
             listTabs
@@ -89,15 +101,18 @@ struct HomeView: View {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 19, weight: .medium))
                     .foregroundStyle(Color.espresso700)
+                    .frame(width: 44, height: 44, alignment: .trailing)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
             // A committed search keeps a small badge so active filtering stays visible.
             .overlay(alignment: .topTrailing) {
                 if !store.draft.isEmpty {
-                    Circle().fill(Color.crema500).frame(width: 7, height: 7).offset(x: 3, y: -2)
+                    Circle().fill(Color.crema500).frame(width: 7, height: 7).offset(x: -1, y: 8)
                 }
             }
         }
-        .frame(height: 34)
+        .frame(height: 44)
     }
 
     @ViewBuilder
@@ -124,16 +139,21 @@ struct HomeView: View {
     private var expandedSearchRow: some View {
         HStack(spacing: 10) {
             searchField
-            Button("Cancel") {
+            Button {
                 store.draft = ""
                 store.clearSearchIfEmpty()
                 searchFocused = false
                 searchExpanded = false
+            } label: {
+                Text("Cancel")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.espresso500)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
-            .font(.subheadline)
-            .foregroundStyle(Color.espresso500)
+            .buttonStyle(.plain)
         }
-        .frame(height: 34)
+        .frame(height: 44)
     }
 
     // Text tabs with an underline indicator, xiaohongshu-style.
@@ -145,12 +165,15 @@ struct HomeView: View {
                 } label: {
                     VStack(spacing: 4) {
                         Text(filter.label)
-                            .font(.system(size: 16, weight: store.list == filter ? .bold : .regular))
+                            // .callout = 16pt but scales with Dynamic Type.
+                            .font(.callout.weight(store.list == filter ? .bold : .regular))
                             .foregroundStyle(store.list == filter ? Color.espresso900 : Color.espresso500.opacity(0.7))
                         Capsule()
                             .fill(store.list == filter ? Color.crema500 : .clear)
                             .frame(width: 18, height: 3)
                     }
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
@@ -183,7 +206,7 @@ struct HomeView: View {
             }
         }
         .padding(.horizontal, 14)
-        .frame(height: 34)
+        .frame(height: 36) // Apple's standard search bar height
         .background(Color.espresso900.opacity(searchFocused ? 0.07 : 0.05), in: Capsule())
     }
 
@@ -291,18 +314,14 @@ struct HomeView: View {
 
     private var emptyState: some View {
         VStack(spacing: 8) {
-            Image(systemName: store.list == .all ? "cup.and.saucer" : "bookmark")
+            Image(systemName: emptyStateIcon)
                 .font(.system(size: 32))
                 .foregroundStyle(Color.espresso500.opacity(0.5))
-            Text(
-                store.list == .all
-                    ? "No shops match. Try a different search or clear the filters."
-                    : "Nothing here yet. Saved and been lists sync once sign-in lands in the app — track shops on the web for now."
-            )
-            .font(.footnote)
-            .foregroundStyle(Color.espresso500)
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, 24)
+            Text(emptyStateMessage)
+                .font(.footnote)
+                .foregroundStyle(Color.espresso500)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
         }
         .padding(.vertical, 48)
         .frame(maxWidth: .infinity)
@@ -312,13 +331,29 @@ struct HomeView: View {
         )
     }
 
+    private var emptyStateIcon: String {
+        switch store.list {
+        case .all: "cup.and.saucer"
+        case .saved: "star"
+        case .been: "checkmark.circle"
+        }
+    }
+
+    private var emptyStateMessage: String {
+        switch store.list {
+        case .all: "No shops match. Try a different search or clear the filters."
+        case .saved: "Nothing saved yet. Tap the star on a shop to keep it here."
+        case .been: "No visits marked yet. Tap the checkmark on a shop you've been to."
+        }
+    }
+
     private func errorBanner(_ message: String) -> some View {
         VStack(spacing: 12) {
             Text("Could not reach the API: \(message)")
                 .font(.footnote)
                 .foregroundStyle(.red)
                 .multilineTextAlignment(.center)
-            Text("Is the backend running? Set the API URL in Settings (gear, top right).")
+            Text("Check your connection, then try again.")
                 .font(.caption)
                 .foregroundStyle(Color.espresso500)
             Button("Retry") { store.reload() }
@@ -339,14 +374,13 @@ struct HomeView: View {
                 showAddShop = true
             } label: {
                 Image(systemName: "plus")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(Color.cream50)
-                    .frame(width: 48, height: 48)
+                    .frame(width: 56, height: 56) // standard FAB size
                     .background(Color.espresso700, in: Circle())
-                    // The ring keeps the dark circle from melting into dark photos.
-                    .overlay(Circle().strokeBorder(Color.cream50.opacity(0.85), lineWidth: 1.5))
-                    .shadow(color: .black.opacity(0.30), radius: 14, y: 5)
-                    .shadow(color: .black.opacity(0.14), radius: 3, y: 1)
+                    // Same elevation as the List/Map pill.
+                    .shadow(color: .black.opacity(0.28), radius: 16, y: 5)
+                    .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
             }
             .padding(.trailing, 16)
             .padding(.bottom, 12)

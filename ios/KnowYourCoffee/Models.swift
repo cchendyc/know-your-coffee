@@ -245,14 +245,27 @@ struct ShopPage: Codable {
     let total: Int
 }
 
+enum UserRole: String, Codable {
+    case user = "USER"
+    case admin = "ADMIN"
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = UserRole(rawValue: raw) ?? .user
+    }
+}
+
 struct User: Codable, Hashable {
     let id: String
     let name: String
     let email: String? // nil for phone-only accounts
     let phone: String?
     let picture: String?
+    var role: UserRole?
     var savedCount: Int?
     var beenCount: Int?
+
+    var isAdmin: Bool { role == .admin }
 
     /// Email or phone, whichever the account signs in with.
     var contactLine: String? { email ?? phone }

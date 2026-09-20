@@ -30,6 +30,7 @@ struct ProfileView: View {
                             claims = []
                         }
                         .font(.subheadline.weight(.medium))
+                        .frame(minHeight: 44)
                     } else {
                         signedOutHeader
                         appleSignInButton
@@ -74,6 +75,7 @@ struct ProfileView: View {
             .task {
                 guard auth.isSignedIn else { return }
                 me = try? await CoffeeAPI.fetchMe()
+                if let me { auth.apply(me) }
                 claims = (try? await CoffeeAPI.fetchMyClaims()) ?? []
             }
         }
@@ -248,10 +250,8 @@ struct ProfileView: View {
     }
 
     private var codeSignInRow: some View {
-        HStack(spacing: 10) {
-            codeSignInOption("Phone", icon: "iphone", method: .phone)
-            codeSignInOption("Email", icon: "envelope", method: .email)
-        }
+        // Phone stays hidden until an SMS provider (Twilio) is configured.
+        codeSignInOption("Sign in with email code", icon: "envelope", method: .email)
         .padding(.horizontal, 24)
         .sheet(item: $codeSignIn) { method in
             CodeSignInSheet(method: method) {
@@ -415,6 +415,7 @@ private struct CodeSignInSheet: View {
                     }
                     .font(.caption.weight(.medium))
                     .foregroundStyle(Color.espresso500)
+                    .frame(minHeight: 44)
                 }
 
                 Spacer()

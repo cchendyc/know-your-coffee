@@ -151,11 +151,22 @@ final class AuthStore {
         store(payload)
     }
 
+    func apply(_ user: User) {
+        self.user = user
+        UserDefaults.standard.set(try? JSONEncoder().encode(user), forKey: Self.userKey)
+    }
+
+    func refreshUser() async {
+        guard isSignedIn else { return }
+        if let me = try? await CoffeeAPI.fetchMe() {
+            apply(me)
+        }
+    }
+
     private func store(_ payload: AuthPayload) {
         token = payload.token
-        user = payload.user
+        apply(payload.user)
         Keychain.write(Self.tokenKey, payload.token)
-        UserDefaults.standard.set(try? JSONEncoder().encode(payload.user), forKey: Self.userKey)
     }
 
     func signOut() {

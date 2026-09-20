@@ -14,6 +14,9 @@ services:
         sync: false
       - key: GOOGLE_OAUTH_CLIENT_ID
         sync: false
+      # OAuth client IDs are public identifiers, safe to commit.
+      - key: GOOGLE_OAUTH_IOS_CLIENT_ID
+        value: 468965480395-el9e0porpnrf8c4qjdg3n81uqgpstbtj.apps.googleusercontent.com
       - key: SESSION_SECRET
         generateValue: true
       - key: GOOGLE_PLACES_API_KEY

@@ -75,6 +75,11 @@ final class ShopStore {
         }
     }
 
+    func remove(_ id: String) {
+        shops.removeAll { $0.id == id }
+        total = max(0, total - 1)
+    }
+
     func reload() {
         loadTask?.cancel()
         isLoading = true

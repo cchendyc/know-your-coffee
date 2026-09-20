@@ -234,6 +234,14 @@ class PostgresRepository:
             total = counted[0]["total"]
         return [_to_shop(r) for r in rows], total
 
+    def delete_shop(self, shop_id: str) -> bool:
+        # reports and shop_claims have no ON DELETE CASCADE yet (pre-0019).
+        with self._pool.connection() as conn:
+            conn.execute("DELETE FROM reports WHERE shop_id = %s", [shop_id])
+            conn.execute("DELETE FROM shop_claims WHERE shop_id = %s", [shop_id])
+            row = conn.execute("DELETE FROM shops WHERE id = %s RETURNING id", [shop_id]).fetchone()
+        return bool(row)
+
     def get_shop(self, shop_id: str, user_id: str | None = None) -> CoffeeShop | None:
         if user_id:
             rows = self._query(
