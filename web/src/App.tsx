@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { fetchShops, type CoffeeShop, type MachineBrand, type User } from './api'
 import { MACHINE_BRANDS, MACHINE_LABELS } from './labels'
 import { ShopCard } from './components/ShopCard'
@@ -190,13 +190,9 @@ export default function App() {
               </div>
             )}
             {view === 'list' && shops.length < total && (
-              <button
-                onClick={() => setPage((p) => p + 1)}
-                disabled={loading}
-                className="mx-auto mt-6 block rounded-2xl border border-cream-200 bg-white px-6 py-2.5 text-sm font-medium text-espresso-700 transition hover:border-crema-400 disabled:opacity-50"
-              >
-                {loading ? 'Loading…' : `Load more (${shops.length} of ${total})`}
-              </button>
+              <LoadMoreSentinel loading={loading} onVisible={() => setPage((p) => p + 1)}>
+                Loading more… ({shops.length} of {total})
+              </LoadMoreSentinel>
             )}
             {!loading && shops.length === 0 && view === 'list' && (
               <div className="mt-10 rounded-2xl border border-dashed border-cream-200 p-10 text-center text-sm text-espresso-500">
@@ -235,6 +231,42 @@ export default function App() {
       {selectedId && (
         <ShopDrawer shopId={selectedId} user={user} onShopChanged={onShopChanged} onClose={() => setSelectedId(null)} />
       )}
+    </div>
+  )
+}
+
+// Infinite scroll: loads the next page when this footer scrolls into view.
+function LoadMoreSentinel({
+  loading,
+  onVisible,
+  children,
+}: {
+  loading: boolean
+  onVisible: () => void
+  children: ReactNode
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const loadingRef = useRef(loading)
+  loadingRef.current = loading
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !loadingRef.current) onVisible()
+      },
+      { rootMargin: '400px' }, // start fetching before the user hits the bottom
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+    // Re-observe after each load so a still-visible sentinel fetches the next
+    // page immediately (IntersectionObserver only fires on state changes).
+  }, [onVisible, loading])
+
+  return (
+    <div ref={ref} className="mt-6 py-4 text-center text-xs text-espresso-500">
+      {children}
     </div>
   )
 }
