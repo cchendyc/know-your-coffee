@@ -103,7 +103,8 @@ export interface Report {
 export interface User {
   id: string
   name: string
-  email: string
+  email: string | null // null for phone-only accounts
+  phone: string | null
   picture: string | null
 }
 
@@ -200,7 +201,7 @@ async function gql<T>(query: string, variables?: Record<string, unknown>): Promi
     const message = json.errors[0].message
     // Session token no longer valid (e.g. server restart): drop the stale
     // login instead of showing a signed-in header that can't do anything.
-    if (token && message.includes('Sign in with Google')) {
+    if (token && message.includes('Sign in')) {
       localStorage.removeItem(TOKEN_KEY)
       localStorage.removeItem(USER_KEY)
       window.dispatchEvent(new Event('kyc:session-expired'))
@@ -302,10 +303,29 @@ export function submitReport(input: ReportInput) {
 export function signInWithGoogle(idToken: string) {
   return gql<{ signInWithGoogle: { token: string; user: User } }>(
     `mutation SignIn($idToken: String!) {
-      signInWithGoogle(idToken: $idToken) { token user { id name email picture } }
+      signInWithGoogle(idToken: $idToken) { token user { id name email phone picture } }
     }`,
     { idToken },
   ).then((d) => d.signInWithGoogle)
+}
+
+/** devCode is set only against a dev backend with no email provider. */
+export function startEmailSignIn(email: string) {
+  return gql<{ startEmailSignIn: { sent: boolean; devCode: string | null } }>(
+    `mutation StartEmail($email: String!) {
+      startEmailSignIn(email: $email) { sent devCode }
+    }`,
+    { email },
+  ).then((d) => d.startEmailSignIn)
+}
+
+export function signInWithEmail(email: string, code: string) {
+  return gql<{ signInWithEmail: { token: string; user: User } }>(
+    `mutation EmailSignIn($email: String!, $code: String!) {
+      signInWithEmail(email: $email, code: $code) { token user { id name email phone picture } }
+    }`,
+    { email, code },
+  ).then((d) => d.signInWithEmail)
 }
 
 export interface PlaceSuggestion {

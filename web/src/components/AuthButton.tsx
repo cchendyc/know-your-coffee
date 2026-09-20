@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { fetchMyStats, signInWithGoogle, TOKEN_KEY, USER_KEY, type User } from '../api'
+import {
+  fetchMyStats,
+  signInWithEmail,
+  signInWithGoogle,
+  startEmailSignIn,
+  TOKEN_KEY,
+  USER_KEY,
+  type User,
+} from '../api'
 
 // trim(): a trailing newline pasted into the env/CI variable makes Google
 // reject the client ID with "invalid_client: The OAuth client was not found".
@@ -57,26 +65,130 @@ export function AuthButton({ user, onChange }: { user: User | null; onChange: (u
     }
   }, [user, onChange])
 
-  if (!CLIENT_ID) {
-    return (
-      <button
-        disabled
-        title="Set VITE_GOOGLE_CLIENT_ID in web/.env.local to enable Google sign-in"
-        className="cursor-not-allowed rounded-full border border-cream-200 px-3 py-1.5 text-xs font-medium text-espresso-500 opacity-60"
-      >
-        Sign in
-      </button>
-    )
-  }
-
   if (user) {
     return <ProfileMenu user={user} onSignOut={() => onChange(null)} />
   }
 
   return (
-    <div>
-      <div ref={buttonRef} />
+    <div className="flex items-center gap-2">
+      {CLIENT_ID ? (
+        <div ref={buttonRef} />
+      ) : (
+        <button
+          disabled
+          title="Set VITE_GOOGLE_CLIENT_ID in web/.env.local to enable Google sign-in"
+          className="cursor-not-allowed rounded-full border border-cream-200 px-3 py-1.5 text-xs font-medium text-espresso-500 opacity-60"
+        >
+          Google
+        </button>
+      )}
+      <EmailSignIn onChange={onChange} />
       {error && <p className="text-xs text-red-600">{error}</p>}
+    </div>
+  )
+}
+
+// Email one-time code sign-in in a small popover: address, then the code.
+function EmailSignIn({ onChange }: { onChange: (u: User | null) => void }) {
+  const [open, setOpen] = useState(false)
+  const [email, setEmail] = useState('')
+  const [code, setCode] = useState('')
+  const [codeSent, setCodeSent] = useState(false)
+  const [devCode, setDevCode] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      if (codeSent) {
+        const { token, user } = await signInWithEmail(email, code)
+        localStorage.setItem(TOKEN_KEY, token)
+        localStorage.setItem(USER_KEY, JSON.stringify(user))
+        setOpen(false)
+        onChange(user)
+      } else {
+        const res = await startEmailSignIn(email)
+        setDevCode(res.devCode)
+        setCodeSent(true)
+        setCode('')
+      }
+    } catch (e) {
+      setError((e as Error).message)
+    }
+    setBusy(false)
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="rounded-full border border-cream-200 px-3 py-1.5 text-xs font-medium text-espresso-700 transition hover:border-crema-400"
+      >
+        Email
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
+          <form
+            className="absolute right-0 z-30 mt-2 w-64 rounded-2xl border border-cream-200 bg-white p-4 shadow-lg"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void submit()
+            }}
+          >
+            <p className="text-xs text-espresso-500">
+              {codeSent ? `Enter the code we sent to ${email}.` : "We'll email you a sign-in code."}
+            </p>
+            {codeSent ? (
+              <input
+                autoFocus
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                inputMode="numeric"
+                placeholder="6-digit code"
+                className="mt-2 w-full rounded-xl border border-cream-200 px-3 py-2 text-center font-mono text-sm outline-none focus:border-crema-400"
+              />
+            ) : (
+              <input
+                autoFocus
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="mt-2 w-full rounded-xl border border-cream-200 px-3 py-2 text-sm outline-none focus:border-crema-400"
+              />
+            )}
+            {devCode && codeSent && (
+              <p className="mt-1 font-mono text-[11px] text-crema-500">Dev backend, no email provider. Code: {devCode}</p>
+            )}
+            {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+            <button
+              type="submit"
+              disabled={busy || (codeSent ? code.length < 6 : email.length < 6)}
+              className="mt-3 w-full rounded-xl bg-espresso-700 py-2 text-xs font-semibold text-cream-50 transition hover:bg-espresso-900 disabled:opacity-50"
+            >
+              {busy ? '…' : codeSent ? 'Sign in' : 'Send code'}
+            </button>
+            {codeSent && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCodeSent(false)
+                  setCode('')
+                  setDevCode(null)
+                  setError(null)
+                }}
+                className="mt-2 w-full text-center text-[11px] text-espresso-500 hover:text-espresso-900"
+              >
+                Use a different email
+              </button>
+            )}
+          </form>
+        </>
+      )}
     </div>
   )
 }
@@ -110,7 +222,7 @@ function ProfileMenu({ user, onSignOut }: { user: User; onSignOut: () => void })
           <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
           <div className="absolute right-0 z-30 mt-2 w-60 rounded-2xl border border-cream-200 bg-white p-4 shadow-lg">
             <p className="text-sm font-semibold">{user.name}</p>
-            <p className="truncate text-xs text-espresso-500">{user.email}</p>
+            <p className="truncate text-xs text-espresso-500">{user.email ?? user.phone}</p>
             <div className="mt-3 flex gap-2">
               <div className="flex-1 rounded-xl bg-cream-100 px-3 py-2 text-center">
                 <p className="text-lg font-bold">{stats ? stats.savedCount : '·'}</p>
