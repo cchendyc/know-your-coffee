@@ -1,6 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CoffeeShop, PhotoKind, User } from '../api'
 import { BEAN_SOURCE_LABELS, MACHINE_LABELS, PHOTO_KINDS, PHOTO_KIND_LABELS } from '../labels'
+import { ReportForm } from './ReportForm'
 import { ReportList } from './ReportList'
 import { SaveBeenButtons } from './SaveBeen'
 
@@ -13,24 +14,35 @@ function Fact({ label, value }: { label: string; value: string }) {
   )
 }
 
-// Full-page view: everything too bulky for the side drawer — photo galleries
-// grouped by section and the complete report history.
+// Full-page view: photo galleries grouped by section, the complete report
+// history, and the update form itself.
 export function ShopExpanded({
   shop,
   user,
+  initialReporting = false,
   onChanged,
+  onReload,
   onClose,
 }: {
   shop: CoffeeShop
   user: User | null
+  initialReporting?: boolean
   onChanged: (shop: CoffeeShop) => void
+  onReload: () => void
   onClose: () => void
 }) {
+  const [reporting, setReporting] = useState(initialReporting)
+  const formRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  useEffect(() => {
+    if (reporting) formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [reporting])
 
   const byKind = new Map<PhotoKind, typeof shop.photos>()
   for (const photo of shop.photos) {
@@ -90,6 +102,32 @@ export function ShopExpanded({
           <Fact label="Milk" value={shop.milkBrands.length ? shop.milkBrands.join(', ') : 'Unknown'} />
         </div>
 
+        <div ref={formRef} className="mt-6 scroll-mt-20">
+          {user && !reporting && (
+            <button
+              onClick={() => setReporting(true)}
+              className="w-full rounded-2xl bg-espresso-700 py-3 text-sm font-semibold text-cream-50 transition hover:bg-espresso-900"
+            >
+              Report an update
+            </button>
+          )}
+          {!user && (
+            <p className="rounded-2xl border border-dashed border-crema-400 bg-crema-400/10 px-4 py-3 text-center text-sm text-espresso-700">
+              Sign in with Google (top right on the main page) to report updates and add photos.
+            </p>
+          )}
+          {reporting && (
+            <ReportForm
+              shop={shop}
+              onDone={() => {
+                setReporting(false)
+                onReload()
+              }}
+              onCancel={() => setReporting(false)}
+            />
+          )}
+        </div>
+
         {shop.drinks.length > 0 && (
           <div className="mt-4 rounded-2xl border border-cream-200 bg-white px-4 py-3">
             <h3 className="text-xs font-semibold tracking-wide text-espresso-500 uppercase">Drinks</h3>
@@ -106,9 +144,7 @@ export function ShopExpanded({
 
         <h3 className="mt-8 text-sm font-bold tracking-tight">Community photos</h3>
         {shop.photos.length === 0 && (
-          <p className="mt-1 text-sm text-espresso-500">
-            No photos yet. Add some from “Report an update” on the shop panel.
-          </p>
+          <p className="mt-1 text-sm text-espresso-500">No photos yet. Add some with “Report an update” above.</p>
         )}
         {PHOTO_KINDS.filter((k) => byKind.has(k)).map((kind) => (
           <div key={kind} className="mt-4">

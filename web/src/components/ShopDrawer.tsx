@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { fetchShop, type CoffeeShop, type User } from '../api'
 import { BEAN_SOURCE_LABELS, MACHINE_LABELS } from '../labels'
-import { ReportForm } from './ReportForm'
 import { ReportList } from './ReportList'
 import { SaveBeenButtons } from './SaveBeen'
 import { ShopExpanded } from './ShopExpanded'
@@ -27,8 +26,9 @@ export function ShopDrawer({
   onClose: () => void
 }) {
   const [shop, setShop] = useState<CoffeeShop | null>(null)
-  const [reporting, setReporting] = useState(false)
   const [expanded, setExpanded] = useState(false)
+  // "Report an update" opens the full page with the form already showing.
+  const [reportOnExpand, setReportOnExpand] = useState(false)
 
   const load = useCallback(() => {
     fetchShop(shopId).then(setShop)
@@ -64,15 +64,27 @@ export function ShopDrawer({
                     {shop.address}, {shop.city}
                   </p>
                 </div>
-                <button
-                  onClick={onClose}
-                  aria-label="Close"
-                  className="rounded-full p-2 text-espresso-500 transition hover:bg-cream-100 hover:text-espresso-900"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="size-5">
-                    <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
-                  </svg>
-                </button>
+                <div className="flex items-center">
+                  <button
+                    onClick={() => setExpanded(true)}
+                    aria-label="Expand: all photos and reports"
+                    title="Expand: all photos & reports"
+                    className="rounded-full p-2 text-espresso-500 transition hover:bg-cream-100 hover:text-espresso-900"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="size-5">
+                      <path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={onClose}
+                    aria-label="Close"
+                    className="rounded-full p-2 text-espresso-500 transition hover:bg-cream-100 hover:text-espresso-900"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="size-5">
+                      <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                </div>
               </div>
               <div className="mt-2 flex items-center justify-between gap-2">
                 <div className="flex gap-4">
@@ -148,38 +160,20 @@ export function ShopDrawer({
                 </button>
               )}
 
-              <button
-                onClick={() => setExpanded(true)}
-                className="mt-4 w-full rounded-2xl border border-cream-200 bg-white py-2.5 text-sm font-medium text-espresso-700 transition hover:border-crema-400"
-              >
-                Expand: all photos & reports
-              </button>
-
-              {!reporting && user && (
+              {user ? (
                 <button
-                  onClick={() => setReporting(true)}
+                  onClick={() => {
+                    setReportOnExpand(true)
+                    setExpanded(true)
+                  }}
                   className="mt-4 w-full rounded-2xl bg-espresso-700 py-3 text-sm font-semibold text-cream-50 transition hover:bg-espresso-900"
                 >
                   Report an update
                 </button>
-              )}
-              {!user && (
+              ) : (
                 <p className="mt-4 rounded-2xl border border-dashed border-crema-400 bg-crema-400/10 px-4 py-3 text-center text-sm text-espresso-700">
                   Sign in with Google (top right) to report updates, add photos, and keep lists.
                 </p>
-              )}
-
-              {reporting && (
-                <div className="mt-4">
-                  <ReportForm
-                    shop={shop}
-                    onDone={() => {
-                      setReporting(false)
-                      load()
-                    }}
-                    onCancel={() => setReporting(false)}
-                  />
-                </div>
               )}
 
               <h3 className="mt-6 text-xs font-semibold tracking-wide text-espresso-500 uppercase">
@@ -196,7 +190,17 @@ export function ShopDrawer({
         )}
       </aside>
       {expanded && shop && (
-        <ShopExpanded shop={shop} user={user} onChanged={onStatusChanged} onClose={() => setExpanded(false)} />
+        <ShopExpanded
+          shop={shop}
+          user={user}
+          initialReporting={reportOnExpand}
+          onChanged={onStatusChanged}
+          onReload={load}
+          onClose={() => {
+            setExpanded(false)
+            setReportOnExpand(false)
+          }}
+        />
       )}
     </div>
   )
