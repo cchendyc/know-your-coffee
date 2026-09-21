@@ -27,12 +27,14 @@ struct LaunchAnimation<Content: View>: View {
             // showsContent removes this branch in the same frame.
             if !showsContent {
                 ZStack {
-                    Color.espresso900
+                    // Static hexes, not the dynamic palette: the opening mark is
+                    // espresso-on-cream in both themes, matching LaunchBackground.
+                    LaunchAnimation.backdrop
 
                     CoffeeSnobContour()
                         .trim(from: 0, to: lineProgress)
                         .stroke(
-                            Color.cream50,
+                            LaunchAnimation.stroke,
                             style: StrokeStyle(
                                 lineWidth: 5,
                                 lineCap: .round,
@@ -49,11 +51,14 @@ struct LaunchAnimation<Content: View>: View {
                 .transition(.opacity)
             }
         }
-        .background(Color.espresso900.ignoresSafeArea())
+        .background(LaunchAnimation.backdrop.ignoresSafeArea())
         .task {
             await playOpeningAnimation()
         }
     }
+
+    private static var backdrop: Color { Color(hex: 0x2B1D14) }
+    private static var stroke: Color { Color(hex: 0xFBF8F3) }
 
     @MainActor
     private func playOpeningAnimation() async {

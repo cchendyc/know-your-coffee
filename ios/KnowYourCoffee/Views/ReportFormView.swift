@@ -317,7 +317,7 @@ struct ReportFormView: View {
         .padding(.horizontal, 16)
         .padding(.top, 12)
         .padding(.bottom, 16)
-        .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(Color.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(gearFromPhoto ? Color.crema400 : Color.cream200, lineWidth: gearFromPhoto ? 1.5 : 1)
@@ -794,7 +794,7 @@ private struct Chip: View {
                 .lineLimit(1)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(selected ? Color.espresso700 : .white, in: Capsule())
+                .background(selected ? Color.espresso700 : Color.surface, in: Capsule())
                 .overlay(Capsule().stroke(selected ? Color.clear : Color.cream200))
                 .foregroundStyle(selected ? Color.inkInverse : Color.espresso700)
         }
@@ -875,7 +875,7 @@ private struct CollapsibleCard<Content: View>: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(Color.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(open ? Color.crema400 : Color.cream200)
@@ -890,7 +890,7 @@ private struct FieldChrome: ViewModifier {
             .font(.kycSecondary)
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
-            .background(.white, in: RoundedRectangle(cornerRadius: KYCRadius.control, style: .continuous))
+            .background(Color.surface, in: RoundedRectangle(cornerRadius: KYCRadius.control, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: KYCRadius.control, style: .continuous).stroke(Color.cream200))
     }
 }

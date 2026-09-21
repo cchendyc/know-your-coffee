@@ -6,6 +6,44 @@ import { ShopDrawer } from './components/ShopDrawer'
 import { MapView } from './components/MapView'
 import { AuthButton, loadStoredUser } from './components/AuthButton'
 import { AddShopModal } from './components/AddShopModal'
+import { getThemePref, setThemePref, type ThemePref } from './theme'
+
+// Cycles System → Light → Dark Roast. System follows the OS appearance.
+function ThemeToggle() {
+  const [pref, setPref] = useState<ThemePref>(getThemePref)
+  const next: Record<ThemePref, ThemePref> = { system: 'light', light: 'dark', dark: 'system' }
+  const label = { system: 'Theme: system', light: 'Theme: light', dark: 'Theme: dark roast' }[pref]
+
+  return (
+    <button
+      type="button"
+      title={`${label} — click to change`}
+      aria-label={label}
+      onClick={() => {
+        const p = next[pref]
+        setPref(p)
+        setThemePref(p)
+      }}
+      className="flex size-9 shrink-0 items-center justify-center rounded-full border border-cream-200 bg-white text-espresso-700 shadow-sm transition hover:border-crema-400"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-4">
+        {pref === 'system' && (
+          <>
+            <rect x="3" y="4" width="18" height="12" rx="2" />
+            <path d="M8 20h8M12 16v4" />
+          </>
+        )}
+        {pref === 'light' && (
+          <>
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4" />
+          </>
+        )}
+        {pref === 'dark' && <path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z" />}
+      </svg>
+    </button>
+  )
+}
 
 // Native <select> pops the OS menu, which ignores the app theme entirely;
 // this draws the same styled list the report form dropdowns use.
@@ -176,6 +214,7 @@ export default function App() {
             <h1 className="text-lg font-bold tracking-tight">Know Your Coffee</h1>
             <p className="text-xs text-espresso-500">coffee snobs</p>
           </div>
+          <ThemeToggle />
           <AuthButton user={user} onChange={setUser} />
         </div>
       </header>

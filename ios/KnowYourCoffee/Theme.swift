@@ -1,17 +1,24 @@
 import SwiftUI
 
 // Palette mirrors web/src/index.css so both clients feel like one product.
+// Every color is dynamic: light values are the cream/espresso palette, dark
+// values are the Dark Roast theme from the Figma iOS page. Roles, not hues:
+// espresso700 is "accent", so in the dark theme it becomes glowing crema.
 extension Color {
-    static let cream50 = Color(hex: 0xFBF8F3)
-    static let cream100 = Color(hex: 0xF4EDE2)
-    static let cream200 = Color(hex: 0xE9DCC9)
-    static let espresso500 = Color(hex: 0x6F4E37)
-    static let espresso700 = Color(hex: 0x4A3325)
-    static let espresso900 = Color(hex: 0x2B1D14)
-    static let crema400 = Color(hex: 0xD4A45F)
-    static let crema500 = Color(hex: 0xC08C3E)
-    static let markerOrange = Color(hex: 0xE85D04)
-    static let savedGreen = Color(hex: 0x2E9E4F)
+    static let cream50 = dynamic(light: 0xFBF8F3, dark: 0x1B120C)
+    static let cream100 = dynamic(light: 0xF4EDE2, dark: 0x3A2A1D)
+    static let cream200 = dynamic(light: 0xE9DCC9, dark: 0x3A2A1D)
+    static let espresso500 = dynamic(light: 0x6F4E37, dark: 0xB99C82)
+    static let espresso700 = dynamic(light: 0x4A3325, dark: 0xE0A458)
+    static let espresso900 = dynamic(light: 0x2B1D14, dark: 0xF4EDE2)
+    static let crema400 = dynamic(light: 0xD4A45F, dark: 0xE0A458)
+    static let crema500 = dynamic(light: 0xC08C3E, dark: 0xE0A458)
+    static let markerOrange = dynamic(light: 0xE85D04, dark: 0xF2762B)
+    static let savedGreen = dynamic(light: 0x2E9E4F, dark: 0x6FBF8F)
+    /// Card surface: white on cream in light, elevated umber on espresso black in dark.
+    static let surface = dynamic(light: 0xFFFFFF, dark: 0x271A11)
+    /// Shadows stay espresso-dark in both themes; a light shadow reads as a glow.
+    static let shadowInk = Color(hex: 0x2B1D14)
 
     init(hex: UInt32) {
         self.init(
@@ -19,6 +26,35 @@ extension Color {
             green: Double((hex >> 8) & 0xFF) / 255,
             blue: Double(hex & 0xFF) / 255
         )
+    }
+
+    private static func dynamic(light: UInt32, dark: UInt32) -> Color {
+        Color(UIColor { trait in
+            UIColor(Color(hex: trait.userInterfaceStyle == .dark ? dark : light))
+        })
+    }
+}
+
+// User theme choice: follow iOS, or force light / Dark Roast.
+enum AppAppearance: String, CaseIterable, Identifiable {
+    case system, light, dark
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .system: "System"
+        case .light: "Light"
+        case .dark: "Dark Roast"
+        }
+    }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: nil
+        case .light: .light
+        case .dark: .dark
+        }
     }
 }
 
@@ -81,13 +117,13 @@ enum KYCRadius {
     static let thumb: CGFloat = 10
 }
 
-// Reusable card container: white, rounded, soft shadow — the web's ShopCard look.
+// Reusable card container: surface fill, rounded, soft shadow — the web's ShopCard look.
 struct CardBackground: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .background(.white)
+            .background(Color.surface)
             .clipShape(RoundedRectangle(cornerRadius: KYCRadius.card, style: .continuous))
-            .shadow(color: .espresso900.opacity(0.06), radius: 8, y: 2)
+            .shadow(color: .shadowInk.opacity(0.06), radius: 8, y: 2)
     }
 }
 

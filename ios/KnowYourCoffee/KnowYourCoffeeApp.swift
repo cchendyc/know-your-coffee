@@ -2,6 +2,9 @@ import SwiftUI
 
 @main
 struct KnowYourCoffeeApp: App {
+    // nil = follow the system appearance; set from the Profile appearance picker.
+    @AppStorage("appearance") private var appearanceRaw = AppAppearance.system.rawValue
+
     init() {
         // Shop cards render remote photos; a generous URLCache keeps scrolling smooth.
         URLCache.shared = URLCache(
@@ -16,6 +19,7 @@ struct KnowYourCoffeeApp: App {
                 HomeView()
             }
             .tint(.espresso700)
+            .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme ?? nil)
         }
     }
 }

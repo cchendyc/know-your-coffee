@@ -351,7 +351,7 @@ struct HomeView: View {
                 .buttonStyle(.borderedProminent)
         }
         .padding(20)
-        .background(.white, in: RoundedRectangle(cornerRadius: KYCRadius.card, style: .continuous))
+        .background(Color.surface, in: RoundedRectangle(cornerRadius: KYCRadius.card, style: .continuous))
         .padding(16)
         .frame(maxHeight: .infinity, alignment: .top)
     }
@@ -403,7 +403,7 @@ struct HomeView: View {
             }
         }
         .padding(4)
-        .background(.white, in: Capsule())
+        .background(Color.surface, in: Capsule())
         .overlay(Capsule().strokeBorder(Color.espresso900.opacity(0.08), lineWidth: 0.5))
         // Small y-offsets: the pill sits near the screen bottom, so a big
         // downward shadow falls off-screen. Keep the halo around the pill.

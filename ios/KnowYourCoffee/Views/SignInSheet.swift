@@ -56,6 +56,7 @@ struct SignInSheet: View {
 struct SignInOptions: View {
     var onSignedIn: () -> Void = {}
 
+    @Environment(\.colorScheme) private var colorScheme
     @State private var auth = AuthStore.shared
     @State private var signingIn = false
     @State private var codeSignIn: CodeSignInMethod?
@@ -112,7 +113,8 @@ struct SignInOptions: View {
                 }
             }
         }
-        .signInWithAppleButtonStyle(.black)
+        // Apple's dark-mode convention: light button on dark surfaces.
+        .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
         .frame(height: 46)
         .clipShape(Capsule())
         .padding(.horizontal, 24)

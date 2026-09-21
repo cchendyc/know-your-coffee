@@ -15,6 +15,7 @@ struct ProfileView: View {
     @State private var showDeveloper = false
     @State private var confirmDeleteAccount = false
     @State private var deletingAccount = false
+    @AppStorage("appearance") private var appearanceRaw = AppAppearance.system.rawValue
 
     var body: some View {
         NavigationStack {
@@ -62,6 +63,8 @@ struct ProfileView: View {
                             }
                         }
                     }
+
+                    appearanceSection
 
                     if let error {
                         Text(error)
@@ -176,8 +179,25 @@ struct ProfileView: View {
                         .foregroundStyle(statusColor(claim.status))
                 }
                 .padding(12)
-                .background(.white, in: RoundedRectangle(cornerRadius: KYCRadius.control, style: .continuous))
+                .background(Color.surface, in: RoundedRectangle(cornerRadius: KYCRadius.control, style: .continuous))
             }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 24)
+    }
+
+    // System follows iOS light/dark; Light and Dark Roast force a theme.
+    private var appearanceSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Appearance")
+                .font(.kycSection)
+                .foregroundStyle(Color.ink)
+            Picker("Appearance", selection: $appearanceRaw) {
+                ForEach(AppAppearance.allCases) { option in
+                    Text(option.label).tag(option.rawValue)
+                }
+            }
+            .pickerStyle(.segmented)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 24)

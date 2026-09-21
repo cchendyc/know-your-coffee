@@ -12,6 +12,37 @@
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
 }
 
+/*
+ * Dark Roast theme (matches the Figma iOS page). Tailwind v4 utilities read
+ * these variables, so overriding them re-skins every component: cream base
+ * becomes espresso black, white cards become elevated umber, espresso accents
+ * become glowing crema, and ink flips to cream. `--color-white` is included
+ * deliberately — bg-white is the card surface everywhere.
+ */
+[data-theme='dark'] {
+  --color-cream-50: #1b120c;
+  --color-cream-100: #3a2a1d;
+  --color-cream-200: #3a2a1d;
+  --color-espresso-500: #b99c82;
+  --color-espresso-700: #e0a458;
+  --color-espresso-900: #f4ede2;
+  --color-crema-400: #e0a458;
+  --color-crema-500: #e0a458;
+}
+
+/*
+ * Cards use bg-white; in dark they become elevated umber. The --color-white
+ * token itself is NOT overridden because text-white must stay white on the
+ * red/green/crema action buttons.
+ */
+[data-theme='dark'] .bg-white {
+  background-color: #271a11;
+}
+
+[data-theme='dark'] .bg-white\/90 {
+  background-color: rgb(39 26 17 / 0.9);
+}
+
 body {
   background: var(--color-cream-50);
   color: var(--color-espresso-900);

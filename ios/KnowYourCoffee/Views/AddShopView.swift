@@ -50,7 +50,7 @@ struct AddShopView: View {
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(12)
-                                .background(.white, in: RoundedRectangle(cornerRadius: KYCRadius.control, style: .continuous))
+                                .background(Color.surface, in: RoundedRectangle(cornerRadius: KYCRadius.control, style: .continuous))
                             }
                             .buttonStyle(.plain)
                         }

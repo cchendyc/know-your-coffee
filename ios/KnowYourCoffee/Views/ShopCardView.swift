@@ -33,7 +33,7 @@ struct ShopCardView: View {
             .padding(10)
         }
         .frame(width: width)
-        .background(.white)
+        .background(Color.surface)
         .clipShape(RoundedRectangle(cornerRadius: KYCRadius.control, style: .continuous))
         .shadow(color: .espresso900.opacity(0.05), radius: 6, y: 2)
     }
@@ -124,7 +124,7 @@ struct ShopCardPlaceholder: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(10)
         }
-        .background(.white)
+        .background(Color.surface)
         .clipShape(RoundedRectangle(cornerRadius: KYCRadius.control, style: .continuous))
         .redacted(reason: .placeholder)
     }

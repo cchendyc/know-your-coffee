@@ -11,10 +11,6 @@
 	<!-- iOS OAuth client ID from the Google Cloud project (bundle id
 	     com.knowyourcoffee.app). Empty disables in-app Google sign-in.
 	     The same value goes in the backend env as GOOGLE_OAUTH_IOS_CLIENT_ID. -->
-	<!-- The palette (cream/espresso) is fixed light; system materials would
-	     otherwise go dark and make bars and buttons unreadable in Dark Mode. -->
-	<key>UIUserInterfaceStyle</key>
-	<string>Light</string>
 	<key>GoogleOAuthClientID</key>
 	<string>468965480395-el9e0porpnrf8c4qjdg3n81uqgpstbtj.apps.googleusercontent.com</string>
 	<key>NSCameraUsageDescription</key>
