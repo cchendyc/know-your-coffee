@@ -43,7 +43,7 @@ struct SignInSheet: View {
             .background(Color.cream50)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    ToolbarTextButton(label: "Cancel") { dismiss() }
                 }
             }
         }
@@ -281,7 +281,7 @@ struct CodeSignInSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    ToolbarTextButton(label: "Cancel") { dismiss() }
                 }
             }
             .onAppear { focused = true }

@@ -97,7 +97,7 @@ struct ProfileView: View {
             .background(Color.cream50)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    ToolbarTextButton(label: "Done", weight: .semibold) { dismiss() }
                 }
             }
             .task {

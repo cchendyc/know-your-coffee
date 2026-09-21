@@ -126,11 +126,20 @@ class MemoryRepository:
         return sorted({s["city"] for s in self._shops.values()})
 
     def list_reports(self, shop_id: str, limit: int | None = None) -> list[Report]:
-        reports = list(reversed(self._reports.get(shop_id, [])))
+        reports = list(reversed(self._visible_reports(shop_id)))
         return reports[:limit] if limit else reports
 
     def count_reports(self, shop_id: str) -> int:
-        return len(self._reports.get(shop_id, []))
+        return len(self._visible_reports(shop_id))
+
+    # Admin data entry is not community activity: admin reports still fold
+    # into the shop record but stay out of the updates feed and count.
+    def _visible_reports(self, shop_id: str) -> list[Report]:
+        def by_admin(report: Report) -> bool:
+            user = self._users.get(report.get("userId") or "")
+            return user is not None and user.get("role") == "ADMIN"
+
+        return [r for r in self._reports.get(shop_id, []) if not by_admin(r)]
 
     def add_report(self, report: dict) -> Report:
         # The scalar primary mirrors the first machines entry.
@@ -156,6 +165,7 @@ class MemoryRepository:
             "outdoorSeating": report.get("outdoorSeating"),
             "note": report.get("note"),
             "source": report.get("source") or "TEXT",
+            "userId": report.get("userId"),
             "reporter": {"name": user["name"], "picture": user["picture"]} if user else None,
             "createdAt": _now(),
         }
@@ -283,10 +293,14 @@ class MemoryRepository:
         return self._users.get(user_id)
 
     def delete_user(self, user_id: str) -> bool:
-        # Reports and photos only hold a reporter-name snapshot here, so there
-        # is nothing to anonymize (unlike postgres, which nulls user_id).
         if user_id not in self._users:
             return False
+        # Anonymize like postgres: the reporter-name snapshot stays, but the
+        # userId link is cut so role lookups on reports stop resolving.
+        for reports in self._reports.values():
+            for report in reports:
+                if report.get("userId") == user_id:
+                    report["userId"] = None
         del self._users[user_id]
         self._statuses = {k: v for k, v in self._statuses.items() if k[0] != user_id}
         self._claims = {cid: c for cid, c in self._claims.items() if c["userId"] != user_id}

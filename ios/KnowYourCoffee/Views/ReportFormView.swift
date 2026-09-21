@@ -983,13 +983,13 @@ struct ClaimShopSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(result == nil ? "Cancel" : "Done") { dismiss() }
+                    ToolbarTextButton(label: result == nil ? "Cancel" : "Done") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     if submitting {
                         ProgressView()
                     } else if result == nil {
-                        Button("Claim") { submit() }
+                        ToolbarTextButton(label: "Claim", weight: .semibold) { submit() }
                     }
                 }
             }

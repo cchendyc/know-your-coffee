@@ -147,6 +147,21 @@ extension View {
 }
 
 // Small capsule tag, tinted per role (machine, roaster, origin...).
+// Toolbar text button; the system default (17pt) towers over the app's 11–14pt scale.
+struct ToolbarTextButton: View {
+    let label: String
+    var weight: Font.Weight = .medium
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 13, weight: weight))
+                .foregroundStyle(Color.espresso700)
+        }
+    }
+}
+
 struct Pill: View {
     let text: String
     var fill: Color = .cream100

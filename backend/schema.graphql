@@ -183,8 +183,9 @@ type CoffeeShop implements Node {
   "Community photos, newest first. Photos carry full image data; request only as many as you render."
   photos(limit: Int): [ShopPhoto!]!
   photoCount: Int!
-  "Community reports, newest first."
+  "Community reports, newest first. Reports by ADMIN users are hidden: they fold into the shop record but are data entry, not community activity."
   reports(limit: Int): [Report!]!
+  "Counts the same reports the reports field returns, so it also excludes ADMIN reports."
   reportCount: Int!
   updatedAt: String!
 }

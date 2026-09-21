@@ -1,5 +1,5 @@
 import type { CoffeeShop, User } from '../api'
-import { AMENITIES, BEAN_SOURCE_LABELS, machineDisplay } from '../labels'
+import { AMENITIES } from '../labels'
 import { SaveBeenButtons } from './SaveBeen'
 
 export function ShopCard({
@@ -49,20 +49,6 @@ export function ShopCard({
         <p className="mt-0.5 text-xs text-espresso-500">
           {shop.address} · {shop.city}
         </p>
-      </div>
-
-      <div className="flex flex-wrap gap-1.5">
-        <span className="rounded-full bg-espresso-700 px-2.5 py-1 text-xs font-medium text-cream-50">
-          {machineDisplay(shop.machine, shop.machineModel)}
-        </span>
-        <span className="rounded-full bg-crema-400/25 px-2.5 py-1 text-xs font-medium text-espresso-700">
-          {/* In-house roasters would just repeat the shop name as "<name> beans". */}
-          {shop.beanSource === 'IN_HOUSE_ROAST'
-            ? BEAN_SOURCE_LABELS.IN_HOUSE_ROAST
-            : shop.roaster
-              ? `${shop.roaster} beans`
-              : BEAN_SOURCE_LABELS[shop.beanSource]}
-        </span>
       </div>
 
       {(shop.milkBrands.length > 0 || AMENITIES.some((a) => shop[a.key] !== null)) && (

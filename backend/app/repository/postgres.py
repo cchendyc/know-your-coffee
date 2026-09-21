@@ -259,17 +259,26 @@ class PostgresRepository:
     def list_cities(self) -> list[str]:
         return [r["city"] for r in self._query("SELECT DISTINCT city FROM shops ORDER BY city ASC")]
 
+    # Admin reports fold into the shop record like any other, but they are
+    # data entry, not community activity: both the list and the count skip
+    # them. Anonymous reports (user_id NULL) stay visible.
     def list_reports(self, shop_id: str, limit: int | None = None) -> list[Report]:
         rows = self._query(
             """SELECT r.*, u.name AS reporter_name, u.picture AS reporter_picture
                FROM reports r LEFT JOIN users u ON u.id = r.user_id
-               WHERE r.shop_id = %(shop_id)s ORDER BY r.created_at DESC LIMIT %(limit)s""",
+               WHERE r.shop_id = %(shop_id)s AND (u.role IS NULL OR u.role <> 'ADMIN')
+               ORDER BY r.created_at DESC LIMIT %(limit)s""",
             {"shop_id": shop_id, "limit": limit},
         )
         return [_to_report(r) for r in rows]
 
     def count_reports(self, shop_id: str) -> int:
-        return self._query("SELECT count(*) AS n FROM reports WHERE shop_id = %s", [shop_id])[0]["n"]
+        return self._query(
+            """SELECT count(*) AS n
+               FROM reports r LEFT JOIN users u ON u.id = r.user_id
+               WHERE r.shop_id = %s AND (u.role IS NULL OR u.role <> 'ADMIN')""",
+            [shop_id],
+        )[0]["n"]
 
     def add_report(self, report: dict) -> Report:
         # The scalar primary mirrors the first machines entry.

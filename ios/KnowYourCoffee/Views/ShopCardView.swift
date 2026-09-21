@@ -15,13 +15,6 @@ struct ShopCardView: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
 
-                if let tag = tagLine {
-                    Text(tag)
-                        .font(.kycMetaBold)
-                        .foregroundStyle(Color.crema500)
-                        .lineLimit(1)
-                }
-
                 HStack(spacing: 8) {
                     Text(shop.city)
                         .font(.kycMeta)
@@ -36,14 +29,6 @@ struct ShopCardView: View {
         .background(Color.surface)
         .clipShape(RoundedRectangle(cornerRadius: KYCRadius.control, style: .continuous))
         .shadow(color: .espresso900.opacity(0.05), radius: 6, y: 2)
-    }
-
-    // One line only: the most identifying gear/bean fact, not a pill wall.
-    private var tagLine: String? {
-        if let first = shop.knownMachines.first { return first.display }
-        if let roaster = shop.roaster, !roaster.isEmpty { return roaster }
-        if shop.beanSource != .unknown { return shop.beanSource.label }
-        return nil
     }
 
     // Staggered feed heights, stable across launches (Swift's String hash is

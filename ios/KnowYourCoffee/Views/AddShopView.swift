@@ -63,7 +63,7 @@ struct AddShopView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    ToolbarTextButton(label: "Cancel") { dismiss() }
                 }
             }
             .onAppear { focused = true }
