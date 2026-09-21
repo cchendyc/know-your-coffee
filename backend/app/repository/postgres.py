@@ -522,6 +522,16 @@ class PostgresRepository:
             self._execute("DELETE FROM login_codes WHERE identifier = %s", [identifier])
         return ok
 
+    def delete_user(self, user_id: str) -> bool:
+        with self._pool.connection() as conn:
+            conn.execute("UPDATE reports SET user_id = NULL WHERE user_id = %s", [user_id])
+            conn.execute("UPDATE shop_photos SET user_id = NULL WHERE user_id = %s", [user_id])
+            conn.execute("DELETE FROM shop_claims WHERE user_id = %s", [user_id])
+            conn.execute("UPDATE shops SET owner_user_id = NULL WHERE owner_user_id = %s", [user_id])
+            # user_shops cascades on delete.
+            row = conn.execute("DELETE FROM users WHERE id = %s RETURNING id", [user_id]).fetchone()
+        return bool(row)
+
     def list_owned_shops(self, user_id: str) -> list[CoffeeShop]:
         rows = self._query(
             """SELECT s.*, us.saved AS saved_by_me, us.been AS been_by_me

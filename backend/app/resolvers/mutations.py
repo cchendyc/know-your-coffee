@@ -278,3 +278,11 @@ def resolve_delete_shop(_, info, id):
     if not info.context["repo"].delete_shop(id):
         raise GraphQLError(f"Shop {id} not found")
     return True
+
+
+@mutation.field("deleteAccount")
+def resolve_delete_account(_, info):
+    user = _require_user(info)
+    if not info.context["repo"].delete_user(user["id"]):
+        raise GraphQLError("Account not found; it may already be deleted.")
+    return True

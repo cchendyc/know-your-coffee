@@ -16,6 +16,7 @@ struct AddShopView: View {
     @FocusState private var focused: Bool
 
     @State private var auth = AuthStore.shared
+    @State private var showSignIn = false
 
     var body: some View {
         NavigationStack {
@@ -28,7 +29,7 @@ struct AddShopView: View {
 
                     if let error {
                         Text(error)
-                            .font(.footnote)
+                            .font(.kycSecondary)
                             .foregroundStyle(.red)
                     }
 
@@ -41,15 +42,15 @@ struct AddShopView: View {
                             } label: {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(suggestion.name)
-                                        .font(.subheadline.weight(.medium))
-                                        .foregroundStyle(Color.espresso900)
+                                        .font(.kycBody)
+                                        .foregroundStyle(Color.ink)
                                     Text(suggestion.address)
-                                        .font(.caption)
-                                        .foregroundStyle(Color.espresso500)
+                                        .font(.kycSecondary)
+                                        .foregroundStyle(Color.inkMuted)
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(12)
-                                .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .background(.white, in: RoundedRectangle(cornerRadius: KYCRadius.control, style: .continuous))
                             }
                             .buttonStyle(.plain)
                         }
@@ -66,6 +67,9 @@ struct AddShopView: View {
                 }
             }
             .onAppear { focused = true }
+            .sheet(isPresented: $showSignIn) {
+                SignInSheet()
+            }
         }
     }
 
@@ -74,24 +78,25 @@ struct AddShopView: View {
             Image(systemName: "person.badge.key")
                 .foregroundStyle(Color.crema500)
             Text("Adding a shop needs a signed-in account.")
-                .font(.footnote)
+                .font(.kycSecondary)
                 .foregroundStyle(Color.espresso700)
             Spacer()
             Button("Sign in") {
-                Task { try? await auth.signIn() }
+                showSignIn = true
             }
-            .font(.footnote.weight(.semibold))
+            .font(.kycSecondaryBold)
         }
         .padding(12)
-        .background(Color.crema400.opacity(0.15), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(Color.crema400.opacity(0.15), in: RoundedRectangle(cornerRadius: KYCRadius.control, style: .continuous))
     }
 
     private var searchBox: some View {
         HStack(spacing: 7) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 14))
-                .foregroundStyle(Color.espresso500.opacity(0.55))
+                .foregroundStyle(Color.inkFaint)
             TextField(auth.isSignedIn ? "Shop name, e.g. Sightglass" : "Sign in to search", text: $query)
+                .font(.kycBody)
                 .focused($focused)
                 .autocorrectionDisabled()
                 .disabled(!auth.isSignedIn)
@@ -152,32 +157,32 @@ struct AddShopView: View {
                 }
                 .frame(height: 160)
                 .frame(maxWidth: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: KYCRadius.control, style: .continuous))
             }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(preview.name)
-                    .font(.system(.headline, design: .rounded, weight: .bold))
-                    .foregroundStyle(Color.espresso900)
+                    .font(.kycSection)
+                    .foregroundStyle(Color.ink)
                 Text("\(preview.address), \(preview.city)")
-                    .font(.footnote)
-                    .foregroundStyle(Color.espresso500)
+                    .font(.kycSecondary)
+                    .foregroundStyle(Color.inkMuted)
             }
 
             if let existing = preview.existing {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("Already listed", systemImage: "checkmark.circle.fill")
-                        .font(.footnote.weight(.semibold))
+                        .font(.kycSecondaryBold)
                         .foregroundStyle(Color.savedGreen)
                     Button("Open \(existing.name)") {
                         onAdded(existing)
                     }
-                    .font(.subheadline.weight(.semibold))
+                    .font(.kycBodyBold)
                 }
             } else if !preview.isCoffeeShop {
-                Label("Google doesn't think this is a coffee shop, so it can't be added.",
+                Label("That's not a coffee shop, duh. Drink more coffee.",
                       systemImage: "exclamationmark.triangle.fill")
-                    .font(.footnote)
+                    .font(.kycSecondary)
                     .foregroundStyle(Color.crema500)
             } else {
                 Button {
@@ -190,11 +195,11 @@ struct AddShopView: View {
                             Text("Add this shop")
                         }
                     }
-                    .font(.subheadline.weight(.semibold))
+                    .font(.kycBodyBold)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                     .background(Color.espresso700, in: Capsule())
-                    .foregroundStyle(Color.cream50)
+                    .foregroundStyle(Color.inkInverse)
                 }
                 .buttonStyle(.plain)
                 .disabled(adding)
@@ -203,12 +208,12 @@ struct AddShopView: View {
             Button("Back to results") {
                 self.preview = nil
             }
-            .font(.caption)
-            .foregroundStyle(Color.espresso500)
+            .font(.kycSecondary)
+            .foregroundStyle(Color.inkMuted)
             .frame(minHeight: 44)
         }
         .padding(14)
-        .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .cardStyle()
     }
 
     private func add(_ preview: PlacePreview) {

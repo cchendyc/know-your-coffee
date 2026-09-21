@@ -176,6 +176,12 @@ final class AuthStore {
         UserDefaults.standard.removeObject(forKey: Self.userKey)
     }
 
+    // App Store guideline 5.1.1(v): in-app account deletion.
+    func deleteAccount() async throws {
+        try await CoffeeAPI.deleteAccount()
+        signOut()
+    }
+
     // The server rejected our session (restart without SESSION_SECRET, expiry).
     func sessionExpired() {
         signOut()

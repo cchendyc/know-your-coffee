@@ -12,8 +12,10 @@ struct KnowYourCoffeeApp: App {
 
     var body: some Scene {
         WindowGroup {
-            HomeView()
-                .tint(.espresso700)
+            LaunchAnimation {
+                HomeView()
+            }
+            .tint(.espresso700)
         }
     }
 }

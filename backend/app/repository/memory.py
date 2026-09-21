@@ -282,6 +282,19 @@ class MemoryRepository:
     def get_user(self, user_id: str) -> User | None:
         return self._users.get(user_id)
 
+    def delete_user(self, user_id: str) -> bool:
+        # Reports and photos only hold a reporter-name snapshot here, so there
+        # is nothing to anonymize (unlike postgres, which nulls user_id).
+        if user_id not in self._users:
+            return False
+        del self._users[user_id]
+        self._statuses = {k: v for k, v in self._statuses.items() if k[0] != user_id}
+        self._claims = {cid: c for cid, c in self._claims.items() if c["userId"] != user_id}
+        for shop in self._shops.values():
+            if shop.get("ownerId") == user_id:
+                shop["ownerId"] = None
+        return True
+
     def _new_user(self, **fields) -> User:
         record: User = {
             "id": str(uuid4()),

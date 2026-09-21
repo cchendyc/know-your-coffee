@@ -14,7 +14,9 @@ struct ShopDetailView: View {
     @State private var loadError: String?
     @State private var showReportForm = false
     @State private var showClaim = false
-    @State private var needSignIn = false
+    @State private var showSignIn = false
+    // The gated action the user tapped; runs after a successful sign-in.
+    @State private var pendingAction: (() -> Void)?
     @State private var actionError: String?
     @State private var confirmDelete = false
     @State private var deleting = false
@@ -30,8 +32,8 @@ struct ShopDetailView: View {
                 loadError: loadError,
                 isLoadingFull: full == nil && loadError == nil,
                 actions: ShopPageActions(
-                    onToggleSaved: { toggle(saved: !shop.savedByMe) },
-                    onToggleBeen: { toggle(been: !shop.beenByMe) },
+                    onToggleSaved: { gated { toggle(saved: !shop.savedByMe) } },
+                    onToggleBeen: { gated { toggle(been: !shop.beenByMe) } },
                     onUpdate: { gated { showReportForm = true } }
                 )
             )
@@ -45,7 +47,11 @@ struct ShopDetailView: View {
             }
             .overlay(alignment: .topTrailing) {
                 HStack(spacing: 2) {
-                    ShareLink(item: shareText) {
+                    ShareLink(
+                        item: shareURL,
+                        subject: Text(shop.name),
+                        message: Text("\(shop.name) — \(shop.address), \(shop.city)")
+                    ) {
                         FloatingCircleIcon(symbol: "square.and.arrow.up")
                     }
                     Menu {
@@ -82,11 +88,12 @@ struct ShopDetailView: View {
             ClaimShopSheet(shop: shop)
                 .presentationDetents([.medium])
         }
-        .alert("Sign in required", isPresented: $needSignIn) {
-            Button("Sign in") { Task { try? await AuthStore.shared.signIn() } }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Saving shops, reporting, and claiming need a signed-in account.")
+        .sheet(isPresented: $showSignIn, onDismiss: {
+            let action = pendingAction
+            pendingAction = nil
+            if AuthStore.shared.isSignedIn { action?() }
+        }) {
+            SignInSheet()
         }
         .alert("Something went wrong", isPresented: .init(
             get: { actionError != nil },
@@ -114,21 +121,22 @@ struct ShopDetailView: View {
         }
     }
 
-    private func gated(_ action: () -> Void) {
-        if AuthStore.shared.isSignedIn { action() } else { needSignIn = true }
+    private func gated(_ action: @escaping () -> Void) {
+        if AuthStore.shared.isSignedIn {
+            action()
+        } else {
+            pendingAction = action
+            showSignIn = true
+        }
     }
 
-    private var shareText: String {
-        var lines = [shop.name, "\(shop.address), \(shop.city)"]
-        if let website = shop.website { lines.append(website) }
-        return lines.joined(separator: "\n")
+    // Deep link into our web app, not the shop's own site.
+    private var shareURL: URL {
+        let id = shop.id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? shop.id
+        return URL(string: "https://knowyourthings.top/?shop=\(id)")!
     }
 
     private func toggle(saved: Bool? = nil, been: Bool? = nil) {
-        guard AuthStore.shared.isSignedIn else {
-            needSignIn = true
-            return
-        }
         Task {
             do {
                 // The mutation returns core fields only; keep the loaded
@@ -182,6 +190,13 @@ struct FloatingCircleIcon: View {
     }
 }
 
+private struct ShopScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 // The shared page content; also used for pushed chain locations.
 struct ShopPageView: View {
     let shop: CoffeeShop
@@ -189,12 +204,31 @@ struct ShopPageView: View {
     var isLoadingFull = false
     var actions: ShopPageActions?
 
+    @State private var scrolledPastPhoto = false
+
     var body: some View {
+        GeometryReader { proxy in
+            scrollContent
+                .overlay(alignment: .top) {
+                    // Content scrolls under the clock/Dynamic Island; blur it once
+                    // the carousel is gone so the status bar stays legible.
+                    if scrolledPastPhoto {
+                        Rectangle()
+                            .fill(.regularMaterial)
+                            .frame(height: proxy.safeAreaInsets.top)
+                            .ignoresSafeArea(edges: .top)
+                            .transition(.opacity)
+                    }
+                }
+        }
+    }
+
+    private var scrollContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 PhotoCarousel(shop: shop)
 
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 14) {
                     header
                     detailsCard
                     if !shop.coffees.isEmpty { coffeesOnBar }
@@ -211,12 +245,28 @@ struct ShopPageView: View {
                     }
                     if let loadError {
                         Text(loadError)
-                            .font(.caption)
+                            .font(.kycSecondary)
                             .foregroundStyle(.red)
                     }
                 }
                 .padding(16)
                 .padding(.bottom, 8)
+            }
+            .background(
+                GeometryReader { geo in
+                    Color.clear.preference(
+                        key: ShopScrollOffsetKey.self,
+                        value: geo.frame(in: .named("shopScroll")).minY
+                    )
+                }
+            )
+        }
+        .coordinateSpace(name: "shopScroll")
+        .onPreferenceChange(ShopScrollOffsetKey.self) { minY in
+            // 220 = carousel height; ~60 = status bar. Flip once the photo has left.
+            let past = minY < -160
+            if past != scrolledPastPhoto {
+                withAnimation(.easeInOut(duration: 0.15)) { scrolledPastPhoto = past }
             }
         }
         .background(Color.cream50)
@@ -229,18 +279,18 @@ struct ShopPageView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(shop.name)
-                .font(.system(.title2, design: .rounded, weight: .bold))
-                .foregroundStyle(Color.espresso900)
+                .font(.kycPageTitle)
+                .foregroundStyle(Color.ink)
 
             HStack(spacing: 10) {
                 HStack(spacing: 4) {
                     Image(systemName: "mappin.and.ellipse")
-                        .font(.caption)
+                        .font(.system(size: 11))
                     Text("\(shop.address), \(shop.city)")
-                        .font(.footnote)
+                        .font(.kycSecondary)
                         .lineLimit(1)
                 }
-                .foregroundStyle(Color.espresso500)
+                .foregroundStyle(Color.inkMuted)
 
                 Spacer(minLength: 0)
 
@@ -250,11 +300,11 @@ struct ShopPageView: View {
                     item.openInMaps()
                 } label: {
                     Label("Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 10)
+                        .font(.kycSecondaryBold)
+                        .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(Color.espresso700, in: Capsule())
-                        .foregroundStyle(Color.cream50)
+                        .foregroundStyle(Color.inkInverse)
                         .frame(minHeight: 44)
                         .contentShape(Rectangle())
                 }
@@ -275,8 +325,9 @@ struct ShopPageView: View {
 
             if let vibe = shop.vibe, !vibe.isEmpty {
                 Text(vibe)
-                    .font(.subheadline)
-                    .foregroundStyle(Color.espresso700)
+                    .font(.kycBody)
+                    .foregroundStyle(Color.inkMuted)
+                    .lineSpacing(3) // ~1.4x line height for comfortable reading
             }
 
             amenityChips
@@ -294,19 +345,19 @@ struct ShopPageView: View {
         if !known.isEmpty {
             FlowLayout(spacing: 6) {
                 ForEach(known, id: \.0) { label, symbol, value in
-                    HStack(spacing: 5) {
+                    HStack(spacing: 4) {
                         Image(systemName: value == true ? symbol : "xmark")
-                            .font(.caption2)
+                            .font(.system(size: 10))
                         Text(value == true ? label : "No \(label.lowercased())")
-                            .font(.caption.weight(.medium))
+                            .font(.kycMeta)
                     }
                     .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 5)
                     .background(
                         value == true ? Color.savedGreen.opacity(0.1) : Color.espresso900.opacity(0.04),
                         in: Capsule()
                     )
-                    .foregroundStyle(value == true ? Color.savedGreen : Color.espresso500)
+                    .foregroundStyle(value == true ? Color.savedGreen : Color.inkMuted)
                 }
             }
         }
@@ -316,8 +367,8 @@ struct ShopPageView: View {
 
     private func sectionTitle(_ text: String) -> some View {
         Text(text)
-            .font(.system(.subheadline, design: .rounded, weight: .bold))
-            .foregroundStyle(Color.espresso900)
+            .font(.kycSection)
+            .foregroundStyle(Color.ink)
     }
 
     private var detailsCard: some View {
@@ -335,31 +386,28 @@ struct ShopPageView: View {
 
         return VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: 10) {
                     Image(systemName: row.symbol)
-                        .font(.system(size: 15))
+                        .font(.system(size: 13))
                         .foregroundStyle(Color.crema500)
-                        .frame(width: 22)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(row.label)
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(Color.espresso500.opacity(0.8))
-                            .textCase(.uppercase)
+                        .frame(width: 20)
+                    VStack(alignment: .leading, spacing: 3) {
+                        EyebrowLabel(row.label)
                         Text(row.value)
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(Color.espresso900)
+                            .font(.kycBody)
+                            .foregroundStyle(Color.ink)
                     }
                     Spacer(minLength: 0)
                 }
-                .padding(.vertical, 10)
+                .padding(.vertical, 9)
                 if index < rows.count - 1 {
                     Divider().overlay(Color.espresso900.opacity(0.05))
                 }
             }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 4)
-        .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(.vertical, 5)
+        .cardStyle()
     }
 
     private var coffeesOnBar: some View {
@@ -375,26 +423,26 @@ struct ShopPageView: View {
         VStack(alignment: .leading, spacing: 6) {
             if let title = coffee.title {
                 Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.espresso900)
+                    .font(.kycBodyBold)
+                    .foregroundStyle(Color.ink)
             }
             if !coffee.pills.isEmpty {
                 FlowLayout(spacing: 5) {
                     ForEach(coffee.pills, id: \.self) { pill in
-                        Pill(text: pill, fill: .white, foreground: .espresso500)
+                        Pill(text: pill, fill: .cream100, foreground: .espresso700)
                     }
                 }
             }
             if !coffee.tastingNotes.isEmpty {
                 Text(coffee.tastingNotes.joined(separator: " · "))
-                    .font(.caption)
+                    .font(.kycSecondary)
                     .italic()
                     .foregroundStyle(Color.crema500)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(Color.cream100.opacity(0.7), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .cardStyle()
     }
 
     private var menuCard: some View {
@@ -404,25 +452,25 @@ struct ShopPageView: View {
                 ForEach(Array(shop.drinks.enumerated()), id: \.offset) { index, drink in
                     HStack {
                         Text(drink.name)
-                            .font(.subheadline)
-                            .foregroundStyle(Color.espresso900)
+                            .font(.kycBody)
+                            .foregroundStyle(Color.ink)
                         Spacer()
                         if let price = drink.price {
                             Text(price, format: .currency(code: "USD").precision(.fractionLength(2)))
-                                .font(.subheadline.weight(.medium))
+                                .font(.kycBody)
                                 .monospacedDigit()
-                                .foregroundStyle(Color.espresso500)
+                                .foregroundStyle(Color.inkMuted)
                         }
                     }
-                    .padding(.vertical, 9)
+                    .padding(.vertical, 8)
                     if index < shop.drinks.count - 1 {
                         Divider().overlay(Color.espresso900.opacity(0.05))
                     }
                 }
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 4)
-            .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .padding(.vertical, 5)
+            .cardStyle()
         }
     }
 
@@ -436,23 +484,26 @@ struct ShopPageView: View {
                     avatar(report.reporter)
                     VStack(alignment: .leading, spacing: 5) {
                         HStack(spacing: 6) {
+                            // Instagram's comment pattern: name in ink
+                            // semibold, timestamp one muted step down.
                             Text(report.reporter?.name ?? "Anonymous")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(Color.espresso500)
+                                .font(.kycSecondaryBold)
+                                .foregroundStyle(Color.ink)
                             if report.source == "PHOTO" {
                                 Image(systemName: "camera.fill")
-                                    .font(.caption2)
-                                    .foregroundStyle(Color.espresso500.opacity(0.6))
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(Color.inkFaint)
                             }
                             Text(RelativeDate.format(report.createdAt))
-                                .font(.caption2)
-                                .foregroundStyle(Color.espresso500.opacity(0.6))
+                                .font(.kycMeta)
+                                .foregroundStyle(Color.inkMuted)
                         }
 
                         if let note = report.note, !note.isEmpty {
                             Text(note)
-                                .font(.subheadline)
-                                .foregroundStyle(Color.espresso900)
+                                .font(.kycBody)
+                                .foregroundStyle(Color.ink)
+                                .lineSpacing(3)
                         }
 
                         let pills = reportPills(report)
@@ -486,7 +537,7 @@ struct ShopPageView: View {
                 avatarFallback(reporter)
             }
         }
-        .frame(width: 32, height: 32)
+        .frame(width: 28, height: 28)
         .clipShape(Circle())
     }
 
@@ -494,9 +545,9 @@ struct ShopPageView: View {
         Circle()
             .fill(Color.crema400.opacity(0.4))
             .overlay(
-                Text(String(reporter?.name.prefix(1) ?? "?"))
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.espresso700)
+                    Text(String(reporter?.name.prefix(1) ?? "?"))
+                        .font(.kycMetaBold)
+                        .foregroundStyle(Color.espresso700)
             )
     }
 
@@ -524,16 +575,16 @@ struct ShopPageView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(location.name)
-                                .font(.subheadline.weight(.medium))
-                                .foregroundStyle(Color.espresso900)
+                                .font(.kycBody)
+                                .foregroundStyle(Color.ink)
                             Text("\(location.address), \(location.city)")
-                                .font(.caption)
-                                .foregroundStyle(Color.espresso500)
+                                .font(.kycSecondary)
+                                .foregroundStyle(Color.inkMuted)
                         }
                         Spacer()
                         Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(Color.espresso500.opacity(0.4))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.inkFaint)
                     }
                     .padding(.vertical, 8)
                 }
@@ -542,7 +593,7 @@ struct ShopPageView: View {
     }
 
     // MARK: Bottom bar — xiaohongshu comment bar: an input-look button that
-    // opens the update form, then star (save) and seal (been).
+    // opens the update form, then bookmark (save) and seal (been).
 
     @ViewBuilder
     private var actionBar: some View {
@@ -550,15 +601,15 @@ struct ShopPageView: View {
             // The 44pt icon frames carry ~11pt of their own padding.
             HStack(spacing: 2) {
                 Button(action: actions.onUpdate) {
-                    HStack(spacing: 7) {
+                    HStack(spacing: 6) {
                         Image(systemName: "square.and.pencil")
-                            .font(.system(size: 14))
+                            .font(.system(size: 13))
                         Text("Add an update…")
-                            .font(.subheadline)
+                            .font(.kycBody)
                     }
-                    .foregroundStyle(Color.espresso500.opacity(0.8))
-                    .padding(.horizontal, 14)
-                    .frame(height: 40)
+                    .foregroundStyle(Color.inkMuted)
+                    .padding(.horizontal, 13)
+                    .frame(height: 36)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.espresso900.opacity(0.05), in: Capsule())
                 }
@@ -566,13 +617,13 @@ struct ShopPageView: View {
                 .padding(.trailing, 6)
 
                 barIcon(
-                    symbol: shop.savedByMe ? "star.fill" : "star",
-                    tint: shop.savedByMe ? .crema500 : .espresso500,
+                    symbol: shop.savedByMe ? "bookmark.fill" : "bookmark",
+                    tint: shop.savedByMe ? .crema500 : .inkMuted,
                     action: actions.onToggleSaved
                 )
                 barIcon(
                     symbol: shop.beenByMe ? "checkmark.circle.fill" : "checkmark.circle",
-                    tint: shop.beenByMe ? .savedGreen : .espresso500,
+                    tint: shop.beenByMe ? .savedGreen : .inkMuted,
                     action: actions.onToggleBeen
                 )
             }
@@ -586,7 +637,7 @@ struct ShopPageView: View {
     private func barIcon(symbol: String, tint: Color, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 22, weight: .medium, design: .rounded))
+                .font(.system(size: 19, weight: .medium, design: .rounded))
                 .contentTransition(.symbolEffect(.replace))
                 .foregroundStyle(tint)
                 .frame(width: 44, height: 44)
@@ -701,7 +752,7 @@ private struct ChainLocationPage: View {
                 ShopPageView(shop: shop)
             } else if let error {
                 Text(error)
-                    .font(.footnote)
+                    .font(.kycSecondary)
                     .foregroundStyle(.red)
                     .padding()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

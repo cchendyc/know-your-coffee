@@ -216,6 +216,39 @@ enum CoffeeAPI {
         )
     }
 
+    // MARK: Photo analysis & upload
+
+    static func identifyMachine(imageBase64: String) async throws -> MachineGuess {
+        struct Payload: Decodable { let identifyMachine: MachineGuess }
+        let query = """
+            mutation Identify($img: String!) {
+              identifyMachine(imageBase64: $img) { machine machineModel confidence notes }
+            }
+            """
+        return try await execute(query, variables: ["img": imageBase64], as: Payload.self).identifyMachine
+    }
+
+    static func parseMenu(imageBase64: String) async throws -> [DrinkItem] {
+        struct Payload: Decodable { let parseMenu: [DrinkItem] }
+        let query = "mutation Parse($img: String!) { parseMenu(imageBase64: $img) { name price } }"
+        return try await execute(query, variables: ["img": imageBase64], as: Payload.self).parseMenu
+    }
+
+    static func addShopPhotos(shopID: String, photos: [[String: String]]) async throws {
+        struct Payload: Decodable {
+            struct P: Decodable { let id: String }
+            let addShopPhotos: [P]
+        }
+        let query = """
+            mutation AddPhotos($shopId: ID!, $photos: [PhotoInput!]!) {
+              addShopPhotos(shopId: $shopId, photos: $photos) { id }
+            }
+            """
+        _ = try await execute(query, variables: [
+            "shopId": shopID, "photos": photos,
+        ], as: Payload.self)
+    }
+
     static func claimShop(shopID: String, note: String?) async throws -> ShopClaim {
         struct Payload: Decodable { let claimShop: ShopClaim }
         let query = """
@@ -237,6 +270,11 @@ enum CoffeeAPI {
             variables: ["id": id],
             as: Payload.self
         )
+    }
+
+    static func deleteAccount() async throws {
+        struct Payload: Decodable { let deleteAccount: Bool }
+        _ = try await execute("mutation { deleteAccount }", as: Payload.self)
     }
 
     static func fetchMyClaims() async throws -> [ShopClaim] {

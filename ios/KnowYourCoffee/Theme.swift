@@ -22,18 +22,92 @@ extension Color {
     }
 }
 
-// Reusable card container: white, rounded-2xl, soft shadow — the web's ShopCard look.
+// MARK: - Text roles
+//
+// Two text colors, like Instagram (#262626 / #8E8E8E) and X (#0F1419 /
+// #536471): everything readable is ink, everything supporting is inkMuted.
+// inkFaint is only for placeholders and disabled states — never body copy.
+// Crema, green, and red are reserved for actions and status, not prose.
+extension Color {
+    static let ink = espresso900
+    static let inkMuted = espresso500
+    static let inkFaint = espresso500.opacity(0.55)
+    /// Text on espresso fills (buttons, selected chips).
+    static let inkInverse = cream50
+}
+
+// MARK: - Type ramp
+//
+// Six roles, SF Pro only. Hierarchy comes from weight and the two ink
+// colors, not from more sizes. Rounded is the brand voice: page titles only.
+extension Font {
+    /// Screen title; at most one per screen.
+    static let kycPageTitle = Font.system(size: 22, weight: .bold, design: .rounded)
+    /// Card and section headers.
+    static let kycSection = Font.system(size: 16, weight: .semibold)
+    /// Primary content.
+    static let kycBody = Font.system(size: 15)
+    static let kycBodyBold = Font.system(size: 15, weight: .semibold)
+    /// Supporting copy: subtitles, form fields, hints.
+    static let kycSecondary = Font.system(size: 13)
+    static let kycSecondaryBold = Font.system(size: 13, weight: .semibold)
+    /// Timestamps, counts, chips, badges.
+    static let kycMeta = Font.system(size: 12, weight: .medium)
+    static let kycMetaBold = Font.system(size: 12, weight: .semibold)
+    /// Uppercase eyebrow labels; always through EyebrowLabel.
+    static let kycMicro = Font.system(size: 11, weight: .semibold)
+}
+
+// Uppercase micro-label above a group of fields or chips.
+struct EyebrowLabel: View {
+    let text: String
+
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Text(text.uppercased())
+            .font(.kycMicro)
+            .tracking(0.6)
+            .foregroundStyle(Color.inkMuted)
+    }
+}
+
+// MARK: - Shape and spacing constants
+//
+// Three radii: cards 16, controls and inset layers 12, thumbnails 10.
+enum KYCRadius {
+    static let card: CGFloat = 16
+    static let control: CGFloat = 12
+    static let thumb: CGFloat = 10
+}
+
+// Reusable card container: white, rounded, soft shadow — the web's ShopCard look.
 struct CardBackground: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: KYCRadius.card, style: .continuous))
             .shadow(color: .espresso900.opacity(0.06), radius: 8, y: 2)
+    }
+}
+
+// Second elevation layer: cream inset inside a white card, for grouped
+// sub-content (a coffee entry, a report row, a claim).
+struct InsetCardBackground: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(Color.cream50)
+            .clipShape(RoundedRectangle(cornerRadius: KYCRadius.control, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: KYCRadius.control, style: .continuous)
+                    .stroke(Color.cream200, lineWidth: 1)
+            )
     }
 }
 
 extension View {
     func cardStyle() -> some View { modifier(CardBackground()) }
+    func insetCardStyle() -> some View { modifier(InsetCardBackground()) }
 }
 
 // Small capsule tag, tinted per role (machine, roaster, origin...).
@@ -44,10 +118,10 @@ struct Pill: View {
 
     var body: some View {
         Text(text)
-            .font(.caption.weight(.medium))
+            .font(.kycMeta)
             .lineLimit(1)
             .padding(.horizontal, 10)
-            .padding(.vertical, 5)
+            .padding(.vertical, 4)
             .background(fill, in: Capsule())
             .foregroundStyle(foreground)
     }

@@ -132,6 +132,13 @@ struct DrinkItem: Codable, Hashable {
     let price: Double?
 }
 
+struct MachineGuess: Codable {
+    let machine: MachineBrand
+    let machineModel: String?
+    let confidence: Double
+    let notes: String?
+}
+
 struct Reporter: Codable, Hashable {
     let name: String
     let picture: String?

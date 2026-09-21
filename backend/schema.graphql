@@ -397,4 +397,10 @@ type Mutation {
   resolveClaim(claimId: ID!, approve: Boolean!): ShopClaim!
   "Remove a shop that is not a coffee shop. Cascades reports, photos, and claims. Requires ADMIN."
   deleteShop(id: ID!): Boolean!
+  """
+  Delete the signed-in user's account (App Store guideline 5.1.1(v)).
+  Contributed reports and photos stay but are anonymized; saves, claims,
+  and shop ownership are removed. The session token stops working.
+  """
+  deleteAccount: Boolean!
 }

@@ -6,6 +6,7 @@ struct HomeView: View {
     @State private var selectedShop: CoffeeShop?
     @State private var showProfile = false
     @State private var showAddShop = false
+    @State private var showSignIn = false
     @State private var searchExpanded = false
     @FocusState private var searchFocused: Bool
     // Detail zooms out of the tapped card (matched transition source).
@@ -51,6 +52,12 @@ struct HomeView: View {
                 store.reload()
                 selectedShop = added
             }
+        }
+        // Adding a shop needs an account; continue into the form after sign-in.
+        .sheet(isPresented: $showSignIn, onDismiss: {
+            if auth.isSignedIn { showAddShop = true }
+        }) {
+            SignInSheet()
         }
     }
 
@@ -131,8 +138,8 @@ struct HomeView: View {
                 searchExpanded = false
             } label: {
                 Text("Cancel")
-                    .font(.subheadline)
-                    .foregroundStyle(Color.espresso500)
+                    .font(.kycBody)
+                    .foregroundStyle(Color.espresso700)
                     .frame(minHeight: 44)
                     .contentShape(Rectangle())
             }
@@ -150,9 +157,8 @@ struct HomeView: View {
                 } label: {
                     VStack(spacing: 4) {
                         Text(filter.label)
-                            // .callout = 16pt but scales with Dynamic Type.
-                            .font(.callout.weight(store.list == filter ? .bold : .regular))
-                            .foregroundStyle(store.list == filter ? Color.espresso900 : Color.espresso500.opacity(0.7))
+                            .font(.system(size: 15, weight: store.list == filter ? .semibold : .regular))
+                            .foregroundStyle(store.list == filter ? Color.ink : Color.inkMuted)
                         Capsule()
                             .fill(store.list == filter ? Color.crema500 : .clear)
                             .frame(width: 18, height: 3)
@@ -169,10 +175,10 @@ struct HomeView: View {
         HStack(spacing: 7) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Color.espresso500.opacity(0.55))
+                .foregroundStyle(Color.inkFaint)
 
             TextField("La Marzocco, Ethiopia, Oakland…", text: $store.draft)
-                .font(.subheadline)
+                .font(.kycBody)
                 .focused($searchFocused)
                 .submitLabel(.search)
                 .autocorrectionDisabled()
@@ -186,7 +192,7 @@ struct HomeView: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 14))
-                        .foregroundStyle(Color.espresso500.opacity(0.35))
+                        .foregroundStyle(Color.inkFaint)
                 }
             }
         }
@@ -215,14 +221,14 @@ struct HomeView: View {
     private func chip(label: String, isOn: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label)
-                .font(.caption.weight(isOn ? .semibold : .medium))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
+                .font(isOn ? .kycMetaBold : .kycMeta)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 6)
                 .background(
                     isOn ? Color.espresso900 : Color.espresso900.opacity(0.05),
                     in: Capsule()
                 )
-                .foregroundStyle(isOn ? Color.cream50 : Color.espresso700)
+                .foregroundStyle(isOn ? Color.inkInverse : Color.espresso700)
         }
         .buttonStyle(.plain)
     }
@@ -233,7 +239,7 @@ struct HomeView: View {
         // Wide photos otherwise push their column past half the screen;
         // masonry only works with hard column widths.
         GeometryReader { geo in
-            let columnWidth = (geo.size.width - 12 * 2 - 10) / 2
+            let columnWidth = (geo.size.width - 8 * 2 - 6) / 2
             ScrollView {
                 if store.isLoading && store.shops.isEmpty {
                     masonry(
@@ -264,11 +270,11 @@ struct HomeView: View {
         @ViewBuilder left: () -> some View,
         @ViewBuilder right: () -> some View
     ) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            LazyVStack(spacing: 10) { left() }
-            LazyVStack(spacing: 10) { right() }
+        HStack(alignment: .top, spacing: 6) {
+            LazyVStack(spacing: 6) { left() }
+            LazyVStack(spacing: 6) { right() }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 8)
         .padding(.bottom, 90) // clears the floating toggle
     }
 
@@ -301,10 +307,10 @@ struct HomeView: View {
         VStack(spacing: 8) {
             Image(systemName: emptyStateIcon)
                 .font(.system(size: 32))
-                .foregroundStyle(Color.espresso500.opacity(0.5))
+                .foregroundStyle(Color.inkFaint)
             Text(emptyStateMessage)
-                .font(.footnote)
-                .foregroundStyle(Color.espresso500)
+                .font(.kycSecondary)
+                .foregroundStyle(Color.inkMuted)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
         }
@@ -319,7 +325,7 @@ struct HomeView: View {
     private var emptyStateIcon: String {
         switch store.list {
         case .all: "cup.and.saucer"
-        case .saved: "star"
+        case .saved: "bookmark"
         case .been: "checkmark.circle"
         }
     }
@@ -327,7 +333,7 @@ struct HomeView: View {
     private var emptyStateMessage: String {
         switch store.list {
         case .all: "No shops match. Try a different search or clear the filters."
-        case .saved: "Nothing saved yet. Tap the star on a shop to keep it here."
+        case .saved: "Nothing saved yet. Tap the bookmark on a shop to keep it here."
         case .been: "No visits marked yet. Tap the checkmark on a shop you've been to."
         }
     }
@@ -335,17 +341,17 @@ struct HomeView: View {
     private func errorBanner(_ message: String) -> some View {
         VStack(spacing: 12) {
             Text("Could not reach the API: \(message)")
-                .font(.footnote)
+                .font(.kycSecondary)
                 .foregroundStyle(.red)
                 .multilineTextAlignment(.center)
             Text("Check your connection, then try again.")
-                .font(.caption)
-                .foregroundStyle(Color.espresso500)
+                .font(.kycSecondary)
+                .foregroundStyle(Color.inkMuted)
             Button("Retry") { store.reload() }
                 .buttonStyle(.borderedProminent)
         }
         .padding(20)
-        .background(.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(.white, in: RoundedRectangle(cornerRadius: KYCRadius.card, style: .continuous))
         .padding(16)
         .frame(maxHeight: .infinity, alignment: .top)
     }
@@ -356,7 +362,7 @@ struct HomeView: View {
         HStack {
             Spacer()
             Button {
-                showAddShop = true
+                if auth.isSignedIn { showAddShop = true } else { showSignIn = true }
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 22, weight: .semibold))
@@ -382,19 +388,21 @@ struct HomeView: View {
                         mode == .list ? "List" : "Map",
                         systemImage: mode == .list ? "square.grid.2x2" : "map"
                     )
-                    .font(.footnote.weight(.semibold))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+                    .font(.kycBodyBold)
+                    // 44pt minimum tap target; the old 11pt pill misclicked.
+                    .padding(.horizontal, 20)
+                    .frame(height: 40)
                     .background(
                         store.viewMode == mode ? Color.espresso700 : .clear,
                         in: Capsule()
                     )
-                    .foregroundStyle(store.viewMode == mode ? Color.cream50 : Color.espresso500)
+                    .foregroundStyle(store.viewMode == mode ? Color.inkInverse : Color.inkMuted)
+                    .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(3)
+        .padding(4)
         .background(.white, in: Capsule())
         .overlay(Capsule().strokeBorder(Color.espresso900.opacity(0.08), lineWidth: 0.5))
         // Small y-offsets: the pill sits near the screen bottom, so a big

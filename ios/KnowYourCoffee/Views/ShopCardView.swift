@@ -8,24 +8,24 @@ struct ShopCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             photo
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(shop.name)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.espresso900)
+                    .font(.kycSecondaryBold)
+                    .foregroundStyle(Color.ink)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
 
                 if let tag = tagLine {
                     Text(tag)
-                        .font(.caption2.weight(.medium))
+                        .font(.kycMetaBold)
                         .foregroundStyle(Color.crema500)
                         .lineLimit(1)
                 }
 
                 HStack(spacing: 8) {
                     Text(shop.city)
-                        .font(.caption2)
-                        .foregroundStyle(Color.espresso500.opacity(0.8))
+                        .font(.kycMeta)
+                        .foregroundStyle(Color.inkMuted)
                     Spacer(minLength: 0)
                     amenityIcons
                 }
@@ -34,7 +34,7 @@ struct ShopCardView: View {
         }
         .frame(width: width)
         .background(.white)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: KYCRadius.control, style: .continuous))
         .shadow(color: .espresso900.opacity(0.05), radius: 6, y: 2)
     }
 
@@ -78,11 +78,11 @@ struct ShopCardView: View {
         .overlay(alignment: .topTrailing) { statusBadge }
     }
 
-    // Same iconography as the detail action bar: star = saved, check = been.
+    // Same iconography as the detail action bar: bookmark = saved, check = been.
     @ViewBuilder
     private var statusBadge: some View {
         if shop.savedByMe || shop.beenByMe {
-            Image(systemName: shop.savedByMe ? "star.fill" : "checkmark")
+            Image(systemName: shop.savedByMe ? "bookmark.fill" : "checkmark")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(shop.savedByMe ? Color.crema500 : Color.savedGreen)
                 .padding(6)
@@ -103,8 +103,8 @@ struct ShopCardView: View {
                 Image(systemName: "sun.max.fill")
             }
         }
-        .font(.system(size: 9))
-        .foregroundStyle(Color.crema500.opacity(0.9))
+        .font(.system(size: 10))
+        .foregroundStyle(Color.crema500)
     }
 }
 
@@ -125,7 +125,7 @@ struct ShopCardPlaceholder: View {
             .padding(10)
         }
         .background(.white)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: KYCRadius.control, style: .continuous))
         .redacted(reason: .placeholder)
     }
 }

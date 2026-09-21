@@ -10,11 +10,11 @@ struct ProfileView: View {
     @State private var auth = AuthStore.shared
     @State private var me: User?
     @State private var claims: [ShopClaim] = []
-    @State private var signingIn = false
-    @State private var codeSignIn: CodeSignInMethod?
     @State private var error: String?
     @State private var versionTaps = 0
     @State private var showDeveloper = false
+    @State private var confirmDeleteAccount = false
+    @State private var deletingAccount = false
 
     var body: some View {
         NavigationStack {
@@ -29,18 +29,43 @@ struct ProfileView: View {
                             me = nil
                             claims = []
                         }
-                        .font(.subheadline.weight(.medium))
+                        .font(.kycBodyBold)
                         .frame(minHeight: 44)
+
+                        // App Store guideline 5.1.1(v): account deletion in-app.
+                        Button("Delete account…") {
+                            confirmDeleteAccount = true
+                        }
+                        .font(.kycSecondary)
+                        .foregroundStyle(Color.inkMuted)
+                        .frame(minHeight: 44)
+                        .disabled(deletingAccount)
+                        .confirmationDialog(
+                            "Delete your account?",
+                            isPresented: $confirmDeleteAccount,
+                            titleVisibility: .visible
+                        ) {
+                            Button("Delete account", role: .destructive) {
+                                Task { await deleteAccount() }
+                            }
+                            Button("Cancel", role: .cancel) {}
+                        } message: {
+                            Text("Your account, saves, and claims are removed permanently. Updates and photos you contributed stay, without your name.")
+                        }
                     } else {
                         signedOutHeader
-                        appleSignInButton
-                        signInButton
-                        codeSignInRow
+                        SignInOptions {
+                            Task {
+                                me = try? await CoffeeAPI.fetchMe()
+                                if let me { auth.apply(me) }
+                                claims = (try? await CoffeeAPI.fetchMyClaims()) ?? []
+                            }
+                        }
                     }
 
                     if let error {
                         Text(error)
-                            .font(.caption)
+                            .font(.kycSecondary)
                             .foregroundStyle(.red)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 24)
@@ -56,8 +81,8 @@ struct ProfileView: View {
                     // Debug builds: tapping the version 5 times reveals the
                     // developer section. Invisible otherwise; absent in release.
                     Text("Know Your Coffee \(appVersion)")
-                        .font(.caption2)
-                        .foregroundStyle(Color.espresso500.opacity(0.5))
+                        .font(.kycMeta)
+                        .foregroundStyle(Color.inkFaint)
                         .padding(.top, 8)
                         .onTapGesture {
                             versionTaps += 1
@@ -87,12 +112,12 @@ struct ProfileView: View {
         VStack(spacing: 12) {
             avatar(user)
             Text(user.name)
-                .font(.system(.title3, design: .rounded, weight: .bold))
-                .foregroundStyle(Color.espresso900)
+                .font(.kycPageTitle)
+                .foregroundStyle(Color.ink)
             if let contact = user.contactLine {
                 Text(contact)
-                    .font(.footnote)
-                    .foregroundStyle(Color.espresso500)
+                    .font(.kycSecondary)
+                    .foregroundStyle(Color.inkMuted)
             }
         }
         .padding(.top, 24)
@@ -123,35 +148,35 @@ struct ProfileView: View {
             stat(value: me?.beenCount.map(String.init) ?? "…", label: "Been")
         }
         .padding(.vertical, 14)
-        .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .cardStyle()
         .padding(.horizontal, 24)
     }
 
     private var claimsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("My claims")
-                .font(.system(.subheadline, design: .rounded, weight: .bold))
-                .foregroundStyle(Color.espresso900)
+                .font(.kycSection)
+                .foregroundStyle(Color.ink)
             ForEach(claims) { claim in
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(claim.shop.name)
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(Color.espresso900)
+                            .font(.kycBody)
+                            .foregroundStyle(Color.ink)
                         Text(claim.shop.city)
-                            .font(.caption)
-                            .foregroundStyle(Color.espresso500)
+                            .font(.kycSecondary)
+                            .foregroundStyle(Color.inkMuted)
                     }
                     Spacer()
                     Text(claim.status.capitalized)
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 8)
+                        .font(.kycMetaBold)
+                        .padding(.horizontal, 9)
                         .padding(.vertical, 4)
                         .background(statusColor(claim.status).opacity(0.12), in: Capsule())
                         .foregroundStyle(statusColor(claim.status))
                 }
                 .padding(12)
-                .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(.white, in: RoundedRectangle(cornerRadius: KYCRadius.control, style: .continuous))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -174,124 +199,27 @@ struct ProfileView: View {
                 .frame(width: 84, height: 84)
                 .clipShape(Circle())
             Text("Coffee snob")
-                .font(.system(.title3, design: .rounded, weight: .bold))
-                .foregroundStyle(Color.espresso900)
+                .font(.kycPageTitle)
+                .foregroundStyle(Color.ink)
             Text("Sign in to save shops, mark where you've been, post reports, and claim your shop.")
-                .font(.footnote)
-                .foregroundStyle(Color.espresso500)
+                .font(.kycSecondary)
+                .foregroundStyle(Color.inkMuted)
+                .lineSpacing(3)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
         }
         .padding(.top, 24)
     }
 
-    private var signInButton: some View {
-        Button {
-            signIn()
-        } label: {
-            Group {
-                if signingIn {
-                    ProgressView().tint(Color.cream50)
-                } else {
-                    Label("Sign in with Google", systemImage: "person.badge.key")
-                }
-            }
-            .font(.subheadline.weight(.semibold))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 13)
-            .background(Color.espresso700, in: Capsule())
-            .foregroundStyle(Color.cream50)
-        }
-        .buttonStyle(.plain)
-        .disabled(signingIn)
-        .padding(.horizontal, 24)
-    }
-
-    private var appleSignInButton: some View {
-        SignInWithAppleButton(.signIn) { request in
-            request.requestedScopes = [.fullName, .email]
-        } onCompletion: { result in
-            switch result {
-            case .success(let authorization):
-                guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
-                      let tokenData = credential.identityToken,
-                      let token = String(data: tokenData, encoding: .utf8)
-                else {
-                    error = "Apple returned no identity token."
-                    return
-                }
-                // Apple provides the name only on first authorization.
-                let name = credential.fullName.flatMap {
-                    let formatted = PersonNameComponentsFormatter.localizedString(from: $0, style: .default)
-                    return formatted.isEmpty ? nil : formatted
-                }
-                signingIn = true
-                error = nil
-                Task {
-                    do {
-                        try await auth.signInWithApple(identityToken: token, name: name)
-                        me = try? await CoffeeAPI.fetchMe()
-                        claims = (try? await CoffeeAPI.fetchMyClaims()) ?? []
-                    } catch {
-                        self.error = error.localizedDescription
-                    }
-                    signingIn = false
-                }
-            case .failure(let err):
-                if (err as? ASAuthorizationError)?.code != .canceled {
-                    error = err.localizedDescription
-                }
-            }
-        }
-        .signInWithAppleButtonStyle(.black)
-        .frame(height: 46)
-        .clipShape(Capsule())
-        .padding(.horizontal, 24)
-    }
-
-    private var codeSignInRow: some View {
-        // Phone stays hidden until an SMS provider (Twilio) is configured.
-        codeSignInOption("Sign in with email code", icon: "envelope", method: .email)
-        .padding(.horizontal, 24)
-        .sheet(item: $codeSignIn) { method in
-            CodeSignInSheet(method: method) {
-                codeSignIn = nil
-                Task {
-                    me = try? await CoffeeAPI.fetchMe()
-                    claims = (try? await CoffeeAPI.fetchMyClaims()) ?? []
-                }
-            }
-            .presentationDetents([.medium])
-        }
-    }
-
-    private func codeSignInOption(_ label: String, icon: String, method: CodeSignInMethod) -> some View {
-        Button {
-            codeSignIn = method
-        } label: {
-            Label(label, systemImage: icon)
-                .font(.subheadline.weight(.semibold))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 13)
-                .background(Capsule().strokeBorder(Color.espresso700, lineWidth: 1.5))
-                .foregroundStyle(Color.espresso700)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func signIn() {
-        signingIn = true
-        error = nil
-        Task {
-            do {
-                try await auth.signIn()
-                me = try? await CoffeeAPI.fetchMe()
-                claims = (try? await CoffeeAPI.fetchMyClaims()) ?? []
-            } catch AuthError.cancelled {
-            } catch {
-                self.error = error.localizedDescription
-            }
-            signingIn = false
+    private func deleteAccount() async {
+        deletingAccount = true
+        defer { deletingAccount = false }
+        do {
+            try await auth.deleteAccount()
+            me = nil
+            claims = []
+        } catch {
+            self.error = error.localizedDescription
         }
     }
 
@@ -301,157 +229,25 @@ struct ProfileView: View {
             .overlay(
                 Image(systemName: "person.fill")
                     .font(.system(size: 36))
-                    .foregroundStyle(Color.espresso500.opacity(0.5))
+                    .foregroundStyle(Color.inkFaint)
             )
     }
 
     private func stat(value: String, label: String) -> some View {
         VStack(spacing: 2) {
             Text(value)
-                .font(.system(.headline, design: .rounded, weight: .bold))
-                .foregroundStyle(Color.espresso900)
+                .font(.kycSection)
+                .monospacedDigit()
+                .foregroundStyle(Color.ink)
             Text(label)
-                .font(.caption2)
-                .foregroundStyle(Color.espresso500)
+                .font(.kycMeta)
+                .foregroundStyle(Color.inkMuted)
         }
         .frame(maxWidth: .infinity)
     }
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
-    }
-}
-
-// Two steps: phone number or email, then the 6-digit code.
-private struct CodeSignInSheet: View {
-    let method: CodeSignInMethod
-    let onSignedIn: () -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var identifier = ""
-    @State private var code = ""
-    @State private var codeSent = false
-    @State private var devCode: String?
-    @State private var busy = false
-    @State private var error: String?
-    @FocusState private var focused: Bool
-
-    private var isPhone: Bool { method == .phone }
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 16) {
-                Text(
-                    codeSent
-                        ? "Enter the code we sent to \(identifier)."
-                        : isPhone ? "We'll text you a sign-in code." : "We'll email you a sign-in code."
-                )
-                .font(.footnote)
-                .foregroundStyle(Color.espresso500)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
-
-                if codeSent {
-                    TextField("6-digit code", text: $code)
-                        .keyboardType(.numberPad)
-                        .textContentType(.oneTimeCode)
-                        .multilineTextAlignment(.center)
-                        .font(.system(.title3, design: .monospaced, weight: .semibold))
-                        .focused($focused)
-                        .padding(14)
-                        .background(Color.cream100, in: RoundedRectangle(cornerRadius: 14))
-                        .padding(.horizontal, 24)
-                    if let devCode {
-                        Text("Dev backend, no \(isPhone ? "SMS" : "email") provider. Code: \(devCode)")
-                            .font(.caption.monospaced())
-                            .foregroundStyle(Color.crema500)
-                    }
-                } else {
-                    TextField(isPhone ? "+1 415 555 0100" : "you@example.com", text: $identifier)
-                        .keyboardType(isPhone ? .phonePad : .emailAddress)
-                        .textContentType(isPhone ? .telephoneNumber : .emailAddress)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .multilineTextAlignment(.center)
-                        .font(.title3.weight(.medium))
-                        .focused($focused)
-                        .padding(14)
-                        .background(Color.cream100, in: RoundedRectangle(cornerRadius: 14))
-                        .padding(.horizontal, 24)
-                }
-
-                if let error {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
-                }
-
-                Button(action: submit) {
-                    Group {
-                        if busy {
-                            ProgressView().tint(Color.cream50)
-                        } else {
-                            Text(codeSent ? "Sign in" : "Send code")
-                        }
-                    }
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 13)
-                    .background(Color.espresso700, in: Capsule())
-                    .foregroundStyle(Color.cream50)
-                }
-                .buttonStyle(.plain)
-                .disabled(busy || (codeSent ? code.count < 6 : identifier.count < (isPhone ? 7 : 6)))
-                .padding(.horizontal, 24)
-
-                if codeSent {
-                    Button(isPhone ? "Use a different number" : "Use a different email") {
-                        codeSent = false
-                        code = ""
-                        devCode = nil
-                        error = nil
-                    }
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(Color.espresso500)
-                    .frame(minHeight: 44)
-                }
-
-                Spacer()
-            }
-            .padding(.top, 20)
-            .background(Color.cream50)
-            .navigationTitle(isPhone ? "Phone sign-in" : "Email sign-in")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
-            .onAppear { focused = true }
-        }
-    }
-
-    private func submit() {
-        busy = true
-        error = nil
-        Task {
-            do {
-                if codeSent {
-                    try await AuthStore.shared.signIn(method: method, identifier: identifier, code: code)
-                    dismiss()
-                    onSignedIn()
-                } else {
-                    devCode = try await AuthStore.shared.startCodeSignIn(method: method, identifier: identifier)
-                    codeSent = true
-                    code = ""
-                }
-            } catch {
-                self.error = error.localizedDescription
-            }
-            busy = false
-        }
     }
 }
 
@@ -474,14 +270,14 @@ private struct DeveloperSection: View {
                     .background(Color.cream100, in: RoundedRectangle(cornerRadius: 10))
                     .onSubmit { onEndpointChange() }
                 Text("GraphQL endpoint. Empty = production. Local dev: http://127.0.0.1:4000/graphql")
-                    .font(.caption2)
-                    .foregroundStyle(Color.espresso500)
+                    .font(.kycMeta)
+                    .foregroundStyle(Color.inkMuted)
             }
             .padding(.top, 8)
         } label: {
             Label("Developer", systemImage: "hammer")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(Color.espresso500)
+                .font(.kycSecondary)
+                .foregroundStyle(Color.inkMuted)
         }
         .tint(Color.espresso500)
     }

@@ -976,7 +976,7 @@ export function ReportForm({ shop, onDone, onCancel }: { shop: CoffeeShop; onDon
         {saving
           ? 'Submitting…'
           : sectionsUpdated > 0
-            ? `Submit — ${sectionsUpdated} section${sectionsUpdated > 1 ? 's' : ''} updated`
+            ? `Submit ${sectionsUpdated} section${sectionsUpdated > 1 ? 's' : ''} updated`
             : 'Submit'}
       </button>
     </div>
