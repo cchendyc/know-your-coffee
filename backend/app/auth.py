@@ -9,13 +9,50 @@ import time
 from typing import TypedDict
 
 import httpx
+import psycopg
 from graphql import GraphQLError
 
 from . import settings
 
-# Sessions die on restart without a fixed SESSION_SECRET; fine for dev.
-_SECRET = (settings.SESSION_SECRET or secrets.token_hex(32)).encode()
 _TTL_SECONDS = 30 * 24 * 3600
+_secret_cache: bytes | None = None
+
+
+def _secret() -> bytes:
+    """HMAC key for session tokens and login codes.
+
+    SESSION_SECRET wins. Without it, a generated secret is stored in
+    app_secrets so every restart and instance signs with the same key; a
+    process-local random key would sign everyone out whenever Render's free
+    tier spins the service down and back up.
+    """
+    global _secret_cache
+    if _secret_cache is None:
+        _secret_cache = _load_secret()
+    return _secret_cache
+
+
+def _load_secret() -> bytes:
+    if settings.SESSION_SECRET:
+        return settings.SESSION_SECRET.encode()
+    if settings.DATABASE_URL:
+        try:
+            return _persisted_secret(settings.DATABASE_URL).encode()
+        except psycopg.Error as e:
+            print(f"WARNING: could not load session secret from app_secrets: {e}", flush=True)
+    print("WARNING: SESSION_SECRET unset; every restart signs out all users.", flush=True)
+    return secrets.token_hex(32).encode()
+
+
+def _persisted_secret(database_url: str) -> str:
+    # Insert-if-absent then read, so two cold-starting instances agree.
+    with psycopg.connect(database_url) as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO app_secrets (name, value) VALUES ('session', %s) ON CONFLICT (name) DO NOTHING",
+            (secrets.token_hex(32),),
+        )
+        cur.execute("SELECT value FROM app_secrets WHERE name = 'session'")
+        return cur.fetchone()[0]
 
 
 class SessionUser(TypedDict):
@@ -34,7 +71,7 @@ def _b64url_decode(text: str) -> bytes:
 
 
 def _sign(payload: str) -> str:
-    return _b64url(hmac.new(_SECRET, payload.encode(), hashlib.sha256).digest())
+    return _b64url(hmac.new(_secret(), payload.encode(), hashlib.sha256).digest())
 
 
 def create_session_token(user: SessionUser) -> str:
@@ -63,7 +100,7 @@ def verify_session_token(token: str | None) -> SessionUser | None:
 
 def hash_login_code(identifier: str, code: str) -> str:
     """One-way code digest bound to its phone/email, so a leaked table row is useless."""
-    return _b64url(hmac.new(_SECRET, f"{identifier}:{code}".encode(), hashlib.sha256).digest())
+    return _b64url(hmac.new(_secret(), f"{identifier}:{code}".encode(), hashlib.sha256).digest())
 
 
 class GoogleIdentity(TypedDict):
