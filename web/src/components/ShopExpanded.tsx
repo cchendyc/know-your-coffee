@@ -33,6 +33,7 @@ function Modal({ onClose, children }: { onClose: () => void; children: ReactNode
 export function ShopExpanded({
   shop,
   user,
+  isSeller = false,
   initialReporting = false,
   onChanged,
   onDeleted,
@@ -42,6 +43,7 @@ export function ShopExpanded({
 }: {
   shop: CoffeeShop
   user: User | null
+  isSeller?: boolean
   initialReporting?: boolean
   onChanged: (shop: CoffeeShop) => void
   onDeleted: (id: string) => void
@@ -172,7 +174,7 @@ export function ShopExpanded({
               onClick={() => setModal('claim')}
               className="ml-auto text-xs font-medium text-crema-500 hover:underline"
             >
-              Own this shop? Become a seller
+              {isSeller ? 'Own this location too? Add it to your Seller Hub' : 'Own this shop? Become a seller'}
             </button>
           )}
         </div>

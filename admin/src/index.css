@@ -1,0 +1,19 @@
+@import 'tailwindcss';
+
+/* Same palette tokens as web/src/index.css, light theme only. */
+@theme {
+  --color-cream-50: #fbf8f3;
+  --color-cream-100: #f4ede2;
+  --color-cream-200: #e9dcc9;
+  --color-espresso-500: #6f4e37;
+  --color-espresso-700: #4a3325;
+  --color-espresso-900: #2b1d14;
+  --color-crema-400: #d4a45f;
+  --color-crema-500: #c08c3e;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  background: var(--color-cream-50);
+  color: var(--color-espresso-900);
+}
