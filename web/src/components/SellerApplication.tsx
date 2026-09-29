@@ -38,7 +38,16 @@ const ROLES = [
   { name: 'Staff', detail: 'You work here and act for the owner.' },
 ] as const
 
-export function SellerApplicationModal({ shop, onClose }: { shop?: CoffeeShop; onClose: () => void }) {
+export function SellerApplicationModal({
+  shop,
+  isSeller = false,
+  onClose,
+}: {
+  shop?: CoffeeShop
+  // Existing sellers skip the onboarding pitch: the shop joins their switcher.
+  isSeller?: boolean
+  onClose: () => void
+}) {
   const steps: Step[] = shop ? ['role', 'verify', 'review'] : ['shop', 'role', 'verify', 'review']
   const [step, setStep] = useState<Step>(steps[0])
   const [selectedShop, setSelectedShop] = useState<CoffeeShop | null>(shop ?? null)
@@ -165,9 +174,10 @@ export function SellerApplicationModal({ shop, onClose }: { shop?: CoffeeShop; o
             </div>
             <h3 className="text-lg font-bold">Application submitted</h3>
             <p className="mx-auto mt-1 max-w-sm text-sm text-espresso-500">
-              Support will verify you by {method.title.toLowerCase()} and review the application. Once
-              approved, you'll see a brief onboarding and get access to the Seller Hub for{' '}
-              {selectedShop?.name}.
+              Support will verify you by {method.title.toLowerCase()} and review the application.{' '}
+              {isSeller
+                ? `Once approved, ${selectedShop?.name} appears in your Seller Hub's shop switcher.`
+                : `Once approved, you'll see a brief onboarding and get access to the Seller Hub for ${selectedShop?.name}.`}
             </p>
             <button
               onClick={onClose}

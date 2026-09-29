@@ -379,7 +379,7 @@ export function ShopExpanded({
           />
         </Modal>
       )}
-      {modal === 'claim' && <SellerApplicationModal shop={shop} onClose={() => setModal('none')} />}
+      {modal === 'claim' && <SellerApplicationModal shop={shop} isSeller={isSeller} onClose={() => setModal('none')} />}
       {modal === 'delete' && (
         <Modal onClose={() => setModal('none')}>
           <h3 className="text-lg font-bold tracking-tight">Delete {shop.name}?</h3>

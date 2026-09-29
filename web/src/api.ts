@@ -598,32 +598,43 @@ export function updateDeliverySettings(
   ).then((d) => d.updateDeliverySettings)
 }
 
-export function fetchMyProducts(shopId: string, status?: ListingStatus) {
-  return gql<{ myProducts: Product[]; myProductCounts: ProductCounts }>(
-    `query MyProducts($shopId: ID!, $status: ListingStatus) {
-      myProducts(shopId: $shopId, status: $status) { ${PRODUCT_FIELDS} }
+// Seller Hub tables page with limit/offset; the server caps limit at 100.
+export const SELLER_PAGE_SIZE = 25
+
+export function fetchMyProducts(shopId: string, status?: ListingStatus, offset = 0) {
+  return gql<{ myProducts: { products: Product[]; total: number }; myProductCounts: ProductCounts }>(
+    `query MyProducts($shopId: ID!, $status: ListingStatus, $limit: Int!, $offset: Int!) {
+      myProducts(shopId: $shopId, status: $status, limit: $limit, offset: $offset) {
+        products { ${PRODUCT_FIELDS} }
+        total
+      }
       myProductCounts(shopId: $shopId) { total inStock lowStock hidden }
     }`,
-    { shopId, status: status ?? null },
+    { shopId, status: status ?? null, limit: SELLER_PAGE_SIZE, offset },
   )
 }
 
-export function fetchMyOrders(shopId: string) {
-  return gql<{ myOrders: Order[] }>(
-    `query MyOrders($shopId: ID!) { myOrders(shopId: $shopId) { ${ORDER_FIELDS} } }`,
-    { shopId },
+export function fetchMyOrders(shopId: string, offset = 0) {
+  return gql<{ myOrders: { orders: Order[]; total: number } }>(
+    `query MyOrders($shopId: ID!, $limit: Int!, $offset: Int!) {
+      myOrders(shopId: $shopId, limit: $limit, offset: $offset) { orders { ${ORDER_FIELDS} } total }
+    }`,
+    { shopId, limit: SELLER_PAGE_SIZE, offset },
   ).then((d) => d.myOrders)
 }
 
-export function fetchMyShipments(shopId: string) {
-  return gql<{ myShipments: Shipment[] }>(
-    `query MyShipments($shopId: ID!) {
-      myShipments(shopId: $shopId) {
-        id orderId carrier tracking shipBy status createdAt
-        order { number buyer { name } items { productId name qty unitPrice } }
+export function fetchMyShipments(shopId: string, status?: ShipmentStatus, offset = 0) {
+  return gql<{ myShipments: { shipments: Shipment[]; total: number } }>(
+    `query MyShipments($shopId: ID!, $status: ShipmentStatus, $limit: Int!, $offset: Int!) {
+      myShipments(shopId: $shopId, status: $status, limit: $limit, offset: $offset) {
+        shipments {
+          id orderId carrier tracking shipBy status createdAt
+          order { number buyer { name } items { productId name qty unitPrice } }
+        }
+        total
       }
     }`,
-    { shopId },
+    { shopId, status: status ?? null, limit: SELLER_PAGE_SIZE, offset },
   ).then((d) => d.myShipments)
 }
 
