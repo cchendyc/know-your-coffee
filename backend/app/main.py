@@ -15,11 +15,15 @@ services = create_services(repos)
 def get_context(request, _data):
     header = request.headers.get("authorization") or ""
     token = header[7:] if header.startswith("Bearer ") else None
+    user = verify_session_token(token)
     return {
         "request": request,
         "repos": repos,
         "services": services,
-        "user": verify_session_token(token),
+        "user": user,
+        # A token that fails verification (expired, or signed by another
+        # secret) must be surfaced, or clients keep a cached login forever.
+        "stale_token": bool(token) and user is None,
     }
 
 
