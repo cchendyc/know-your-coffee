@@ -7,7 +7,7 @@ import httpx
 from graphql import GraphQLError
 
 from .. import settings
-from ..models import NewShop
+from ..shops.records import NewShop
 
 _SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
 
@@ -39,15 +39,15 @@ def _component(place: dict, kind: str) -> str | None:
 def _empty_shop_fields() -> dict:
     return {
         "machine": "UNKNOWN",
-        "machineModel": None,
-        "beanSource": "UNKNOWN",
+        "machine_model": None,
+        "bean_source": "UNKNOWN",
         "roaster": None,
-        "beanOrigins": [],
+        "bean_origins": [],
         "grinders": [],
         "drinks": [],
-        "milkBrands": [],
+        "milk_brands": [],
         "vibe": None,
-        "photoUrl": None,
+        "photo_url": None,
         "website": None,
     }
 
@@ -85,7 +85,7 @@ async def search_places(query: str) -> list[dict]:
             bias=_BAY_AREA_BIAS,
         )
     return [
-        {"placeId": p["id"], "name": p["displayName"]["text"], "address": p.get("formattedAddress", "")}
+        {"place_id": p["id"], "name": p["displayName"]["text"], "address": p.get("formattedAddress", "")}
         for p in places
     ]
 
@@ -108,14 +108,14 @@ async def place_preview(place_id: str) -> dict | None:
     photos = p.get("photos") or []
     street = " ".join(x for x in [_component(p, "street_number"), _component(p, "route")] if x)
     return {
-        "placeId": p["id"],
+        "place_id": p["id"],
         "name": p["displayName"]["text"],
-        "isCoffeeShop": _is_coffee_shop(p["displayName"]["text"], p.get("types") or []),
+        "is_coffee_shop": _is_coffee_shop(p["displayName"]["text"], p.get("types") or []),
         "address": street or (p.get("formattedAddress", "").split(",")[0]),
         "city": _component(p, "locality") or _component(p, "sublocality") or "",
         "lat": p["location"]["latitude"],
         "lng": p["location"]["longitude"],
-        "photoUrl": await resolve_photo_url(photos[0]["name"]) if photos else None,
+        "photo_url": await resolve_photo_url(photos[0]["name"]) if photos else None,
         "website": p.get("websiteUri"),
     }
 
@@ -124,7 +124,7 @@ async def new_shop_from_place(place_id: str) -> NewShop | None:
     preview = await place_preview(place_id)
     if not preview:
         return None
-    if not preview["isCoffeeShop"]:
+    if not preview["is_coffee_shop"]:
         raise GraphQLError("That's not a coffee shop, duh. Drink more coffee.")
     return {
         **_empty_shop_fields(),
@@ -133,7 +133,7 @@ async def new_shop_from_place(place_id: str) -> NewShop | None:
         "city": preview["city"],
         "lat": preview["lat"],
         "lng": preview["lng"],
-        "photoUrl": preview["photoUrl"],
+        "photo_url": preview["photo_url"],
         "website": preview["website"],
     }
 
@@ -187,13 +187,13 @@ async def resolve_photo_url(photo_name: str) -> str | None:
 
 
 class ShopMeta(TypedDict):
-    photoUrl: str | None
+    photo_url: str | None
     website: str | None
 
 
 async def find_shop_meta(name: str, address: str, city: str) -> ShopMeta:
     """Finds the first Places photo and the shop's own website, or nulls."""
-    empty: ShopMeta = {"photoUrl": None, "website": None}
+    empty: ShopMeta = {"photo_url": None, "website": None}
     if not settings.GOOGLE_PLACES_API_KEY:
         return empty
     try:
@@ -205,7 +205,7 @@ async def find_shop_meta(name: str, address: str, city: str) -> ShopMeta:
         return empty
     photos = places[0].get("photos") or []
     return {
-        "photoUrl": await resolve_photo_url(photos[0]["name"]) if photos else None,
+        "photo_url": await resolve_photo_url(photos[0]["name"]) if photos else None,
         "website": places[0].get("websiteUri"),
     }
 

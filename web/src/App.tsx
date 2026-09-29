@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { fetchMe, fetchShops, TOKEN_KEY, USER_KEY, type CoffeeShop, type MachineBrand, type User } from './api'
+import { fetchMe, fetchMyShops, fetchShops, TOKEN_KEY, USER_KEY, type CoffeeShop, type MachineBrand, type User } from './api'
 import { MACHINE_BRANDS, MACHINE_LABELS } from './labels'
 import { ShopCard } from './components/ShopCard'
 import { ShopDrawer } from './components/ShopDrawer'
 import { MapView } from './components/MapView'
 import { AuthButton, loadStoredUser } from './components/AuthButton'
 import { AddShopModal } from './components/AddShopModal'
+import { SellerApplicationModal } from './components/SellerApplication'
+import { SellerHub } from './components/SellerHub'
 import { getThemePref, setThemePref, type ThemePref } from './theme'
 
 // Cycles System → Light → Dark Roast. System follows the OS appearance.
@@ -117,6 +119,18 @@ export default function App() {
   const [view, setView] = useState<'list' | 'map'>('list')
   const [user, setUser] = useState<User | null>(loadStoredUser)
   const [adding, setAdding] = useState(false)
+  // Owned shops unlock the Seller Hub button; empty for buyer-only users.
+  const [myShops, setMyShops] = useState<{ id: string; name: string; city: string }[]>([])
+  const [hubOpen, setHubOpen] = useState(false)
+  const [applying, setApplying] = useState(false)
+  useEffect(() => {
+    if (!user) {
+      setMyShops([])
+      setHubOpen(false)
+      return
+    }
+    fetchMyShops().then(setMyShops).catch(() => setMyShops([]))
+  }, [user])
 
   // Keep ?shop=<id> in the URL so the open shop stays shareable.
   useEffect(() => {
@@ -203,22 +217,42 @@ export default function App() {
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 border-b border-cream-200 bg-cream-50/90 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-4 sm:px-6">
-          <img
-            // BASE_URL keeps this working at github.io/<repo>/ and at the custom domain root.
-            src={`${import.meta.env.BASE_URL}icon-192.png`}
-            alt="Know Your Coffee"
-            className="size-10 rounded-xl"
-          />
-          <div className="flex-1">
-            <h1 className="text-lg font-bold tracking-tight">Know Your Coffee</h1>
-            <p className="text-xs text-espresso-500">coffee snobs</p>
-          </div>
+        <div className="flex items-center gap-3 px-4 py-4 sm:px-5">
+          {/* The logo is the way back to the explorer from the Seller Hub. */}
+          <button
+            type="button"
+            onClick={() => setHubOpen(false)}
+            className="flex items-center gap-3 text-left"
+          >
+            <img
+              // BASE_URL keeps this working at github.io/<repo>/ and at the custom domain root.
+              src={`${import.meta.env.BASE_URL}icon-192.png`}
+              alt="Know Your Coffee"
+              className="size-10 rounded-xl"
+            />
+            <div>
+              <h1 className="text-lg font-bold tracking-tight">Know Your Coffee</h1>
+              <p className="text-xs text-espresso-500">{hubOpen ? 'seller hub' : 'coffee snobs'}</p>
+            </div>
+          </button>
+          <div className="flex-1" />
           <ThemeToggle />
-          <AuthButton user={user} onChange={setUser} />
+          <AuthButton
+            user={user}
+            onChange={setUser}
+            isSeller={myShops.length > 0}
+            onOpenSellerHub={() => setHubOpen(true)}
+            onBecomeSeller={() => setApplying(true)}
+          />
         </div>
       </header>
 
+      {applying && <SellerApplicationModal onClose={() => setApplying(false)} />}
+
+      {hubOpen && myShops.length > 0 && user ? (
+        <SellerHub shops={myShops} user={user} />
+      ) : (
+        <>
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
         <div className="flex flex-col gap-3 sm:flex-row">
           <form
@@ -364,12 +398,15 @@ export default function App() {
           }}
         />
       )}
+        </>
+      )}
 
       {selectedId && (
         <ShopDrawer
           shopId={selectedId}
           initialShop={shops.find((s) => s.id === selectedId)}
           user={user}
+          isSeller={myShops.length > 0}
           onShopChanged={onShopChanged}
           onShopDeleted={onShopDeleted}
           onOpenShop={setSelectedId}

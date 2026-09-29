@@ -249,17 +249,26 @@ enum CoffeeAPI {
         ], as: Payload.self)
     }
 
-    static func claimShop(shopID: String, note: String?) async throws -> ShopClaim {
+    /// Submits a seller application; support reviews it in the admin console.
+    static func claimShop(
+        shopID: String, businessRole: String?, contact: String?, website: String?, note: String?
+    ) async throws -> ShopClaim {
         struct Payload: Decodable { let claimShop: ShopClaim }
         let query = """
-            mutation Claim($shopId: ID!, $note: String) {
-              claimShop(shopId: $shopId, note: $note) {
+            mutation Claim($shopId: ID!, $application: SellerApplicationInput) {
+              claimShop(shopId: $shopId, application: $application) {
                 id status note createdAt shop { id name city }
               }
             }
             """
+        let application: [String: Any?] = [
+            "businessRole": businessRole?.isEmpty == false ? businessRole : nil,
+            "contact": contact?.isEmpty == false ? contact : nil,
+            "website": website?.isEmpty == false ? website : nil,
+            "note": note?.isEmpty == false ? note : nil,
+        ]
         return try await execute(query, variables: [
-            "shopId": shopID, "note": note?.isEmpty == false ? note : nil,
+            "shopId": shopID, "application": application.compactMapValues { $0 },
         ], as: Payload.self).claimShop
     }
 
@@ -283,6 +292,113 @@ enum CoffeeAPI {
             query MyClaims { myClaims { id status note createdAt shop { id name city } } }
             """
         return try await execute(query, as: Payload.self).myClaims
+    }
+
+    // MARK: Seller hub
+
+    private static let productFields =
+        "id shopId name variant price stockQty lowStockThreshold lowStock active createdAt updatedAt"
+    private static let orderFields = """
+        id number status fulfillment buyer { name picture } items { productId name qty unitPrice } total createdAt
+        shipment { id orderId carrier tracking shipBy status createdAt }
+        """
+    private static let shipmentFields = """
+        id orderId carrier tracking shipBy status createdAt
+        order { number buyer { name picture } items { productId name qty unitPrice } }
+        """
+
+    static func fetchMyShops() async throws -> [OwnedShop] {
+        struct Payload: Decodable { let myShops: [OwnedShop] }
+        return try await execute("query MyShops { myShops { id name city } }", as: Payload.self).myShops
+    }
+
+    static func fetchMyProducts(shopID: String) async throws -> [Product] {
+        struct Payload: Decodable { let myProducts: [Product] }
+        let query = "query MyProducts($shopId: ID!) { myProducts(shopId: $shopId) { \(productFields) } }"
+        return try await execute(query, variables: ["shopId": shopID], as: Payload.self).myProducts
+    }
+
+    static func fetchMyOrders(shopID: String) async throws -> [Order] {
+        struct Payload: Decodable { let myOrders: [Order] }
+        let query = "query MyOrders($shopId: ID!) { myOrders(shopId: $shopId) { \(orderFields) } }"
+        return try await execute(query, variables: ["shopId": shopID], as: Payload.self).myOrders
+    }
+
+    static func fetchMyShipments(shopID: String) async throws -> [Shipment] {
+        struct Payload: Decodable { let myShipments: [Shipment] }
+        let query = "query MyShipments($shopId: ID!) { myShipments(shopId: $shopId) { \(shipmentFields) } }"
+        return try await execute(query, variables: ["shopId": shopID], as: Payload.self).myShipments
+    }
+
+    static func createProduct(
+        shopID: String, name: String, variant: String?, price: Double, stockQty: Int
+    ) async throws -> Product {
+        struct Payload: Decodable { let createProduct: Product }
+        let query = """
+            mutation CreateProduct($shopId: ID!, $input: ProductInput!) {
+              createProduct(shopId: $shopId, input: $input) { \(productFields) }
+            }
+            """
+        var input: [String: Any] = ["name": name, "price": price, "stockQty": stockQty]
+        if let variant, !variant.isEmpty { input["variant"] = variant }
+        return try await execute(query, variables: [
+            "shopId": shopID, "input": input,
+        ], as: Payload.self).createProduct
+    }
+
+    /// Patch semantics: only the keys in `input` change.
+    static func updateProduct(id: String, input: [String: Any]) async throws -> Product {
+        struct Payload: Decodable { let updateProduct: Product }
+        let query = """
+            mutation UpdateProduct($id: ID!, $input: ProductInput!) {
+              updateProduct(id: $id, input: $input) { \(productFields) }
+            }
+            """
+        return try await execute(query, variables: ["id": id, "input": input], as: Payload.self).updateProduct
+    }
+
+    static func deleteProduct(id: String) async throws {
+        struct Payload: Decodable { let deleteProduct: Bool }
+        _ = try await execute(
+            "mutation DeleteProduct($id: ID!) { deleteProduct(id: $id) }",
+            variables: ["id": id],
+            as: Payload.self
+        )
+    }
+
+    static func cancelOrder(id: String) async throws -> Order {
+        struct Payload: Decodable { let cancelOrder: Order }
+        let query = "mutation CancelOrder($id: ID!) { cancelOrder(id: $id) { \(orderFields) } }"
+        return try await execute(query, variables: ["id": id], as: Payload.self).cancelOrder
+    }
+
+    // status is the pickup step to move to: .readyForPickup or .pickedUp.
+    static func advancePickup(id: String, to status: OrderStatus) async throws -> Order {
+        struct Payload: Decodable {
+            let markReadyForPickup: Order?
+            let markPickedUp: Order?
+        }
+        let field = status == .pickedUp ? "markPickedUp" : "markReadyForPickup"
+        let query = "mutation AdvancePickup($id: ID!) { \(field)(id: $id) { \(orderFields) } }"
+        let payload = try await execute(query, variables: ["id": id], as: Payload.self)
+        guard let order = payload.markPickedUp ?? payload.markReadyForPickup else {
+            throw URLError(.badServerResponse)
+        }
+        return order
+    }
+
+    static func updateShipment(
+        id: String, carrier: String? = nil, tracking: String? = nil, status: ShipmentStatus? = nil
+    ) async throws -> Shipment {
+        struct Payload: Decodable { let updateShipment: Shipment }
+        let query = """
+            mutation UpdateShipment($id: ID!, $carrier: String, $tracking: String, $status: ShipmentStatus) {
+              updateShipment(id: $id, carrier: $carrier, tracking: $tracking, status: $status) { \(shipmentFields) }
+            }
+            """
+        return try await execute(query, variables: [
+            "id": id, "carrier": carrier, "tracking": tracking, "status": status?.rawValue,
+        ], as: Payload.self).updateShipment
     }
 
     // MARK: Add shop (Google Places)

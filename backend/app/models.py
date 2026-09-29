@@ -44,6 +44,11 @@ USER_ROLES = ["USER", "ADMIN"]
 
 CLAIM_STATUSES = ["PENDING", "APPROVED", "REJECTED"]
 
+# Orders are auto-accepted at checkout; the only seller action is cancel.
+ORDER_STATUSES = ["PLACED", "SHIPPED", "DELIVERED", "CANCELED"]
+
+SHIPMENT_STATUSES = ["LABEL_READY", "READY_FOR_DROPOFF", "IN_TRANSIT", "DELIVERED"]
+
 
 # One espresso machine on the bar.
 class Machine(TypedDict):
@@ -170,13 +175,18 @@ class User(TypedDict):
     role: str
 
 
-# A user's request to be recognized as a shop's owner; resolved by an admin.
+# A seller application: a user's request to be recognized as a shop's owner,
+# reviewed by support. Approval grants Seller Hub access for that shop.
 class ShopClaim(TypedDict):
     id: str
     shopId: str
     userId: str
     status: str
+    businessRole: str | None
+    contact: str | None
+    website: str | None
     note: str | None
+    applicant: Reporter | None
     createdAt: str
     resolvedAt: str | None
 
@@ -188,6 +198,54 @@ class ShopPhoto(TypedDict):
     data: str
     uploader: Reporter | None
     createdAt: str
+
+
+# Something a shop sells online, e.g. a 12 oz bag of Urcunina.
+class Product(TypedDict):
+    id: str
+    shopId: str
+    name: str
+    variant: str | None
+    price: float
+    stockQty: int
+    lowStockThreshold: int
+    lowStock: bool
+    active: bool
+    createdAt: str
+    updatedAt: str
+
+
+# A line on an order. Name and unitPrice are snapshots taken at purchase,
+# so deleting a product never breaks order history.
+class OrderItem(TypedDict):
+    productId: str
+    name: str
+    qty: int
+    unitPrice: float
+
+
+class Order(TypedDict):
+    id: str
+    number: int
+    shopId: str
+    buyerUserId: str | None  # None after the buyer deletes their account
+    buyer: Reporter | None
+    items: list[OrderItem]
+    total: float
+    status: str
+    createdAt: str
+
+
+# One package per order, created automatically when the order is placed.
+class Shipment(TypedDict):
+    id: str
+    orderId: str
+    carrier: str | None
+    tracking: str | None
+    shipBy: str | None  # ISO date
+    status: str
+    createdAt: str
+    updatedAt: str
 
 
 class MachineGuess(TypedDict):

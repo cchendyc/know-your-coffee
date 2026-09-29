@@ -15,6 +15,32 @@ enum ClaimStatus {
   REJECTED
 }
 
+enum OrderStatus {
+  "Auto-accepted at checkout; sellers never accept or decline."
+  PLACED
+  SHIPPED
+  DELIVERED
+  "Pickup only: packed and waiting at the counter."
+  READY_FOR_PICKUP
+  "Pickup only: the buyer collected it."
+  PICKED_UP
+  CANCELED
+}
+
+enum Fulfillment {
+  "Seller ships it; the order gets a shipment."
+  SHIP
+  "Buyer collects it at the shop; no shipment."
+  PICKUP
+}
+
+enum ShipmentStatus {
+  LABEL_READY
+  READY_FOR_DROPOFF
+  IN_TRANSIT
+  DELIVERED
+}
+
 enum MachineBrand {
   LA_MARZOCCO
   SLAYER
@@ -174,12 +200,22 @@ type CoffeeShop implements Node {
   chain: Chain
   "The verified owner's user id, set when an ownership claim is approved."
   ownerId: ID
+  "The verified owner's public profile, set when an ownership claim is approved."
+  owner: Reporter
   "True when the signed-in viewer is the verified owner."
   ownedByMe: Boolean!
+  "True once the owner finished the seller onboarding walkthrough."
+  sellerOnboarded: Boolean!
   "True when the signed-in viewer bookmarked this shop."
   savedByMe: Boolean!
   "True when the signed-in viewer marked this shop as visited."
   beenByMe: Boolean!
+  "Products the shop sells online. Empty until the verified owner adds some."
+  products: [Product!]!
+  "How buyers can receive products: shipping, pickup, or both."
+  deliverySettings: DeliverySettings!
+  "Work waiting on the seller at this shop. Null unless the viewer owns it."
+  workload: SellerWorkload
   "Community photos, newest first. Photos carry full image data; request only as many as you render."
   photos(limit: Int): [ShopPhoto!]!
   photoCount: Int!
@@ -205,6 +241,45 @@ type ShopPage {
   total: Int!
 }
 
+"A page of a seller's listings plus the total match count, for offset pagination."
+type ProductPage {
+  products: [Product!]!
+  total: Int!
+}
+
+"A page of a seller's orders plus the total match count, for offset pagination."
+type OrderPage {
+  orders: [Order!]!
+  total: Int!
+}
+
+"A page of a seller's shipments plus the total match count, for offset pagination."
+type ShipmentPage {
+  shipments: [Shipment!]!
+  total: Int!
+}
+
+"""
+The signed-in viewer as a seller. One user may own any number of shops;
+each shop has exactly one owner. Ownership comes from approved claims.
+"""
+type Seller {
+  "Owned shops, by name."
+  shops: [CoffeeShop!]!
+  "Every owned shop's workload summed."
+  workload: SellerWorkload!
+}
+
+"Counts of seller work outstanding; badges in the shop switcher and the all-shops overview."
+type SellerWorkload {
+  "PLACED and READY_FOR_PICKUP orders."
+  toFulfill: Int!
+  "Shipments not yet handed to a carrier: LABEL_READY and READY_FOR_DROPOFF."
+  toShip: Int!
+  "Active listings at or below their low-stock threshold."
+  lowStock: Int!
+}
+
 type User implements Node {
   id: ID!
   name: String!
@@ -220,16 +295,177 @@ type User implements Node {
   beenCount: Int!
 }
 
-"A user's request to be recognized as a shop's owner; resolved by an admin."
+"Something a shop sells online, e.g. a 12 oz bag of Urcunina."
+type Product implements Node {
+  id: ID!
+  shopId: ID!
+  name: String!
+  "Size or packaging, e.g. 12 oz whole bean."
+  variant: String
+  price: Float!
+  stockQty: Int!
+  "stockQty at or below this marks the product low stock."
+  lowStockThreshold: Int!
+  lowStock: Boolean!
+  "Inactive products are hidden from buyers; order history keeps them."
+  active: Boolean!
+  "Listing images in display order, at most 6. Fetch per listing; each is a whole data URL."
+  photos: [ProductPhoto!]!
+  "The first photo, for lists and cards."
+  coverPhoto: ProductPhoto
+  status: ListingStatus!
+  createdAt: String!
+  updatedAt: String!
+}
+
+"Derived from active and stock; HIDDEN wins over stock level."
+enum ListingStatus {
+  IN_STOCK
+  "Active with stockQty at or below lowStockThreshold, including 0."
+  LOW_STOCK
+  HIDDEN
+}
+
+"Listing counts per status, for the Seller Hub filter chips."
+type ProductCounts {
+  total: Int!
+  inStock: Int!
+  lowStock: Int!
+  hidden: Int!
+}
+
+type ProductPhoto implements Node {
+  id: ID!
+  "Data URL of the image."
+  data: String!
+  "0-based display order; 0 is the cover."
+  position: Int!
+}
+
+"""
+One slot in a listing's photo list. Send id to keep an existing photo in
+this position, or data to upload a new one. Exactly one of the two.
+"""
+input ProductPhotoInput {
+  id: ID
+  "Data URL; clients should downscale to ~1000px before upload."
+  data: String
+}
+
+"""
+Shared by create and update. Create requires name and price and defaults
+stockQty 0, lowStockThreshold 5, active true. Update keeps omitted fields.
+"""
+input ProductInput {
+  name: String
+  variant: String
+  price: Float
+  stockQty: Int
+  lowStockThreshold: Int
+  active: Boolean
+}
+
+"Fulfillment methods a shop offers. At least one of shipping and pickup is always on."
+type DeliverySettings {
+  shipping: Boolean!
+  pickup: Boolean!
+  "Shown to pickup buyers, e.g. Ask at the register. Open 7am to 3pm."
+  pickupInstructions: String
+}
+
+"Update keeps omitted fields. Turning off both shipping and pickup is rejected."
+input DeliverySettingsInput {
+  shipping: Boolean
+  pickup: Boolean
+  pickupInstructions: String
+}
+
+"Owner-editable shop profile. Empty strings clear the field."
+input ShopProfileInput {
+  "Shop bio shown on the shop page."
+  vibe: String
+  website: String
+}
+
+"A line on an order. Name and unitPrice are snapshots taken at purchase."
+type OrderItem {
+  productId: ID!
+  name: String!
+  qty: Int!
+  unitPrice: Float!
+}
+
+input OrderItemInput {
+  productId: ID!
+  qty: Int! = 1
+}
+
+"A purchase. Auto-accepted; sellers can cancel but never accept or decline."
+type Order implements Node {
+  id: ID!
+  "Sequential display number, e.g. 1279."
+  number: Int!
+  shopId: ID!
+  shop: CoffeeShop!
+  "Null when the buyer's account was deleted."
+  buyer: Reporter
+  items: [OrderItem!]!
+  total: Float!
+  status: OrderStatus!
+  fulfillment: Fulfillment!
+  "Null for pickup orders and once the order is canceled."
+  shipment: Shipment
+  createdAt: String!
+}
+
+"One package per order, created automatically when the order is placed."
+type Shipment implements Node {
+  id: ID!
+  orderId: ID!
+  order: Order!
+  carrier: String
+  tracking: String
+  "ISO date the package must ship by; two days after purchase."
+  shipBy: String
+  status: ShipmentStatus!
+  createdAt: String!
+  updatedAt: String!
+}
+
+"""
+A seller application: a user's request to be recognized as a shop's owner,
+reviewed by support. Approval grants Seller Hub access for that shop.
+"""
 type ShopClaim implements Node {
   id: ID!
   shopId: ID!
   shop: CoffeeShop!
   status: ClaimStatus!
+  "Applicant's role at the business, e.g. Owner, Manager."
+  businessRole: String
+  "Business email or phone support can use to verify."
+  contact: String
+  "Website or social profile that proves the affiliation."
+  website: String
   "Evidence for the claim, e.g. a link or how to verify."
   note: String
+  "Who applied. Null on records whose account was deleted."
+  applicant: Reporter
+  "Shops the applicant already owns, so support can fast-track a second location."
+  applicantOwnedShops: [CoffeeShop!]!
   createdAt: String!
   resolvedAt: String
+}
+
+"Seller application details submitted with claimShop."
+input SellerApplicationInput {
+  "Role at the business, e.g. Owner, Manager."
+  businessRole: String
+  "Business email or phone for verification."
+  contact: String
+  "Website or social profile proving the affiliation."
+  website: String
+  note: String
 }
 
 type Reporter {
@@ -353,8 +589,22 @@ type Query {
   userNode: User
   "Shops the signed-in viewer owns (approved claims)."
   myShops: [CoffeeShop!]!
+  "The viewer's seller account. Null when they own no shop."
+  mySeller: Seller
   "The signed-in viewer's ownership claims, newest first."
   myClaims: [ShopClaim!]!
+  "One product by id. Hidden products are visible only to the shop owner."
+  product(id: ID!): Product
+  "A shop's products including inactive ones, oldest first. Requires shop ownership. limit is capped at 100."
+  myProducts(shopId: ID!, status: ListingStatus, limit: Int! = 25, offset: Int! = 0): ProductPage!
+  "Per-status listing counts. Requires shop ownership."
+  myProductCounts(shopId: ID!): ProductCounts!
+  "Orders for one owned shop, or for every owned shop when shopId is omitted. Newest first. limit is capped at 100."
+  myOrders(shopId: ID, status: OrderStatus, limit: Int! = 25, offset: Int! = 0): OrderPage!
+  "Shipments for one owned shop, or for every owned shop when shopId is omitted. Soonest ship-by first. limit is capped at 100."
+  myShipments(shopId: ID, status: ShipmentStatus, limit: Int! = 25, offset: Int! = 0): ShipmentPage!
+  "Orders the signed-in viewer placed as a buyer, newest first."
+  myPurchases: [Order!]!
   "All unresolved claims, oldest first. Requires ADMIN."
   pendingClaims: [ShopClaim!]!
   "Type-ahead shop search on Google Places, biased to the Bay Area. Requires sign-in and GOOGLE_PLACES_API_KEY on the server."
@@ -392,10 +642,41 @@ type Mutation {
   importShopsFromYelp(location: String! = "San Francisco, CA"): [CoffeeShop!]!
   "Bulk-import coffee shops near a location from Google Places. Requires ADMIN and GOOGLE_PLACES_API_KEY on the server."
   importShopsFromGoogle(location: String! = "San Francisco, CA"): [CoffeeShop!]!
-  "Request ownership of a shop. Idempotent while a claim is pending. Requires sign-in."
-  claimShop(shopId: ID!, note: String): ShopClaim!
+  "Apply to be a shop's seller. Existing sellers apply the same way for each additional shop. Idempotent while a claim is pending. Requires sign-in. note alone is the legacy form; prefer application."
+  claimShop(shopId: ID!, note: String, application: SellerApplicationInput): ShopClaim!
   "Approve or reject a claim; approval sets the shop's owner. Requires ADMIN."
   resolveClaim(claimId: ID!, approve: Boolean!): ShopClaim!
+  "Add a product to a shop's storefront. Requires shop ownership."
+  createProduct(shopId: ID!, input: ProductInput!): Product!
+  "Update a product; omitted input fields keep their values. Requires shop ownership."
+  updateProduct(id: ID!, input: ProductInput!): Product!
+  "Remove a product. Order history keeps its name snapshots. Requires shop ownership."
+  deleteProduct(id: ID!): Boolean!
+  "Replace a listing's photos with this ordered list (max 6, ~700KB each). Photos not listed are deleted. Requires shop ownership."
+  setProductPhotos(productId: ID!, photos: [ProductPhotoInput!]!): Product!
+  """
+  Duplicate listings from one owned shop into another. Omit productIds to copy
+  every listing. Copies keep name, variant, price, threshold, and photos;
+  stock starts at 0 and the copy is hidden until the seller lists it.
+  Requires ownership of both shops.
+  """
+  copyProducts(fromShopId: ID!, toShopId: ID!, productIds: [ID!]): [Product!]!
+  "Set which fulfillment methods buyers can choose. Requires shop ownership."
+  updateDeliverySettings(shopId: ID!, input: DeliverySettingsInput!): CoffeeShop!
+  "Owner-editable public profile. Omitted input fields keep their values. Requires shop ownership."
+  updateShopProfile(shopId: ID!, input: ShopProfileInput!): CoffeeShop!
+  "Record that the owner finished the seller walkthrough. Idempotent. Requires shop ownership."
+  completeSellerOnboarding(shopId: ID!): CoffeeShop!
+  "Buy products. Auto-accepted; SHIP also creates the shipment with a 2-day ship-by. The shop must offer the chosen fulfillment. Requires sign-in."
+  placeOrder(shopId: ID!, items: [OrderItemInput!]!, fulfillment: Fulfillment = SHIP): Order!
+  "Cancel a PLACED or READY_FOR_PICKUP order, restocking its items. Buyer or shop owner."
+  cancelOrder(id: ID!): Order!
+  "Pickup order: PLACED to READY_FOR_PICKUP. Requires shop ownership."
+  markReadyForPickup(id: ID!): Order!
+  "Pickup order: READY_FOR_PICKUP to PICKED_UP. Requires shop ownership."
+  markPickedUp(id: ID!): Order!
+  "Set carrier, tracking, or status. IN_TRANSIT marks the order SHIPPED; DELIVERED marks it DELIVERED. Requires shop ownership."
+  updateShipment(id: ID!, carrier: String, tracking: String, status: ShipmentStatus): Shipment!
   "Remove a shop that is not a coffee shop. Cascades reports, photos, and claims. Requires ADMIN."
   deleteShop(id: ID!): Boolean!
   """

@@ -16,7 +16,7 @@ struct KnowYourCoffeeApp: App {
     var body: some Scene {
         WindowGroup {
             LaunchAnimation {
-                HomeView()
+                RootView()
             }
             .tint(.espresso700)
             .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme ?? nil)

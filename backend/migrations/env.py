@@ -1,8 +1,16 @@
 import os
+import sys
 from pathlib import Path
 
 from alembic import context
 from sqlalchemy import create_engine
+
+# Migrations are handwritten SQL, but exposing the model metadata lets
+# `alembic revision --autogenerate` draft them and flag drift.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from app.models import Base  # noqa: E402
+
+target_metadata = Base.metadata
 
 
 def _database_url() -> str:
@@ -21,7 +29,7 @@ def _database_url() -> str:
 
 
 def run_migrations_offline() -> None:
-    context.configure(url=_database_url(), literal_binds=True)
+    context.configure(url=_database_url(), literal_binds=True, target_metadata=target_metadata)
     with context.begin_transaction():
         context.run_migrations()
 
@@ -29,7 +37,7 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     engine = create_engine(_database_url())
     with engine.connect() as connection:
-        context.configure(connection=connection)
+        context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
             context.run_migrations()
 

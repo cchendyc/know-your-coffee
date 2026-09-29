@@ -9,6 +9,16 @@
   --color-espresso-900: #2b1d14;
   --color-crema-400: #d4a45f;
   --color-crema-500: #c08c3e;
+  /* Status colors as tokens so dark mode can re-skin them; raw Tailwind
+   * greens/ambers/reds stay light and glare in Dark Roast. */
+  --color-ok-100: #dcfce7;
+  --color-ok-700: #15803d;
+  --color-warn-100: #fef3c7;
+  --color-warn-700: #b45309;
+  --color-danger-100: #fee2e2;
+  --color-danger-200: #fecaca;
+  --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -28,6 +38,14 @@
   --color-espresso-900: #f4ede2;
   --color-crema-400: #e0a458;
   --color-crema-500: #e0a458;
+  --color-ok-100: #1e3826;
+  --color-ok-700: #7ed49a;
+  --color-warn-100: #3e2f13;
+  --color-warn-700: #e5b45a;
+  --color-danger-100: #44201c;
+  --color-danger-200: #5c2b25;
+  --color-danger-600: #f08a7e;
+  --color-danger-700: #f4a99f;
 }
 
 /*
@@ -41,6 +59,14 @@
 
 [data-theme='dark'] .bg-white\/90 {
   background-color: rgb(39 26 17 / 0.9);
+}
+
+[data-theme='dark'] .bg-white\/60 {
+  background-color: rgb(39 26 17 / 0.6);
+}
+
+[data-theme='dark'] .focus\:bg-white:focus {
+  background-color: #271a11;
 }
 
 body {

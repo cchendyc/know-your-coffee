@@ -297,6 +297,126 @@ struct ShopClaim: Codable, Identifiable, Hashable {
     let shop: ShopRef
 }
 
+// MARK: Seller hub
+
+// myShops slice for the hub; the full CoffeeShop payload is not needed.
+struct OwnedShop: Codable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let city: String
+}
+
+struct Product: Codable, Identifiable, Hashable {
+    let id: String
+    let shopId: String
+    var name: String
+    var variant: String?
+    var price: Double
+    var stockQty: Int
+    var lowStockThreshold: Int
+    var lowStock: Bool
+    var active: Bool
+    let createdAt: String
+    let updatedAt: String
+}
+
+// Name and unitPrice are purchase-time snapshots; deleting a product keeps history.
+struct OrderItem: Codable, Hashable {
+    let productId: String
+    let name: String
+    let qty: Int
+    let unitPrice: Double
+}
+
+// SHIP orders advance through their shipment; PICKUP orders through the pickup steps.
+enum OrderStatus: String, Codable, Hashable {
+    case placed = "PLACED"
+    case shipped = "SHIPPED"
+    case delivered = "DELIVERED"
+    case readyForPickup = "READY_FOR_PICKUP"
+    case pickedUp = "PICKED_UP"
+    case canceled = "CANCELED"
+}
+
+enum Fulfillment: String, Codable, Hashable {
+    case ship = "SHIP"
+    case pickup = "PICKUP"
+}
+
+enum ShipmentStatus: String, Codable, Hashable {
+    case labelReady = "LABEL_READY"
+    case readyForDropoff = "READY_FOR_DROPOFF"
+    case inTransit = "IN_TRANSIT"
+    case delivered = "DELIVERED"
+
+    var label: String {
+        switch self {
+        case .labelReady: "Label ready"
+        case .readyForDropoff: "Ready for dropoff"
+        case .inTransit: "In transit"
+        case .delivered: "Delivered"
+        }
+    }
+}
+
+struct Order: Codable, Identifiable, Hashable {
+    let id: String
+    let number: Int
+    var status: OrderStatus
+    let fulfillment: Fulfillment
+    let buyer: Reporter?
+    let items: [OrderItem]
+    let total: Double
+    let createdAt: String
+    var shipment: Shipment?
+
+    var itemsSummary: String {
+        items.map { "\($0.qty)× \($0.name)" }.joined(separator: " · ")
+    }
+
+    var isPickup: Bool { fulfillment == .pickup }
+
+    // A no-show pickup can still be canceled after it is packed.
+    var isCancelable: Bool { status == .placed || status == .readyForPickup }
+
+    // Shipped orders advance through their shipment, so only pickup has steps here.
+    var nextPickupStep: (status: OrderStatus, label: String)? {
+        guard isPickup else { return nil }
+        switch status {
+        case .placed: return (.readyForPickup, "Mark ready")
+        case .readyForPickup: return (.pickedUp, "Mark picked up")
+        default: return nil
+        }
+    }
+}
+
+struct Shipment: Codable, Identifiable, Hashable {
+    struct OrderRef: Codable, Hashable {
+        let number: Int
+        let buyer: Reporter?
+        let items: [OrderItem]
+    }
+
+    let id: String
+    let orderId: String
+    var carrier: String?
+    var tracking: String?
+    let shipBy: String? // ISO date
+    var status: ShipmentStatus
+    let createdAt: String
+    let order: OrderRef?
+
+    // One step at a time: print → dropoff → carrier scan → delivered.
+    var nextStep: (status: ShipmentStatus, label: String)? {
+        switch status {
+        case .labelReady: (.readyForDropoff, "Mark ready for dropoff")
+        case .readyForDropoff: (.inTransit, "Mark in transit")
+        case .inTransit: (.delivered, "Mark delivered")
+        case .delivered: nil
+        }
+    }
+}
+
 struct PlaceSuggestion: Codable, Identifiable, Hashable {
     let placeId: String
     let name: String

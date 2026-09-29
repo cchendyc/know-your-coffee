@@ -12,7 +12,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from app import settings
-from app.repository.util import norm_name
+from app.shops.text import norm_name
 
 if not settings.DATABASE_URL:
     print("DATABASE_URL is not set; dedup only applies to the Postgres store")

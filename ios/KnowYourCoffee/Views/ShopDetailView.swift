@@ -85,8 +85,7 @@ struct ShopDetailView: View {
             }
         }
         .sheet(isPresented: $showClaim) {
-            ClaimShopSheet(shop: shop)
-                .presentationDetents([.medium])
+            SellerApplicationFlow(shop: shop)
         }
         .sheet(isPresented: $showSignIn, onDismiss: {
             let action = pendingAction

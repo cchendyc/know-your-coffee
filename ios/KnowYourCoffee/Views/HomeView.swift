@@ -1,6 +1,12 @@
 import SwiftUI
 
 struct HomeView: View {
+    // Embedded = inside RootView's tab bar: the hamburger, profile sheet, and
+    // list/map toggle disappear (Map and You are tabs of their own).
+    var embedded = false
+    // Set for the Saved tab: pins the filter and swaps the tab strip for a title.
+    var pinnedList: ShopStore.ListFilter? = nil
+
     @State private var store = ShopStore()
     @State private var auth = AuthStore.shared
     @State private var selectedShop: CoffeeShop?
@@ -20,7 +26,7 @@ struct HomeView: View {
                 header
                 if let message = store.errorMessage {
                     errorBanner(message)
-                } else if store.viewMode == .list {
+                } else if store.viewMode == .list || embedded {
                     feed
                 } else {
                     ShopMapView(shops: store.shops) { selectedShop = $0 }
@@ -28,10 +34,14 @@ struct HomeView: View {
                 }
             }
 
-            modeToggle
-            addButton
+            if !embedded { modeToggle }
+            if pinnedList == nil { addButton }
         }
-        .task { store.reload(); await auth.refreshUser() }
+        .task {
+            if let pinnedList { store.list = pinnedList }
+            store.reload()
+            await auth.refreshUser()
+        }
         .fullScreenCover(item: $selectedShop) { shop in
             ShopDetailView(
                 summary: shop,
@@ -88,17 +98,28 @@ struct HomeView: View {
         HStack(spacing: 0) {
             // 44pt frames keep the HIG minimum hit target; alignment pins the
             // small glyphs to the screen edges so the layout doesn't shift.
-            Button {
-                showProfile = true
-            } label: {
-                profileIcon
-                    .frame(width: 44, height: 44, alignment: .leading)
-                    .contentShape(Rectangle())
+            if embedded {
+                // Profile lives in the You tab; a spacer keeps tabs centered.
+                Color.clear.frame(width: 44, height: 44)
+            } else {
+                Button {
+                    showProfile = true
+                } label: {
+                    profileIcon
+                        .frame(width: 44, height: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
 
             Spacer()
-            listTabs
+            if let pinnedList {
+                Text(pinnedList.label)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.ink)
+            } else {
+                listTabs
+            }
             Spacer()
 
             Button {

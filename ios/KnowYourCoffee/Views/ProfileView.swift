@@ -4,17 +4,21 @@ import SwiftUI
 // Profile sheet: real account when signed in (Google via ASWebAuthenticationSession),
 // sign-in call to action otherwise. Debug builds add a developer section.
 struct ProfileView: View {
+    // True when shown as the You tab: no Done button, and dismissal is a no-op.
+    var isTab = false
     let onEndpointChange: () -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var auth = AuthStore.shared
     @State private var me: User?
     @State private var claims: [ShopClaim] = []
+    @State private var ownedShops: [OwnedShop] = []
     @State private var error: String?
     @State private var versionTaps = 0
     @State private var showDeveloper = false
     @State private var confirmDeleteAccount = false
     @State private var deletingAccount = false
+    @State private var showBecomeSeller = false
     @AppStorage("appearance") private var appearanceRaw = AppAppearance.system.rawValue
 
     var body: some View {
@@ -24,11 +28,13 @@ struct ProfileView: View {
                     if let user = auth.user {
                         signedInHeader(user)
                         statsRow
+                        if !ownedShops.isEmpty { sellerHubSection } else { becomeSellerSection }
                         if !claims.isEmpty { claimsSection }
                         Button("Sign out", role: .destructive) {
                             auth.signOut()
                             me = nil
                             claims = []
+                            ownedShops = []
                         }
                         .font(.kycBodyBold)
                         .frame(minHeight: 44)
@@ -60,6 +66,7 @@ struct ProfileView: View {
                                 me = try? await CoffeeAPI.fetchMe()
                                 if let me { auth.apply(me) }
                                 claims = (try? await CoffeeAPI.fetchMyClaims()) ?? []
+                                ownedShops = (try? await CoffeeAPI.fetchMyShops()) ?? []
                             }
                         }
                     }
@@ -96,15 +103,21 @@ struct ProfileView: View {
             }
             .background(Color.cream50)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    ToolbarTextButton(label: "Done", weight: .semibold) { dismiss() }
+                if !isTab {
+                    ToolbarItem(placement: .confirmationAction) {
+                        ToolbarTextButton(label: "Done", weight: .semibold) { dismiss() }
+                    }
                 }
+            }
+            .sheet(isPresented: $showBecomeSeller) {
+                SellerApplicationFlow()
             }
             .task {
                 guard auth.isSignedIn else { return }
                 me = try? await CoffeeAPI.fetchMe()
                 if let me { auth.apply(me) }
                 claims = (try? await CoffeeAPI.fetchMyClaims()) ?? []
+                ownedShops = (try? await CoffeeAPI.fetchMyShops()) ?? []
             }
         }
     }
@@ -152,6 +165,74 @@ struct ProfileView: View {
         }
         .padding(.vertical, 14)
         .cardStyle()
+        .padding(.horizontal, 24)
+    }
+
+    // Verified owners only; buyer-only users never see this section.
+    private var sellerHubSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Seller Hub")
+                .font(.kycSection)
+                .foregroundStyle(Color.ink)
+            ForEach(ownedShops) { shop in
+                NavigationLink {
+                    SellerHubView(shop: shop)
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "storefront")
+                            .font(.system(size: 16))
+                            .foregroundStyle(Color.espresso700)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(shop.name)
+                                .font(.kycBody)
+                                .foregroundStyle(Color.ink)
+                            Text("Products, orders & shipments")
+                                .font(.kycSecondary)
+                                .foregroundStyle(Color.inkMuted)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.inkFaint)
+                    }
+                    .padding(12)
+                    .background(Color.surface, in: RoundedRectangle(cornerRadius: KYCRadius.control, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 24)
+    }
+
+    // Signed-in users with no owned shop: the general seller application
+    // entry — pick your shop, then apply. Not tied to browsing a shop page.
+    private var becomeSellerSection: some View {
+        Button {
+            showBecomeSeller = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "storefront")
+                    .font(.system(size: 16))
+                    .foregroundStyle(Color.espresso700)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Become a seller")
+                        .font(.kycBody)
+                        .foregroundStyle(Color.ink)
+                    Text("Run your shop here: products, orders, shipments")
+                        .font(.kycSecondary)
+                        .foregroundStyle(Color.inkMuted)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.inkFaint)
+            }
+            .padding(12)
+            .background(Color.surface, in: RoundedRectangle(cornerRadius: KYCRadius.control, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 24)
     }
 

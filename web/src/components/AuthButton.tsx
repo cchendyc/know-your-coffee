@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   fetchMyStats,
   signInWithEmail,
@@ -31,7 +32,19 @@ export function loadStoredUser(): User | null {
   return raw ? (JSON.parse(raw) as User) : null
 }
 
-export function AuthButton({ user, onChange }: { user: User | null; onChange: (u: User | null) => void }) {
+export function AuthButton({
+  user,
+  onChange,
+  isSeller = false,
+  onOpenSellerHub,
+  onBecomeSeller,
+}: {
+  user: User | null
+  onChange: (u: User | null) => void
+  isSeller?: boolean
+  onOpenSellerHub?: () => void
+  onBecomeSeller?: () => void
+}) {
   const buttonRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -66,7 +79,15 @@ export function AuthButton({ user, onChange }: { user: User | null; onChange: (u
   }, [user, onChange])
 
   if (user) {
-    return <ProfileMenu user={user} onSignOut={() => onChange(null)} />
+    return (
+      <ProfileMenu
+        user={user}
+        isSeller={isSeller}
+        onOpenSellerHub={onOpenSellerHub}
+        onBecomeSeller={onBecomeSeller}
+        onSignOut={() => onChange(null)}
+      />
+    )
   }
 
   return (
@@ -195,20 +216,38 @@ function EmailSignIn({ onChange }: { onChange: (u: User | null) => void }) {
   )
 }
 
-function ProfileMenu({ user, onSignOut }: { user: User; onSignOut: () => void }) {
+function ProfileMenu({
+  user,
+  isSeller,
+  onOpenSellerHub,
+  onBecomeSeller,
+  onSignOut,
+}: {
+  user: User
+  isSeller: boolean
+  onOpenSellerHub?: () => void
+  onBecomeSeller?: () => void
+  onSignOut: () => void
+}) {
   const [open, setOpen] = useState(false)
   const [stats, setStats] = useState<{ savedCount: number; beenCount: number } | null>(null)
 
   useEffect(() => {
-    if (open) fetchMyStats().then(setStats).catch(() => setStats(null))
+    if (!open) return
+    fetchMyStats().then(setStats).catch(() => setStats(null))
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   }, [open])
 
   return (
-    <div className="relative">
+    <div>
       <button
         onClick={() => setOpen((o) => !o)}
         aria-label="Profile"
-        className="flex items-center gap-2 rounded-full transition hover:opacity-80"
+        className={`flex items-center gap-2 rounded-full transition duration-200 hover:opacity-80 ${
+          open ? 'pointer-events-none scale-75 opacity-0' : ''
+        }`}
       >
         {user.picture ? (
           <img src={user.picture} alt="" className="size-9 rounded-full ring-2 ring-crema-400/50" referrerPolicy="no-referrer" />
@@ -219,13 +258,38 @@ function ProfileMenu({ user, onSignOut }: { user: User; onSignOut: () => void })
         )}
       </button>
 
-      {open && (
+      {createPortal(
+        // Portaled: the header's backdrop-blur would otherwise contain these fixed layers.
         <>
-          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-30 mt-2 w-60 rounded-2xl border border-cream-200 bg-white p-4 shadow-lg">
-            <p className="text-sm font-semibold">{user.name}</p>
-            <p className="truncate text-xs text-espresso-500">{user.email ?? user.phone}</p>
-            <div className="mt-3 flex gap-2">
+          {open && <div onClick={() => setOpen(false)} className="fixed inset-0 z-40" />}
+          {/* Always mounted so the panel can slide in and out. */}
+          <aside
+            aria-hidden={!open}
+            className={`fixed inset-y-0 right-0 z-50 flex w-80 max-w-[85vw] flex-col border-l border-cream-200 bg-white p-5 shadow-xl transition-transform duration-200 ${
+              open ? 'translate-x-0' : 'pointer-events-none translate-x-full'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              {user.picture ? (
+                <img src={user.picture} alt="" className="size-11 rounded-full" referrerPolicy="no-referrer" />
+              ) : (
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-espresso-700 font-semibold text-cream-50">
+                  {user.name[0]}
+                </span>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold">{user.name}</p>
+                <p className="truncate text-xs text-espresso-500">{user.email ?? user.phone}</p>
+              </div>
+              <button
+                onClick={() => setOpen(false)}
+                aria-label="Close"
+                className="rounded-lg px-2 py-1 text-espresso-500 hover:text-espresso-900"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="mt-5 flex gap-2">
               <div className="flex-1 rounded-xl bg-cream-100 px-3 py-2 text-center">
                 <p className="text-lg font-bold">{stats ? stats.savedCount : '·'}</p>
                 <p className="text-[11px] text-espresso-500">Saved</p>
@@ -235,6 +299,33 @@ function ProfileMenu({ user, onSignOut }: { user: User; onSignOut: () => void })
                 <p className="text-[11px] text-espresso-500">Been</p>
               </div>
             </div>
+            {isSeller ? (
+              <button
+                onClick={() => {
+                  setOpen(false)
+                  onOpenSellerHub?.()
+                }}
+                className="mt-3 flex w-full items-center gap-2.5 rounded-xl bg-espresso-700 px-3 py-2.5 text-left text-xs font-semibold text-cream-50 transition hover:bg-espresso-900"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-4">
+                  <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4ZM3 6h18M16 10a4 4 0 0 1-8 0" />
+                </svg>
+                Seller Hub
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  setOpen(false)
+                  onBecomeSeller?.()
+                }}
+                className="mt-3 flex w-full items-center gap-2.5 rounded-xl border border-cream-200 px-3 py-2.5 text-left text-xs font-medium text-espresso-700 transition hover:border-crema-400"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-4">
+                  <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4ZM3 6h18M16 10a4 4 0 0 1-8 0" />
+                </svg>
+                Become a seller
+              </button>
+            )}
             <button
               onClick={() => {
                 localStorage.removeItem(TOKEN_KEY)
@@ -242,12 +333,13 @@ function ProfileMenu({ user, onSignOut }: { user: User; onSignOut: () => void })
                 setOpen(false)
                 onSignOut()
               }}
-              className="mt-3 w-full rounded-xl border border-cream-200 py-2 text-xs font-medium text-espresso-500 transition hover:border-crema-400 hover:text-espresso-900"
+              className="mt-auto w-full rounded-xl border border-cream-200 py-2 text-xs font-medium text-espresso-500 transition hover:border-crema-400 hover:text-espresso-900"
             >
               Sign out
             </button>
-          </div>
-        </>
+          </aside>
+        </>,
+        document.body,
       )}
     </div>
   )

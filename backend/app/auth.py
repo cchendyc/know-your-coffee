@@ -54,6 +54,10 @@ def verify_session_token(token: str | None) -> SessionUser | None:
         return None
     if data.get("exp", 0) < time.time():
         return None
+    # Pre-bigint-migration tokens carry UUID ids; treat them as signed out
+    # so clients re-authenticate instead of erroring on every query.
+    if not str(data.get("id", "")).isdigit():
+        return None
     return {"id": data["id"], "name": data["name"], "email": data.get("email"), "picture": data.get("picture")}
 
 

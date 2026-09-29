@@ -7,8 +7,23 @@ import re
 import httpx
 from graphql import GraphQLError
 
+from typing import TypedDict
+
 from .. import settings
-from ..models import MACHINE_BRANDS, DrinkItem, MachineGuess
+from ..models.enums import MACHINE_BRANDS
+
+
+# What machine a photo probably shows.
+class MachineGuess(TypedDict):
+    machine: str
+    machine_model: str | None
+    confidence: float
+    notes: str | None
+
+
+class DrinkItem(TypedDict):
+    name: str
+    price: float | None
 
 _GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent"
 _DATA_URL_RE = re.compile(r"^data:(image/[a-z+]+);base64,(.*)$", re.S)
@@ -42,7 +57,7 @@ async def identify_machine(image_base64: str) -> MachineGuess:
     if not settings.GEMINI_API_KEY:
         return {
             "machine": "UNKNOWN",
-            "machineModel": None,
+            "machine_model": None,
             "confidence": 0.0,
             "notes": "Photo recognition is not configured yet (server is missing GEMINI_API_KEY). Enter the machine manually.",
         }
@@ -57,7 +72,7 @@ async def identify_machine(image_base64: str) -> MachineGuess:
     brand = parsed.get("brand")
     return {
         "machine": brand if brand in MACHINE_BRANDS else "UNKNOWN",
-        "machineModel": parsed.get("model"),
+        "machine_model": parsed.get("model"),
         "confidence": max(0.0, min(1.0, float(parsed.get("confidence") or 0))),
         "notes": parsed.get("notes"),
     }

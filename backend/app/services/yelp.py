@@ -4,7 +4,7 @@ import httpx
 from graphql import GraphQLError
 
 from .. import settings
-from ..models import NewShop
+from ..shops.records import NewShop
 
 
 async def fetch_shops_from_yelp(location: str) -> list[NewShop]:
@@ -32,15 +32,15 @@ async def fetch_shops_from_yelp(location: str) -> list[NewShop]:
                 "lat": b["coordinates"]["latitude"],
                 "lng": b["coordinates"]["longitude"],
                 "machine": "UNKNOWN",
-                "machineModel": None,
-                "beanSource": "UNKNOWN",
+                "machine_model": None,
+                "bean_source": "UNKNOWN",
                 "roaster": None,
-                "beanOrigins": [],
+                "bean_origins": [],
                 "grinders": [],
                 "drinks": [],
-                "milkBrands": [],
+                "milk_brands": [],
                 "vibe": None,
-                "photoUrl": None,
+                "photo_url": None,
                 "website": None,
             }
         )

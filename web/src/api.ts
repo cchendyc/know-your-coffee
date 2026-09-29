@@ -154,11 +154,20 @@ export interface CoffeeShop {
   photoCount?: number
   reports?: Report[]
   reportCount?: number
+  owner?: { name: string; picture: string | null } | null
+  deliverySettings?: DeliverySettings
+  sellerOnboarded?: boolean
   chain?: {
     id: string
     name: string
     shops: ChainLocation[]
   } | null
+}
+
+export interface DeliverySettings {
+  shipping: boolean
+  pickup: boolean
+  pickupInstructions: string | null
 }
 
 export interface MachineGuess {
@@ -193,7 +202,7 @@ export const USER_KEY = 'kyc_user'
 // In production the API lives on another host (e.g. Render); locally Vite proxies /graphql.
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.trim() || '/graphql'
 
-async function gql<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
+export async function gql<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
   const token = localStorage.getItem(TOKEN_KEY)
   const res = await fetch(API_URL, {
     method: 'POST',
@@ -288,6 +297,7 @@ export function fetchShop(id: string) {
         ${SHOP_FIELDS}
         photoCount
         reportCount
+        owner { name picture }
         photos { id kind data createdAt uploader { name picture } }
         reports { ${REPORT_FIELDS} }
         chain { id name shops { id name address city } }
@@ -429,4 +439,269 @@ export function deleteShop(id: string) {
     `mutation DeleteShop($id: ID!) { deleteShop(id: $id) }`,
     { id },
   ).then((d) => d.deleteShop)
+}
+
+// MARK: Seller application
+
+export interface SellerApplicationInput {
+  businessRole?: string
+  contact?: string
+  website?: string
+  note?: string
+}
+
+// Support reviews applications in the admin console; approval grants Seller Hub access.
+export function claimShop(shopId: string, application: SellerApplicationInput) {
+  return gql<{ claimShop: { id: string; status: 'PENDING' | 'APPROVED' | 'REJECTED' } }>(
+    `mutation Claim($shopId: ID!, $application: SellerApplicationInput) {
+      claimShop(shopId: $shopId, application: $application) { id status }
+    }`,
+    { shopId, application },
+  ).then((d) => d.claimShop)
+}
+
+// MARK: Seller hub
+
+export type OrderStatus = 'PLACED' | 'SHIPPED' | 'DELIVERED' | 'READY_FOR_PICKUP' | 'PICKED_UP' | 'CANCELED'
+export type Fulfillment = 'SHIP' | 'PICKUP'
+export type ShipmentStatus = 'LABEL_READY' | 'READY_FOR_DROPOFF' | 'IN_TRANSIT' | 'DELIVERED'
+
+export type ListingStatus = 'IN_STOCK' | 'LOW_STOCK' | 'HIDDEN'
+
+export interface ProductCounts {
+  total: number
+  inStock: number
+  lowStock: number
+  hidden: number
+}
+
+export interface Product {
+  id: string
+  shopId: string
+  name: string
+  variant: string | null
+  price: number
+  stockQty: number
+  lowStockThreshold: number
+  lowStock: boolean
+  active: boolean
+  status: ListingStatus
+  coverPhoto: ProductPhoto | null
+  photos?: ProductPhoto[] // fetchProduct only; each is a whole data URL
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ProductPhoto {
+  id: string
+  data: string
+  position: number
+}
+
+export const MAX_PRODUCT_PHOTOS = 6
+
+export interface ProductInput {
+  name?: string
+  variant?: string | null
+  price?: number
+  stockQty?: number
+  lowStockThreshold?: number
+  active?: boolean
+}
+
+export interface OrderItem {
+  productId: string
+  name: string
+  qty: number
+  unitPrice: number
+}
+
+export interface Order {
+  id: string
+  number: number
+  status: OrderStatus
+  fulfillment: Fulfillment
+  buyer: { name: string; picture: string | null } | null
+  items: OrderItem[]
+  total: number
+  createdAt: string
+  shipment: Shipment | null
+}
+
+export interface Shipment {
+  id: string
+  orderId: string
+  carrier: string | null
+  tracking: string | null
+  shipBy: string | null
+  status: ShipmentStatus
+  createdAt: string
+  order?: { number: number; buyer: { name: string } | null; items: OrderItem[] }
+}
+
+const PRODUCT_FIELDS = `id shopId name variant price stockQty lowStockThreshold lowStock active status coverPhoto { id data position } createdAt updatedAt`
+const ORDER_FIELDS = `id number status fulfillment buyer { name picture } items { productId name qty unitPrice } total createdAt
+  shipment { id orderId carrier tracking shipBy status createdAt }`
+
+// Shops the viewer owns; drives the Seller Hub entry and shop switcher.
+export function fetchMyShops() {
+  return gql<{ myShops: { id: string; name: string; city: string }[] }>(
+    `query MyShops { myShops { id name city } }`,
+  ).then((d) => d.myShops)
+}
+
+// Hub payload: the full shop plus seller-only extras (delivery settings, owner).
+export function fetchSellerShop(id: string) {
+  return gql<{ shop: CoffeeShop | null }>(
+    `query SellerShop($id: ID!) {
+      shop(id: $id) {
+        ${SHOP_FIELDS}
+        owner { name picture }
+        deliverySettings { shipping pickup pickupInstructions }
+        sellerOnboarded
+      }
+    }`,
+    { id },
+  ).then((d) => d.shop)
+}
+
+export function completeSellerOnboarding(shopId: string) {
+  return gql<{ completeSellerOnboarding: { id: string; sellerOnboarded: boolean } }>(
+    `mutation CompleteOnboarding($shopId: ID!) {
+      completeSellerOnboarding(shopId: $shopId) { id sellerOnboarded }
+    }`,
+    { shopId },
+  ).then((d) => d.completeSellerOnboarding)
+}
+
+export function updateShopProfile(shopId: string, input: { vibe?: string; website?: string }) {
+  return gql<{ updateShopProfile: CoffeeShop }>(
+    `mutation UpdateShopProfile($shopId: ID!, $input: ShopProfileInput!) {
+      updateShopProfile(shopId: $shopId, input: $input) { ${SHOP_FIELDS} }
+    }`,
+    { shopId, input },
+  ).then((d) => d.updateShopProfile)
+}
+
+export function updateDeliverySettings(
+  shopId: string,
+  input: { shipping?: boolean; pickup?: boolean; pickupInstructions?: string | null },
+) {
+  return gql<{ updateDeliverySettings: CoffeeShop }>(
+    `mutation UpdateDelivery($shopId: ID!, $input: DeliverySettingsInput!) {
+      updateDeliverySettings(shopId: $shopId, input: $input) {
+        id
+        deliverySettings { shipping pickup pickupInstructions }
+      }
+    }`,
+    { shopId, input },
+  ).then((d) => d.updateDeliverySettings)
+}
+
+export function fetchMyProducts(shopId: string, status?: ListingStatus) {
+  return gql<{ myProducts: Product[]; myProductCounts: ProductCounts }>(
+    `query MyProducts($shopId: ID!, $status: ListingStatus) {
+      myProducts(shopId: $shopId, status: $status) { ${PRODUCT_FIELDS} }
+      myProductCounts(shopId: $shopId) { total inStock lowStock hidden }
+    }`,
+    { shopId, status: status ?? null },
+  )
+}
+
+export function fetchMyOrders(shopId: string) {
+  return gql<{ myOrders: Order[] }>(
+    `query MyOrders($shopId: ID!) { myOrders(shopId: $shopId) { ${ORDER_FIELDS} } }`,
+    { shopId },
+  ).then((d) => d.myOrders)
+}
+
+export function fetchMyShipments(shopId: string) {
+  return gql<{ myShipments: Shipment[] }>(
+    `query MyShipments($shopId: ID!) {
+      myShipments(shopId: $shopId) {
+        id orderId carrier tracking shipBy status createdAt
+        order { number buyer { name } items { productId name qty unitPrice } }
+      }
+    }`,
+    { shopId },
+  ).then((d) => d.myShipments)
+}
+
+export function createProduct(shopId: string, input: ProductInput) {
+  return gql<{ createProduct: Product }>(
+    `mutation CreateProduct($shopId: ID!, $input: ProductInput!) {
+      createProduct(shopId: $shopId, input: $input) { ${PRODUCT_FIELDS} }
+    }`,
+    { shopId, input },
+  ).then((d) => d.createProduct)
+}
+
+export function updateProduct(id: string, input: ProductInput) {
+  return gql<{ updateProduct: Product }>(
+    `mutation UpdateProduct($id: ID!, $input: ProductInput!) {
+      updateProduct(id: $id, input: $input) { ${PRODUCT_FIELDS} }
+    }`,
+    { id, input },
+  ).then((d) => d.updateProduct)
+}
+
+export function deleteProduct(id: string) {
+  return gql<{ deleteProduct: boolean }>(
+    `mutation DeleteProduct($id: ID!) { deleteProduct(id: $id) }`,
+    { id },
+  ).then((d) => d.deleteProduct)
+}
+
+// One listing with every photo; the editor's initial load.
+export function fetchProduct(id: string) {
+  return gql<{ product: Product | null }>(
+    `query Product($id: ID!) { product(id: $id) { ${PRODUCT_FIELDS} photos { id data position } } }`,
+    { id },
+  ).then((d) => d.product)
+}
+
+// Final ordered list: {id} keeps an existing photo, {data} uploads a new one.
+export function setProductPhotos(productId: string, photos: { id?: string; data?: string }[]) {
+  return gql<{ setProductPhotos: Product }>(
+    `mutation SetProductPhotos($productId: ID!, $photos: [ProductPhotoInput!]!) {
+      setProductPhotos(productId: $productId, photos: $photos) { ${PRODUCT_FIELDS} }
+    }`,
+    { productId, photos },
+  ).then((d) => d.setProductPhotos)
+}
+
+export function cancelOrder(id: string) {
+  return gql<{ cancelOrder: Order }>(
+    `mutation CancelOrder($id: ID!) { cancelOrder(id: $id) { ${ORDER_FIELDS} } }`,
+    { id },
+  ).then((d) => d.cancelOrder)
+}
+
+export function markReadyForPickup(id: string) {
+  return gql<{ markReadyForPickup: Order }>(
+    `mutation MarkReadyForPickup($id: ID!) { markReadyForPickup(id: $id) { ${ORDER_FIELDS} } }`,
+    { id },
+  ).then((d) => d.markReadyForPickup)
+}
+
+export function markPickedUp(id: string) {
+  return gql<{ markPickedUp: Order }>(
+    `mutation MarkPickedUp($id: ID!) { markPickedUp(id: $id) { ${ORDER_FIELDS} } }`,
+    { id },
+  ).then((d) => d.markPickedUp)
+}
+
+export function updateShipment(
+  id: string,
+  patch: { carrier?: string; tracking?: string; status?: ShipmentStatus },
+) {
+  return gql<{ updateShipment: Shipment }>(
+    `mutation UpdateShipment($id: ID!, $carrier: String, $tracking: String, $status: ShipmentStatus) {
+      updateShipment(id: $id, carrier: $carrier, tracking: $tracking, status: $status) {
+        id orderId carrier tracking shipBy status createdAt
+        order { number buyer { name } items { productId name qty unitPrice } }
+      }
+    }`,
+    { id, carrier: patch.carrier ?? null, tracking: patch.tracking ?? null, status: patch.status ?? null },
+  ).then((d) => d.updateShipment)
 }

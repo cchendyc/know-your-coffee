@@ -3,10 +3,7 @@ import unicodedata
 from collections import defaultdict
 from urllib.parse import urlparse
 
-from ..models import Coffee
-
-
-def norm_coffees(raw: list[dict] | None) -> list[Coffee]:
+def norm_coffees(raw: list[dict] | None) -> list[dict]:
     """Coffee entries arrive sparse (jsonb or GraphQL input); fill the keys
     the schema requires as non-null lists."""
     return [
@@ -37,19 +34,20 @@ _STOPWORDS = {
     "friendly", "seating", "milk",
 }
 
-# Boolean amenities have no text to match; these tokens become filters.
+# Boolean amenities have no text to match; these tokens become filters on
+# the named shops column.
 _AMENITY_TOKENS = {
-    "dog": "dogFriendly", "dogs": "dogFriendly", "pet": "dogFriendly", "pets": "dogFriendly",
-    "pup": "dogFriendly", "puppy": "dogFriendly",
+    "dog": "dog_friendly", "dogs": "dog_friendly", "pet": "dog_friendly", "pets": "dog_friendly",
+    "pup": "dog_friendly", "puppy": "dog_friendly",
     "wifi": "wifi", "internet": "wifi", "laptop": "wifi",
-    "outdoor": "outdoorSeating", "outdoors": "outdoorSeating", "outside": "outdoorSeating",
-    "patio": "outdoorSeating", "terrace": "outdoorSeating",
+    "outdoor": "outdoor_seating", "outdoors": "outdoor_seating", "outside": "outdoor_seating",
+    "patio": "outdoor_seating", "terrace": "outdoor_seating",
 }
 
 
 def split_search(query: str) -> tuple[list[str], dict[str, bool]]:
     """Splits a free-form query into text tokens that must all match and
-    amenity requirements ("dog friendly" -> dogFriendly=True). Falls back to
+    amenity requirements ("dog friendly" -> dog_friendly=True). Falls back to
     every word when the query is nothing but stopwords."""
     words = [w for w in re.split(r"[^a-z0-9]+", query.lower()) if w]
     tokens: list[str] = []

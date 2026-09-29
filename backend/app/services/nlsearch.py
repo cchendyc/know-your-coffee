@@ -6,7 +6,7 @@ import json
 import httpx
 
 from .. import settings
-from ..models import MACHINE_BRANDS
+from ..models.enums import MACHINE_BRANDS
 
 _GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent"
 

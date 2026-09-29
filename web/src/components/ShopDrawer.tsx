@@ -58,6 +58,7 @@ export function ShopDrawer({
   shopId,
   initialShop,
   user,
+  isSeller = false,
   onShopChanged,
   onShopDeleted,
   onOpenShop,
@@ -67,6 +68,8 @@ export function ShopDrawer({
   // The list's copy of this shop, so the drawer paints instantly.
   initialShop?: CoffeeShop
   user: User | null
+  // Viewer already owns a shop; claim copy reads "add another" instead of "become a seller".
+  isSeller?: boolean
   onShopChanged: (shop: CoffeeShop) => void
   onShopDeleted: (id: string) => void
   onOpenShop: (id: string) => void
@@ -359,6 +362,7 @@ export function ShopDrawer({
         <ShopExpanded
           shop={shop}
           user={user}
+          isSeller={isSeller}
           initialReporting={reportOnExpand}
           onChanged={onStatusChanged}
           onDeleted={onShopDeleted}

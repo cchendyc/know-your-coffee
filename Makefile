@@ -1,15 +1,24 @@
-# Local development. Run `make dev-backend` and `make dev-web` in two terminals.
+# Local development. `make start` brings up the API; `make dev-web` in a second terminal.
+# backend/ and web/ have their own Makefiles; these targets delegate to them.
 
-.PHONY: dev-backend dev-web migrate
+.PHONY: start stop dev-backend dev-web dev-admin migrate
 
-# API on :4000 with reload. Uses backend/.env (Neon DATABASE_URL or in-memory fallback).
-dev-backend:
-	cd backend && .venv/bin/uvicorn app.main:app --port 4000 --reload
+start:
+	$(MAKE) -C backend start
 
-# Vite on :5173, proxying /graphql to :4000.
+stop:
+	$(MAKE) -C backend stop
+	$(MAKE) -C web stop
+	$(MAKE) -C admin stop
+
+dev-backend: start
+
 dev-web:
-	cd web && npm run dev
+	$(MAKE) -C web start
 
-# Apply pending Alembic migrations to DATABASE_URL from backend/.env.
+# Support console on :5174 (seller application review). Admin accounts only.
+dev-admin:
+	$(MAKE) -C admin start
+
 migrate:
-	cd backend && .venv/bin/alembic upgrade head
+	$(MAKE) -C backend migrate

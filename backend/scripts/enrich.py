@@ -10,7 +10,7 @@ import asyncio
 import re
 import sys
 
-from app.repository import create_repository
+from app.core.repositories import create_repositories
 from app.services.google import fetch_google_reviews
 from app.services.yelp import fetch_yelp_reviews
 
@@ -58,7 +58,7 @@ ROASTER_SUFFIX = re.compile(r"\s*(coffee\s*)?(roasters?|roastery|roasting)( co\.
 # one because reviewers complain more precisely than they praise.
 AMENITY_PATTERNS = [
     (
-        "dogFriendly",
+        "dog_friendly",
         re.compile(r"no dogs|dogs? (are )?not (allowed|welcome)", re.I),
         re.compile(r"dog[- ]friendly|dogs? (are )?(allowed|welcome)|pup[- ]?friendly|brought (my|our) dog", re.I),
     ),
@@ -68,7 +68,7 @@ AMENITY_PATTERNS = [
         re.compile(r"\bwi[- ]?fi\b", re.I),
     ),
     (
-        "outdoorSeating",
+        "outdoor_seating",
         re.compile(r"no (outdoor|outside|patio) seating", re.I),
         re.compile(r"outdoor seating|patio|parklet|sidewalk (tables?|seating)|seating outside", re.I),
     ),
@@ -87,18 +87,18 @@ def extract(shop_name: str, texts: list[str], summary: str | None) -> dict:
     # the shop itself, which means they roast in-house.
     mentioned = next((r for r in KNOWN_ROASTERS if re.search(re.escape(r), all_text, re.I)), None)
     if mentioned and mentioned.lower() in shop_name.lower():
-        patch["beanSource"] = "IN_HOUSE_ROAST"
+        patch["bean_source"] = "IN_HOUSE_ROAST"
         patch["roaster"] = mentioned
     elif re.search(r"roaster|roastery|roasting", shop_name, re.I) or IN_HOUSE.search(all_text):
-        patch["beanSource"] = "IN_HOUSE_ROAST"
+        patch["bean_source"] = "IN_HOUSE_ROAST"
         patch["roaster"] = ROASTER_SUFFIX.sub("", shop_name).strip() or None
     elif mentioned:
-        patch["beanSource"] = "LOCAL_ROASTER"
+        patch["bean_source"] = "LOCAL_ROASTER"
         patch["roaster"] = mentioned
 
     milk = [brand for brand, pattern in MILK_BRAND_PATTERNS if pattern.search(all_text)]
     if milk:
-        patch["milkBrands"] = milk
+        patch["milk_brands"] = milk
 
     for field, negative, positive in AMENITY_PATTERNS:
         if negative.search(all_text):
@@ -113,17 +113,17 @@ def extract(shop_name: str, texts: list[str], summary: str | None) -> dict:
 
 async def main() -> None:
     max_shops = int(sys.argv[1]) if len(sys.argv) > 1 else None
-    repo = create_repository()
-    shops, _total = repo.list_shops({"limit": 10_000})
+    repos = create_repositories()
+    shops, _total = repos.shops.list({"limit": 10_000})
     shops = [
         s
         for s in shops
-        if s["machine"] == "UNKNOWN"
-        or not s["roaster"]
-        or not s["vibe"]
-        or s["dogFriendly"] is None
-        or s["wifi"] is None
-        or s["outdoorSeating"] is None
+        if s.machine == "UNKNOWN"
+        or not s.roaster
+        or not s.vibe
+        or s.dog_friendly is None
+        or s.wifi is None
+        or s.outdoor_seating is None
     ]
     print(f"{len(shops)} shops need enrichment; processing up to {max_shops or 'all'}")
 
@@ -131,16 +131,16 @@ async def main() -> None:
     for shop in shops[:max_shops]:
         try:
             yelp, google = await asyncio.gather(
-                fetch_yelp_reviews(shop["name"], shop["address"], shop["city"]),
-                fetch_google_reviews(shop["name"], shop["address"], shop["city"]),
+                fetch_yelp_reviews(shop.name, shop.address, shop.city),
+                fetch_google_reviews(shop.name, shop.address, shop.city),
             )
-            patch = extract(shop["name"], [*google["reviews"], *yelp], google["summary"])
+            patch = extract(shop.name, [*google["reviews"], *yelp], google["summary"])
             if any(v for v in patch.values()):
-                repo.enrich_shop(shop["id"], patch)
+                repos.shops.enrich(str(shop.id), patch)
                 enriched += 1
                 print(
-                    f"{shop['name']} ({shop['city']}): machine={patch.get('machine', '-')} "
-                    f"roaster={patch.get('roaster', '-')} milk={'/'.join(patch.get('milkBrands', [])) or '-'} "
+                    f"{shop.name} ({shop.city}): machine={patch.get('machine', '-')} "
+                    f"roaster={patch.get('roaster', '-')} milk={'/'.join(patch.get('milk_brands', [])) or '-'} "
                     f"vibe={'yes' if patch.get('vibe') else '-'}"
                 )
             else:
@@ -148,7 +148,7 @@ async def main() -> None:
             await asyncio.sleep(0.25)  # light pacing for the Yelp/Google APIs
         except Exception as e:  # noqa: BLE001 — one bad shop must not stop the run
             failed += 1
-            print(f"{shop['name']}: failed ({str(e)[:150]})")
+            print(f"{shop.name}: failed ({str(e)[:150]})")
 
     print(f"done: {enriched} enriched, {skipped} skipped (nothing found), {failed} failed")
 

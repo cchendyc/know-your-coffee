@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { deleteShop, fetchShop, isAdmin, type CoffeeShop, type User } from '../api'
 import { AMENITIES, BEAN_SOURCE_LABELS, coffeePills, machineDisplay, PHOTO_KIND_LABELS } from '../labels'
 import { ChainLocations } from './ChainLocations'
+import { SellerApplicationModal } from './SellerApplication'
 import { QuickConfirm, buildConfirmFacts } from './QuickConfirm'
 import { ReportForm } from './ReportForm'
 import { ReportList } from './ReportList'
@@ -50,7 +51,9 @@ export function ShopExpanded({
   onOpenShop: (id: string) => void
   onClose: () => void
 }) {
-  const [modal, setModal] = useState<'none' | 'report' | 'confirm' | 'delete'>(initialReporting ? 'report' : 'none')
+  const [modal, setModal] = useState<'none' | 'report' | 'confirm' | 'delete' | 'claim'>(
+    initialReporting ? 'report' : 'none',
+  )
   const [allDrinks, setAllDrinks] = useState(false)
   const [loadingDetails, setLoadingDetails] = useState(true)
   const [deleting, setDeleting] = useState(false)
@@ -163,7 +166,32 @@ export function ShopExpanded({
               Shop website ↗
             </a>
           )}
+          {user && !shop.owner && (
+            <button
+              type="button"
+              onClick={() => setModal('claim')}
+              className="ml-auto text-xs font-medium text-crema-500 hover:underline"
+            >
+              Own this shop? Become a seller
+            </button>
+          )}
         </div>
+
+        {shop.owner && (
+          <div className="mt-4 flex items-center gap-3 rounded-2xl border border-cream-200 bg-white px-4 py-3">
+            {shop.owner.picture ? (
+              <img src={shop.owner.picture} alt="" className="size-10 rounded-full" referrerPolicy="no-referrer" />
+            ) : (
+              <span className="flex size-10 items-center justify-center rounded-full bg-espresso-700 text-sm font-semibold text-cream-50">
+                {shop.owner.name[0]}
+              </span>
+            )}
+            <div>
+              <p className="text-sm font-semibold">{shop.owner.name}</p>
+              <p className="text-[11px] font-medium text-ok-700">✓ Verified owner</p>
+            </div>
+          </div>
+        )}
 
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <SectionCard title="Gear">
@@ -349,6 +377,7 @@ export function ShopExpanded({
           />
         </Modal>
       )}
+      {modal === 'claim' && <SellerApplicationModal shop={shop} onClose={() => setModal('none')} />}
       {modal === 'delete' && (
         <Modal onClose={() => setModal('none')}>
           <h3 className="text-lg font-bold tracking-tight">Delete {shop.name}?</h3>
