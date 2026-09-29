@@ -614,17 +614,40 @@ export function fetchMyProducts(shopId: string, status?: ListingStatus, offset =
   )
 }
 
+export interface SellerWorkload {
+  toFulfill: number
+  toShip: number
+  lowStock: number
+}
+
+const WORKLOAD = `shop(id: $shopId) { workload { toFulfill toShip lowStock } }`
+
+// Overview cards: counts only, no rows.
+export function fetchHubStats(shopId: string) {
+  return gql<{ shop: { workload: SellerWorkload | null } | null; myProductCounts: ProductCounts }>(
+    `query HubStats($shopId: ID!) {
+      ${WORKLOAD}
+      myProductCounts(shopId: $shopId) { total inStock lowStock hidden }
+    }`,
+    { shopId },
+  ).then((d) => ({ workload: d.shop?.workload ?? null, counts: d.myProductCounts }))
+}
+
 export function fetchMyOrders(shopId: string, offset = 0) {
-  return gql<{ myOrders: { orders: Order[]; total: number } }>(
+  return gql<{ myOrders: { orders: Order[]; total: number }; shop: { workload: SellerWorkload | null } | null }>(
     `query MyOrders($shopId: ID!, $limit: Int!, $offset: Int!) {
       myOrders(shopId: $shopId, limit: $limit, offset: $offset) { orders { ${ORDER_FIELDS} } total }
+      ${WORKLOAD}
     }`,
     { shopId, limit: SELLER_PAGE_SIZE, offset },
-  ).then((d) => d.myOrders)
+  ).then((d) => ({ ...d.myOrders, workload: d.shop?.workload ?? null }))
 }
 
 export function fetchMyShipments(shopId: string, status?: ShipmentStatus, offset = 0) {
-  return gql<{ myShipments: { shipments: Shipment[]; total: number } }>(
+  return gql<{
+    myShipments: { shipments: Shipment[]; total: number }
+    shop: { workload: SellerWorkload | null } | null
+  }>(
     `query MyShipments($shopId: ID!, $status: ShipmentStatus, $limit: Int!, $offset: Int!) {
       myShipments(shopId: $shopId, status: $status, limit: $limit, offset: $offset) {
         shipments {
@@ -633,9 +656,10 @@ export function fetchMyShipments(shopId: string, status?: ShipmentStatus, offset
         }
         total
       }
+      ${WORKLOAD}
     }`,
     { shopId, status: status ?? null, limit: SELLER_PAGE_SIZE, offset },
-  ).then((d) => d.myShipments)
+  ).then((d) => ({ ...d.myShipments, workload: d.shop?.workload ?? null }))
 }
 
 export function createProduct(shopId: string, input: ProductInput) {

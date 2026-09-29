@@ -312,22 +312,76 @@ enum CoffeeAPI {
         return try await execute("query MyShops { myShops { id name city } }", as: Payload.self).myShops
     }
 
-    static func fetchMyProducts(shopID: String) async throws -> [Product] {
-        struct Payload: Decodable { let myProducts: [Product] }
-        let query = "query MyProducts($shopId: ID!) { myProducts(shopId: $shopId) { \(productFields) } }"
-        return try await execute(query, variables: ["shopId": shopID], as: Payload.self).myProducts
+    // Seller Hub lists page with limit/offset; the server caps limit at 100.
+    static let sellerPageSize = 25
+
+    static func fetchHubStats(shopID: String) async throws -> HubStats {
+        struct Payload: Decodable {
+            struct Shop: Decodable { let workload: HubStats.Workload? }
+            let shop: Shop?
+            let myProductCounts: HubStats.ProductCounts
+        }
+        let query = """
+            query HubStats($shopId: ID!) {
+              shop(id: $shopId) { workload { toFulfill toShip lowStock } }
+              myProductCounts(shopId: $shopId) { total inStock lowStock hidden }
+            }
+            """
+        let payload = try await execute(query, variables: ["shopId": shopID], as: Payload.self)
+        return HubStats(workload: payload.shop?.workload, products: payload.myProductCounts)
     }
 
-    static func fetchMyOrders(shopID: String) async throws -> [Order] {
-        struct Payload: Decodable { let myOrders: [Order] }
-        let query = "query MyOrders($shopId: ID!) { myOrders(shopId: $shopId) { \(orderFields) } }"
-        return try await execute(query, variables: ["shopId": shopID], as: Payload.self).myOrders
+    static func fetchMyProducts(shopID: String, offset: Int = 0) async throws -> Page<Product> {
+        struct Payload: Decodable {
+            struct Inner: Decodable { let products: [Product]; let total: Int }
+            let myProducts: Inner
+        }
+        let query = """
+            query MyProducts($shopId: ID!, $limit: Int!, $offset: Int!) {
+              myProducts(shopId: $shopId, limit: $limit, offset: $offset) { products { \(productFields) } total }
+            }
+            """
+        let variables: [String: Any?] = ["shopId": shopID, "limit": sellerPageSize, "offset": offset]
+        let inner = try await execute(query, variables: variables, as: Payload.self).myProducts
+        return Page(items: inner.products, total: inner.total)
     }
 
-    static func fetchMyShipments(shopID: String) async throws -> [Shipment] {
-        struct Payload: Decodable { let myShipments: [Shipment] }
-        let query = "query MyShipments($shopId: ID!) { myShipments(shopId: $shopId) { \(shipmentFields) } }"
-        return try await execute(query, variables: ["shopId": shopID], as: Payload.self).myShipments
+    static func fetchMyOrders(
+        shopID: String, status: OrderStatus? = nil, offset: Int = 0, limit: Int = sellerPageSize
+    ) async throws -> Page<Order> {
+        struct Payload: Decodable {
+            struct Inner: Decodable { let orders: [Order]; let total: Int }
+            let myOrders: Inner
+        }
+        let query = """
+            query MyOrders($shopId: ID!, $status: OrderStatus, $limit: Int!, $offset: Int!) {
+              myOrders(shopId: $shopId, status: $status, limit: $limit, offset: $offset) { orders { \(orderFields) } total }
+            }
+            """
+        let variables: [String: Any?] = [
+            "shopId": shopID, "status": status?.rawValue, "limit": limit, "offset": offset,
+        ]
+        let inner = try await execute(query, variables: variables, as: Payload.self).myOrders
+        return Page(items: inner.orders, total: inner.total)
+    }
+
+    static func fetchMyShipments(
+        shopID: String, status: ShipmentStatus? = nil, offset: Int = 0
+    ) async throws -> Page<Shipment> {
+        struct Payload: Decodable {
+            struct Inner: Decodable { let shipments: [Shipment]; let total: Int }
+            let myShipments: Inner
+        }
+        let query = """
+            query MyShipments($shopId: ID!, $status: ShipmentStatus, $limit: Int!, $offset: Int!) {
+              myShipments(shopId: $shopId, status: $status, limit: $limit, offset: $offset) { shipments { \(shipmentFields) } total }
+            }
+            """
+        let variables: [String: Any?] = [
+            "shopId": shopID, "status": status?.rawValue, "limit": sellerPageSize, "offset": offset,
+        ]
+        let inner = try await execute(query, variables: variables, as: Payload.self).myShipments
+        return Page(items: inner.shipments, total: inner.total)
     }
 
     static func createProduct(

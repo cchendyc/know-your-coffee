@@ -102,8 +102,8 @@ struct RootView: View {
         if ownedShops.isEmpty, tab == .sellerHub { tab = .explore }
         var open = false
         for shop in ownedShops where !open {
-            let orders = (try? await CoffeeAPI.fetchMyOrders(shopID: shop.id)) ?? []
-            open = orders.contains { $0.status == .placed }
+            let placed = try? await CoffeeAPI.fetchMyOrders(shopID: shop.id, status: .placed, limit: 1)
+            open = (placed?.total ?? 0) > 0
         }
         hasOpenOrders = open
     }

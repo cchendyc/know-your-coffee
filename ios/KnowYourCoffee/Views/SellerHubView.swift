@@ -5,15 +5,8 @@ import SwiftUI
 struct SellerHubView: View {
     let shop: OwnedShop
 
-    @State private var products: [Product] = []
-    @State private var orders: [Order] = []
-    @State private var shipments: [Shipment] = []
-    @State private var loaded = false
+    @State private var stats: HubStats?
     @State private var error: String?
-
-    private var openOrders: Int { orders.filter(\.isCancelable).count }
-    private var toShip: Int { shipments.filter { $0.status == .labelReady }.count }
-    private var lowStock: Int { products.filter { $0.lowStock && $0.active }.count }
 
     var body: some View {
         ScrollView {
@@ -39,26 +32,22 @@ struct SellerHubView: View {
                 }
 
                 VStack(spacing: 10) {
-                    hubRow(
-                        title: "Products",
-                        detail: loaded ? "\(products.count) listed\(lowStock > 0 ? " · \(lowStock) low on stock" : "")" : "…",
-                        icon: "shippingbox"
-                    ) {
-                        ProductsListView(shop: shop, products: $products)
+                    hubRow(title: "Products", detail: productsDetail, icon: "shippingbox") {
+                        ProductsListView(shop: shop)
                     }
                     hubRow(
                         title: "Orders",
-                        detail: loaded ? "\(orders.count) total · \(openOrders) to fulfill" : "…",
+                        detail: stats.map { "\($0.workload?.toFulfill ?? 0) to fulfill" } ?? "…",
                         icon: "bag"
                     ) {
-                        OrdersListView(shop: shop, orders: $orders)
+                        OrdersListView(shop: shop)
                     }
                     hubRow(
                         title: "Shipments",
-                        detail: loaded ? "\(shipments.count) total · \(toShip) to ship" : "…",
+                        detail: stats.map { "\($0.workload?.toShip ?? 0) to ship" } ?? "…",
                         icon: "truck.box"
                     ) {
-                        ShipmentsListView(shop: shop, shipments: $shipments)
+                        ShipmentsListView(shop: shop)
                     }
                 }
                 .padding(.horizontal, 24)
@@ -72,13 +61,14 @@ struct SellerHubView: View {
         .refreshable { await load() }
     }
 
+    private var productsDetail: String {
+        guard let counts = stats?.products else { return "…" }
+        return "\(counts.total) listed\(counts.lowStock > 0 ? " · \(counts.lowStock) low on stock" : "")"
+    }
+
     private func load() async {
         do {
-            async let p = CoffeeAPI.fetchMyProducts(shopID: shop.id)
-            async let o = CoffeeAPI.fetchMyOrders(shopID: shop.id)
-            async let s = CoffeeAPI.fetchMyShipments(shopID: shop.id)
-            (products, orders, shipments) = try await (p, o, s)
-            loaded = true
+            stats = try await CoffeeAPI.fetchHubStats(shopID: shop.id)
             error = nil
         } catch {
             self.error = error.localizedDescription
@@ -118,21 +108,26 @@ struct SellerHubView: View {
 
 struct ProductsListView: View {
     let shop: OwnedShop
-    @Binding var products: [Product]
 
+    @State private var products: [Product] = []
+    @State private var total = 0
+    @State private var loading = false
     @State private var adding = false
     @State private var error: String?
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 10) {
+            LazyVStack(spacing: 10) {
                 if let error {
                     Text(error).font(.kycSecondary).foregroundStyle(.red)
                 }
                 ForEach(products) { product in
                     productRow(product)
+                        .onAppear {
+                            if product.id == products.last?.id { Task { await load(reset: false) } }
+                        }
                 }
-                if products.isEmpty {
+                if products.isEmpty && !loading {
                     Text("No products yet. Add your first bag, tote, or gift card.")
                         .font(.kycSecondary)
                         .foregroundStyle(Color.inkMuted)
@@ -151,8 +146,24 @@ struct ProductsListView: View {
             }
         }
         .sheet(isPresented: $adding) {
-            AddProductSheet(shop: shop) { products.append($0) }
+            // Oldest first, so a new listing belongs on the last page; reload rather than append.
+            AddProductSheet(shop: shop) { _ in Task { await load(reset: true) } }
         }
+        .task { await load(reset: true) }
+        .refreshable { await load(reset: true) }
+    }
+
+    private func load(reset: Bool) async {
+        guard !loading, reset || products.count < total else { return }
+        loading = true
+        defer { loading = false }
+        do {
+            let page = try await CoffeeAPI.fetchMyProducts(shopID: shop.id, offset: reset ? 0 : products.count)
+            let seen = reset ? [] : Set(products.map(\.id))
+            products = (reset ? [] : products) + page.items.filter { !seen.contains($0.id) }
+            total = page.total
+            error = nil
+        } catch { self.error = error.localizedDescription }
     }
 
     private func productRow(_ product: Product) -> some View {
@@ -230,6 +241,7 @@ struct ProductsListView: View {
             do {
                 try await CoffeeAPI.deleteProduct(id: product.id)
                 products.removeAll { $0.id == product.id }
+                total -= 1
                 error = nil
             } catch { self.error = error.localizedDescription }
         }
@@ -307,21 +319,26 @@ private struct AddProductSheet: View {
 
 struct OrdersListView: View {
     let shop: OwnedShop
-    @Binding var orders: [Order]
 
+    @State private var orders: [Order] = []
+    @State private var total = 0
+    @State private var loading = false
     @State private var error: String?
     @State private var confirmCancel: Order?
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 10) {
+            LazyVStack(spacing: 10) {
                 if let error {
                     Text(error).font(.kycSecondary).foregroundStyle(.red)
                 }
                 ForEach(orders) { order in
                     orderRow(order)
+                        .onAppear {
+                            if order.id == orders.last?.id { Task { await load(reset: false) } }
+                        }
                 }
-                if orders.isEmpty {
+                if orders.isEmpty && !loading {
                     Text("No orders yet. They appear here the moment a buyer checks out.")
                         .font(.kycSecondary)
                         .foregroundStyle(Color.inkMuted)
@@ -347,6 +364,21 @@ struct OrdersListView: View {
         } message: {
             Text("The buyer is refunded and the items go back into stock.")
         }
+        .task { await load(reset: true) }
+        .refreshable { await load(reset: true) }
+    }
+
+    private func load(reset: Bool) async {
+        guard !loading, reset || orders.count < total else { return }
+        loading = true
+        defer { loading = false }
+        do {
+            let page = try await CoffeeAPI.fetchMyOrders(shopID: shop.id, offset: reset ? 0 : orders.count)
+            let seen = reset ? [] : Set(orders.map(\.id))
+            orders = (reset ? [] : orders) + page.items.filter { !seen.contains($0.id) }
+            total = page.total
+            error = nil
+        } catch { self.error = error.localizedDescription }
     }
 
     private func orderRow(_ order: Order) -> some View {
@@ -428,20 +460,17 @@ struct OrdersListView: View {
 
 struct ShipmentsListView: View {
     let shop: OwnedShop
-    @Binding var shipments: [Shipment]
 
+    @State private var shipments: [Shipment] = []
+    @State private var total = 0
+    @State private var loading = false
     @State private var filter: ShipmentStatus?
     @State private var editing: Shipment?
     @State private var error: String?
 
-    private var visible: [Shipment] {
-        guard let filter else { return shipments }
-        return shipments.filter { $0.status == filter }
-    }
-
     var body: some View {
         ScrollView {
-            VStack(spacing: 12) {
+            LazyVStack(spacing: 12) {
                 Picker("Status", selection: $filter) {
                     Text("All").tag(ShipmentStatus?.none)
                     Text("To ship").tag(ShipmentStatus?.some(.labelReady))
@@ -453,10 +482,13 @@ struct ShipmentsListView: View {
                 if let error {
                     Text(error).font(.kycSecondary).foregroundStyle(.red)
                 }
-                ForEach(visible) { shipment in
+                ForEach(shipments) { shipment in
                     shipmentRow(shipment)
+                        .onAppear {
+                            if shipment.id == shipments.last?.id { Task { await load(reset: false) } }
+                        }
                 }
-                if visible.isEmpty {
+                if shipments.isEmpty && !loading {
                     Text(filter == nil
                         ? "No shipments yet. Every new order creates one automatically."
                         : "Nothing in this state.")
@@ -475,6 +507,24 @@ struct ShipmentsListView: View {
         .sheet(item: $editing) { shipment in
             EditShipmentSheet(shipment: shipment) { patch($0) }
         }
+        .task(id: filter) { await load(reset: true) }
+        .refreshable { await load(reset: true) }
+    }
+
+    private func load(reset: Bool) async {
+        guard reset || (!loading && shipments.count < total) else { return }
+        loading = true
+        defer { loading = false }
+        do {
+            let page = try await CoffeeAPI.fetchMyShipments(
+                shopID: shop.id, status: filter, offset: reset ? 0 : shipments.count
+            )
+            let seen = reset ? [] : Set(shipments.map(\.id))
+            shipments = (reset ? [] : shipments) + page.items.filter { !seen.contains($0.id) }
+            total = page.total
+            error = nil
+        } catch is CancellationError {
+        } catch { self.error = error.localizedDescription }
     }
 
     private func shipmentRow(_ shipment: Shipment) -> some View {
@@ -534,7 +584,9 @@ struct ShipmentsListView: View {
     private func advance(_ shipment: Shipment, to status: ShipmentStatus) {
         Task {
             do {
-                patch(try await CoffeeAPI.updateShipment(id: shipment.id, status: status))
+                let updated = try await CoffeeAPI.updateShipment(id: shipment.id, status: status)
+                // Under a status filter the row now belongs elsewhere.
+                if filter == nil { patch(updated) } else { await load(reset: true) }
                 error = nil
             } catch { self.error = error.localizedDescription }
         }

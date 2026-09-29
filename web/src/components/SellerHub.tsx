@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import {
   cancelOrder,
+  fetchHubStats,
   fetchMyOrders,
   fetchMyProducts,
   fetchMyShipments,
   fetchSellerShop,
   markPickedUp,
   markReadyForPickup,
+  SELLER_PAGE_SIZE,
   updateDeliverySettings,
   updateProduct,
   updateShipment,
@@ -183,12 +185,12 @@ function OverviewPane({
 
   useEffect(() => {
     if (!shop) return
-    Promise.all([fetchMyProducts(shop.id), fetchMyOrders(shop.id), fetchMyShipments(shop.id)])
-      .then(([{ myProductCounts: counts }, orders, shipments]) =>
+    fetchHubStats(shop.id)
+      .then(({ workload, counts }) =>
         setStats({
           listings: counts.inStock + counts.lowStock,
-          toFulfill: orders.filter((o) => CANCELABLE.includes(o.status)).length,
-          toShip: shipments.filter((s) => s.status === 'LABEL_READY').length,
+          toFulfill: workload?.toFulfill ?? 0,
+          toShip: workload?.toShip ?? 0,
         }),
       )
       .catch((e: Error) => setError(e.message))
@@ -327,19 +329,29 @@ function ProductsPane({
   onEdit: (product: Product) => void
 }) {
   const [filter, setFilter] = useState<ListingStatus | ''>('')
+  const [offset, setOffset] = useState(0)
   const [products, setProducts] = useState<Product[] | null>(null)
+  const [total, setTotal] = useState(0)
   const [counts, setCounts] = useState<ProductCounts | null>(null)
   const [reload, setReload] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchMyProducts(shopId, filter || undefined)
+    fetchMyProducts(shopId, filter || undefined, offset)
       .then((d) => {
-        setProducts(d.myProducts)
+        // The last row on a page left the filter; step back rather than show an empty page.
+        if (d.myProducts.products.length === 0 && offset > 0) return setOffset(Math.max(0, offset - SELLER_PAGE_SIZE))
+        setProducts(d.myProducts.products)
+        setTotal(d.myProducts.total)
         setCounts(d.myProductCounts)
       })
       .catch((e: Error) => setError(e.message))
-  }, [shopId, filter, reload])
+  }, [shopId, filter, offset, reload])
+
+  const pickFilter = (f: ListingStatus | '') => {
+    setFilter(f)
+    setOffset(0)
+  }
 
   // Refetch rather than patch: a stock or visibility change can move the row out of the filter.
   const act = (fn: () => Promise<unknown>) =>
@@ -370,7 +382,7 @@ function ProductsPane({
           {chips.map(([key, label, n]) => (
             <button
               key={key || 'all'}
-              onClick={() => setFilter(key)}
+              onClick={() => pickFilter(key)}
               className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
                 filter === key
                   ? 'bg-espresso-700 text-cream-50'
@@ -437,7 +449,29 @@ function ProductsPane({
           )}
         </Table>
       )}
+      <Pager offset={offset} total={total} onChange={setOffset} />
     </section>
+  )
+}
+
+// Server-side offset paging for the hub tables; hidden when everything fits on one page.
+function Pager({ offset, total, onChange }: { offset: number; total: number; onChange: (offset: number) => void }) {
+  if (total <= SELLER_PAGE_SIZE) return null
+  const end = Math.min(offset + SELLER_PAGE_SIZE, total)
+  const btn =
+    'rounded-lg border border-cream-200 bg-white px-3 py-1.5 text-xs font-medium text-espresso-500 transition hover:border-crema-400 disabled:opacity-40 disabled:hover:border-cream-200'
+  return (
+    <div className="mt-3 flex items-center justify-end gap-2 text-xs text-espresso-500">
+      <span className="mr-1 tabular-nums">
+        {offset + 1}–{end} of {total}
+      </span>
+      <button className={btn} disabled={offset === 0} onClick={() => onChange(Math.max(0, offset - SELLER_PAGE_SIZE))}>
+        Previous
+      </button>
+      <button className={btn} disabled={end >= total} onClick={() => onChange(offset + SELLER_PAGE_SIZE)}>
+        Next
+      </button>
+    </div>
   )
 }
 
@@ -455,22 +489,30 @@ function StockButton({ label, onClick }: { label: string; onClick: () => void })
 // MARK: Orders
 
 function OrdersPane({ shopId }: { shopId: string }) {
+  const [offset, setOffset] = useState(0)
   const [orders, setOrders] = useState<Order[] | null>(null)
+  const [total, setTotal] = useState(0)
+  const [toFulfill, setToFulfill] = useState(0)
+  const [reload, setReload] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchMyOrders(shopId).then(setOrders).catch((e: Error) => setError(e.message))
-  }, [shopId])
-
-  const open = orders?.filter((o) => CANCELABLE.includes(o.status)).length ?? 0
-  const run = (fn: Promise<Order>) =>
-    fn
-      .then((updated) => setOrders((prev) => prev!.map((x) => (x.id === updated.id ? updated : x))))
+    fetchMyOrders(shopId, offset)
+      .then((d) => {
+        setOrders(d.orders)
+        setTotal(d.total)
+        setToFulfill(d.workload?.toFulfill ?? 0)
+      })
       .catch((e: Error) => setError(e.message))
+  }, [shopId, offset, reload])
+
+  // Refetch so the to-fulfill count follows the status change.
+  const run = (fn: Promise<Order>) =>
+    fn.then(() => setReload((n) => n + 1)).catch((e: Error) => setError(e.message))
 
   return (
     <section>
-      <PaneHeader title="Orders" subtitle={orders ? `${orders.length} total · ${open} to fulfill` : '…'} />
+      <PaneHeader title="Orders" subtitle={orders ? `${total} total · ${toFulfill} to fulfill` : '…'} />
       {error && <ErrorNote message={error} onDismiss={() => setError(null)} />}
       {orders && (
         <Table headers={['Order', 'Buyer', 'Items', 'Total', 'Method', 'Status', '']}>
@@ -515,6 +557,7 @@ function OrdersPane({ shopId }: { shopId: string }) {
           {orders.length === 0 && <EmptyRow colSpan={7} message="No orders yet. They appear here the moment a buyer checks out." />}
         </Table>
       )}
+      <Pager offset={offset} total={total} onChange={setOffset} />
     </section>
   )
 }
@@ -523,41 +566,58 @@ function OrdersPane({ shopId }: { shopId: string }) {
 
 function ShipmentsPane({ shopId }: { shopId: string }) {
   const [shipments, setShipments] = useState<Shipment[] | null>(null)
+  const [total, setTotal] = useState(0)
+  const [toShip, setToShip] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<ShipmentStatus | ''>('')
+  const [offset, setOffset] = useState(0)
+  const [reload, setReload] = useState(0)
 
   useEffect(() => {
-    fetchMyShipments(shopId).then(setShipments).catch((e: Error) => setError(e.message))
-  }, [shopId])
+    fetchMyShipments(shopId, filter || undefined, offset)
+      .then((d) => {
+        if (d.shipments.length === 0 && offset > 0) return setOffset(Math.max(0, offset - SELLER_PAGE_SIZE))
+        setShipments(d.shipments)
+        setTotal(d.total)
+        setToShip(d.workload?.toShip ?? 0)
+      })
+      .catch((e: Error) => setError(e.message))
+  }, [shopId, filter, offset, reload])
 
+  const pickFilter = (f: ShipmentStatus | '') => {
+    setFilter(f)
+    setOffset(0)
+  }
   const patch = (s: Shipment) => setShipments((prev) => prev!.map((x) => (x.id === s.id ? { ...x, ...s } : x)))
+  // A status step can move the row out of the filter and changes the to-ship count, so refetch.
   const save = (id: string, p: Parameters<typeof updateShipment>[1]) =>
-    updateShipment(id, p).then(patch).catch((e: Error) => setError(e.message))
+    updateShipment(id, p)
+      .then((s) => (p.status ? setReload((n) => n + 1) : patch(s)))
+      .catch((e: Error) => setError(e.message))
 
-  const visible = shipments?.filter((s) => !filter || s.status === filter)
-  const toShip = shipments?.filter((s) => s.status === 'LABEL_READY').length ?? 0
+  const visible = shipments
   const cellInput =
     'w-full min-w-24 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm outline-none placeholder:text-espresso-500/50 hover:border-cream-200 focus:border-crema-400 focus:bg-cream-100'
 
   return (
     <section>
-      <PaneHeader title="Shipments" subtitle={shipments ? `${shipments.length} total · ${toShip} to ship` : '…'} />
+      <PaneHeader title="Shipments" subtitle={shipments ? `${toShip} to ship` : '…'} />
       {error && <ErrorNote message={error} onDismiss={() => setError(null)} />}
       {shipments && (
         <>
           <div className="mb-4 flex flex-wrap gap-1.5">
-            {([['', `All · ${shipments.length}`], ...Object.entries(SHIPMENT_LABELS)] as [ShipmentStatus | '', string][]).map(
+            {([['', 'All'], ...Object.entries(SHIPMENT_LABELS)] as [ShipmentStatus | '', string][]).map(
               ([key, label]) => (
                 <button
                   key={key || 'all'}
-                  onClick={() => setFilter(key)}
+                  onClick={() => pickFilter(key)}
                   className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
                     filter === key
                       ? 'bg-espresso-700 text-cream-50'
                       : 'border border-cream-200 bg-white text-espresso-500 hover:border-crema-400'
                   }`}
                 >
-                  {label}
+                  {filter === key ? `${label} · ${total}` : label}
                 </button>
               ),
             )}
@@ -617,6 +677,7 @@ function ShipmentsPane({ shopId }: { shopId: string }) {
               <EmptyRow colSpan={7} message={filter ? 'Nothing in this state.' : 'No shipments yet. Every new order creates one automatically.'} />
             )}
           </Table>
+          <Pager offset={offset} total={total} onChange={setOffset} />
         </>
       )}
     </section>

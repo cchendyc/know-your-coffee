@@ -306,6 +306,29 @@ struct OwnedShop: Codable, Identifiable, Hashable {
     let city: String
 }
 
+// One offset page of a seller list plus the unpaged match count.
+struct Page<Item> {
+    let items: [Item]
+    let total: Int
+}
+
+// Hub row counts, computed server-side so the hub never loads whole lists.
+struct HubStats {
+    struct Workload: Decodable {
+        let toFulfill: Int
+        let toShip: Int
+        let lowStock: Int
+    }
+    struct ProductCounts: Decodable {
+        let total: Int
+        let inStock: Int
+        let lowStock: Int
+        let hidden: Int
+    }
+    let workload: Workload?
+    let products: ProductCounts
+}
+
 struct Product: Codable, Identifiable, Hashable {
     let id: String
     let shopId: String

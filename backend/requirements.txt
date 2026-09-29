@@ -1,4 +1,6 @@
 ariadne>=0.23
+# ariadne 1.1 imports graphql.ExecutionContext, which graphql-core 3.3.0 dropped.
+graphql-core>=3.2,<3.3
 uvicorn>=0.30
 httpx>=0.27
 psycopg[binary]>=3.2
