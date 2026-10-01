@@ -46,7 +46,7 @@ class ShipmentRepository:
         with self._session() as s:
             return s.scalar(stmt) or 0
 
-    def update(self, shipment_id: str, changes: dict) -> m.Shipment | None:
+    def update(self, shipment_id: str, changes: dict, actor_user_id: str | None = None) -> m.Shipment | None:
         """changes: carrier, tracking, status. A status change syncs the order."""
         if not changes:
             return self.get(shipment_id)
@@ -57,7 +57,18 @@ class ShipmentRepository:
             for column, value in changes.items():
                 setattr(row, column, value)
             row.updated_at = now()
+            if changes.get("status") is ShipmentStatus.IN_TRANSIT:
+                row.dropped_off_at = now()
+            if changes.get("status") is ShipmentStatus.DELIVERED:
+                row.delivered_at = now()
             order_status = SHIPMENT_TO_ORDER_STATUS.get(changes.get("status"))
             if order_status:
-                s.execute(sa.update(m.Order).where(m.Order.id == row.order_id).values(status=order_status))
+                moved = s.execute(
+                    sa.update(m.Order)
+                    .where(m.Order.id == row.order_id, m.Order.status != order_status)
+                    .values(status=order_status, updated_at=sa.func.now())
+                    .returning(m.Order.id)
+                ).first()
+                if moved:
+                    s.add(m.OrderEvent(order_id=row.order_id, status=order_status, actor_user_id=actor_user_id))
             return row

@@ -286,6 +286,33 @@ enum CoffeeAPI {
         _ = try await execute("mutation { deleteAccount }", as: Payload.self)
     }
 
+    /// Everything the Me tab needs in one round trip. `me` is nil when the
+    /// server does not recognise the session token; callers treat that as
+    /// signed out rather than as an empty account.
+    static func fetchAccount() async throws -> Account {
+        struct Payload: Decodable {
+            struct Seller: Decodable { let shops: [SellerShop]; let workload: SellerWorkload }
+            let me: User?
+            let mySeller: Seller?
+            let myClaims: [ShopClaim]
+        }
+        let query = """
+            query Account {
+              me { \(userFields) }
+              mySeller { shops { id name address city sellerOnboarded \(workloadFields) } \(workloadFields) }
+              myClaims { id status note createdAt shop { id name city } }
+            }
+            """
+        let payload = try await execute(query, as: Payload.self)
+        return Account(
+            me: payload.me,
+            seller: payload.mySeller.map {
+                SellerAccount(shops: $0.shops, workload: $0.workload, pendingClaims: payload.myClaims.filter { $0.status == "PENDING" })
+            },
+            claims: payload.myClaims
+        )
+    }
+
     static func fetchMyClaims() async throws -> [ShopClaim] {
         struct Payload: Decodable { let myClaims: [ShopClaim] }
         let query = """
@@ -296,20 +323,64 @@ enum CoffeeAPI {
 
     // MARK: Seller hub
 
-    private static let productFields =
-        "id shopId name variant price stockQty lowStockThreshold lowStock active createdAt updatedAt"
+    private static let productFields = """
+        id shopId name categoryId category { id slug label } attributes subtitle description
+        price quantity lowStockThreshold lowStock active createdAt updatedAt
+        """
+    private static let categoryFields = """
+        id slug label subtitleTemplate
+        fields { key label valueType unit help options { value label } required showInSubtitle section }
+        """
     private static let orderFields = """
-        id number status fulfillment buyer { name picture } items { productId name qty unitPrice } total createdAt
+        id number status fulfillment shop { id name } buyer { name picture } items { productId name qty unitPrice } total createdAt
         shipment { id orderId carrier tracking shipBy status createdAt }
         """
     private static let shipmentFields = """
         id orderId carrier tracking shipBy status createdAt
-        order { number buyer { name picture } items { productId name qty unitPrice } }
+        order { number shop { id name } buyer { name picture } items { productId name qty unitPrice } }
         """
+    private static let workloadFields = "workload { toFulfill toShip lowStock }"
 
     static func fetchMyShops() async throws -> [OwnedShop] {
         struct Payload: Decodable { let myShops: [OwnedShop] }
         return try await execute("query MyShops { myShops { id name city } }", as: Payload.self).myShops
+    }
+
+    /// Switcher and all-shops payload in one round trip. Nil when the viewer owns nothing.
+    static func fetchMySeller() async throws -> SellerAccount? {
+        struct Payload: Decodable {
+            struct Seller: Decodable { let shops: [SellerShop]; let workload: SellerWorkload }
+            let mySeller: Seller?
+            let myClaims: [ShopClaim]
+        }
+        let query = """
+            query MySeller {
+              mySeller { shops { id name address city sellerOnboarded \(workloadFields) } \(workloadFields) }
+              myClaims { id status note createdAt shop { id name city } }
+            }
+            """
+        let payload = try await execute(query, as: Payload.self)
+        guard let seller = payload.mySeller else { return nil }
+        return SellerAccount(
+            shops: seller.shops,
+            workload: seller.workload,
+            pendingClaims: payload.myClaims.filter { $0.status == "PENDING" }
+        )
+    }
+
+    /// Duplicates listings into a sibling shop; copies start hidden with quantity 0.
+    static func copyProducts(fromShopID: String, toShopID: String, productIDs: [String]? = nil) async throws -> Int {
+        struct Payload: Decodable {
+            struct Copied: Decodable { let id: String }
+            let copyProducts: [Copied]
+        }
+        let query = """
+            mutation CopyProducts($fromShopId: ID!, $toShopId: ID!, $productIds: [ID!]) {
+              copyProducts(fromShopId: $fromShopId, toShopId: $toShopId, productIds: $productIds) { id }
+            }
+            """
+        let variables: [String: Any?] = ["fromShopId": fromShopID, "toShopId": toShopID, "productIds": productIDs]
+        return try await execute(query, variables: variables, as: Payload.self).copyProducts.count
     }
 
     // Seller Hub lists page with limit/offset; the server caps limit at 100.
@@ -331,30 +402,35 @@ enum CoffeeAPI {
         return HubStats(workload: payload.shop?.workload, products: payload.myProductCounts)
     }
 
-    static func fetchMyProducts(shopID: String, offset: Int = 0) async throws -> Page<Product> {
+    static func fetchMyProducts(
+        shopID: String, status: ListingStatus? = nil, offset: Int = 0, limit: Int = sellerPageSize
+    ) async throws -> Page<Product> {
         struct Payload: Decodable {
             struct Inner: Decodable { let products: [Product]; let total: Int }
             let myProducts: Inner
         }
         let query = """
-            query MyProducts($shopId: ID!, $limit: Int!, $offset: Int!) {
-              myProducts(shopId: $shopId, limit: $limit, offset: $offset) { products { \(productFields) } total }
+            query MyProducts($shopId: ID!, $status: ListingStatus, $limit: Int!, $offset: Int!) {
+              myProducts(shopId: $shopId, status: $status, limit: $limit, offset: $offset) { products { \(productFields) } total }
             }
             """
-        let variables: [String: Any?] = ["shopId": shopID, "limit": sellerPageSize, "offset": offset]
+        let variables: [String: Any?] = [
+            "shopId": shopID, "status": status?.rawValue, "limit": limit, "offset": offset,
+        ]
         let inner = try await execute(query, variables: variables, as: Payload.self).myProducts
         return Page(items: inner.products, total: inner.total)
     }
 
+    /// shopID nil = every owned shop (the All shops view).
     static func fetchMyOrders(
-        shopID: String, status: OrderStatus? = nil, offset: Int = 0, limit: Int = sellerPageSize
+        shopID: String?, status: OrderStatus? = nil, offset: Int = 0, limit: Int = sellerPageSize
     ) async throws -> Page<Order> {
         struct Payload: Decodable {
             struct Inner: Decodable { let orders: [Order]; let total: Int }
             let myOrders: Inner
         }
         let query = """
-            query MyOrders($shopId: ID!, $status: OrderStatus, $limit: Int!, $offset: Int!) {
+            query MyOrders($shopId: ID, $status: OrderStatus, $limit: Int!, $offset: Int!) {
               myOrders(shopId: $shopId, status: $status, limit: $limit, offset: $offset) { orders { \(orderFields) } total }
             }
             """
@@ -366,14 +442,14 @@ enum CoffeeAPI {
     }
 
     static func fetchMyShipments(
-        shopID: String, status: ShipmentStatus? = nil, offset: Int = 0
+        shopID: String?, status: ShipmentStatus? = nil, offset: Int = 0
     ) async throws -> Page<Shipment> {
         struct Payload: Decodable {
             struct Inner: Decodable { let shipments: [Shipment]; let total: Int }
             let myShipments: Inner
         }
         let query = """
-            query MyShipments($shopId: ID!, $status: ShipmentStatus, $limit: Int!, $offset: Int!) {
+            query MyShipments($shopId: ID, $status: ShipmentStatus, $limit: Int!, $offset: Int!) {
               myShipments(shopId: $shopId, status: $status, limit: $limit, offset: $offset) { shipments { \(shipmentFields) } total }
             }
             """
@@ -384,20 +460,21 @@ enum CoffeeAPI {
         return Page(items: inner.shipments, total: inner.total)
     }
 
-    static func createProduct(
-        shopID: String, name: String, variant: String?, price: Double, stockQty: Int
-    ) async throws -> Product {
+    /// Listing categories with their form fields; the server owns the definitions.
+    static func fetchCategories() async throws -> [Category] {
+        struct Payload: Decodable { let categories: [Category] }
+        return try await execute("query Categories { categories { \(categoryFields) } }", as: Payload.self).categories
+    }
+
+    /// `input` is a ProductInput: name, categoryId, attributes, description, price, quantity, lowStockThreshold, active.
+    static func createProduct(shopID: String, input: [String: Any]) async throws -> Product {
         struct Payload: Decodable { let createProduct: Product }
         let query = """
             mutation CreateProduct($shopId: ID!, $input: ProductInput!) {
               createProduct(shopId: $shopId, input: $input) { \(productFields) }
             }
             """
-        var input: [String: Any] = ["name": name, "price": price, "stockQty": stockQty]
-        if let variant, !variant.isEmpty { input["variant"] = variant }
-        return try await execute(query, variables: [
-            "shopId": shopID, "input": input,
-        ], as: Payload.self).createProduct
+        return try await execute(query, variables: ["shopId": shopID, "input": input], as: Payload.self).createProduct
     }
 
     /// Patch semantics: only the keys in `input` change.

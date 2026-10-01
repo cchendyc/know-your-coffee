@@ -1,21 +1,17 @@
-"""orders table. Line items live on the order as jsonb snapshots (name and
-unitPrice at purchase time), so deleting a product never breaks history."""
+"""orders table. Line items are OrderItem rows; money is integer cents."""
 
 from __future__ import annotations
 
-from decimal import Decimal
-from typing import Any
-
+from datetime import datetime
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base, CreatedAtMixin, IntId, pg_enum
+from .base import Base, IntId, TimestampedMixin, pg_enum
 from .enums import Fulfillment, OrderStatus
 from .user import User
 
 
-class Order(Base, CreatedAtMixin):
+class Order(Base, TimestampedMixin):
     __tablename__ = "orders"
 
     id: Mapped[int] = mapped_column(IntId, sa.Identity(), primary_key=True)
@@ -24,8 +20,17 @@ class Order(Base, CreatedAtMixin):
     shop_id: Mapped[int] = mapped_column(IntId)
     # Null after the buyer deletes their account.
     buyer_user_id: Mapped[int | None] = mapped_column(IntId)
-    items: Mapped[list[Any]] = mapped_column(JSONB)
-    total: Mapped[Decimal] = mapped_column(sa.Numeric)
+    # Null for PICKUP orders. Addresses are immutable, so no snapshot needed.
+    shipping_address_id: Mapped[int | None] = mapped_column(IntId)
+    subtotal_cents: Mapped[int] = mapped_column()
+    shipping_cents: Mapped[int] = mapped_column(default=0, server_default=sa.text("0"))
+    total_cents: Mapped[int] = mapped_column()
+    currency: Mapped[str] = mapped_column(default="USD", server_default=sa.text("'USD'"))
+    payment_id: Mapped[int | None] = mapped_column(IntId)
+    # Short code the buyer shows at the counter; PICKUP orders only.
+    pickup_code: Mapped[str | None] = mapped_column()
+    cancelled_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    cancellation_reason: Mapped[str | None] = mapped_column()
     status: Mapped[OrderStatus] = mapped_column(
         pg_enum(OrderStatus, "order_status"), default=OrderStatus.PLACED, server_default=sa.text("'PLACED'")
     )
@@ -35,3 +40,11 @@ class Order(Base, CreatedAtMixin):
     )
 
     buyer: Mapped[User | None] = relationship(primaryjoin="foreign(Order.buyer_user_id) == User.id", viewonly=True)
+
+    # Set by OrderRepository on every instance it returns; not columns.
+    items = ()
+    next_actions = ()
+
+    @property
+    def total(self) -> float:
+        return self.total_cents / 100

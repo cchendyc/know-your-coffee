@@ -28,6 +28,10 @@ class CheckoutError(DomainError):
     pass
 
 
+class InvalidListingError(DomainError):
+    pass
+
+
 class OutOfStockError(DomainError):
     def __init__(self, product_name: str):
         super().__init__(f"Not enough stock of {product_name}.")

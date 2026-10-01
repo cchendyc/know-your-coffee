@@ -9,6 +9,11 @@ from .seller import owned_shop_ids
 query = QueryType()
 
 
+@query.field("categories")
+def resolve_categories(_, info):
+    return info.context["repos"].categories.list()
+
+
 @query.field("product")
 def resolve_product(_, info, id):
     repos = info.context["repos"]

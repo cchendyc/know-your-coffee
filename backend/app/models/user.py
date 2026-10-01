@@ -20,6 +20,8 @@ class User(Base, CreatedAtMixin):
     name: Mapped[str] = mapped_column()
     picture: Mapped[str | None] = mapped_column()
     role: Mapped[str] = mapped_column(default="USER", server_default=sa.text("'USER'"))
+    # Stripe Customer; created lazily on first saved payment method.
+    stripe_customer_id: Mapped[str | None] = mapped_column(unique=True)
 
 # One active sign-in code per email/phone; attempts capped at 5.
 class LoginCode(Base, CreatedAtMixin):

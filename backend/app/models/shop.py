@@ -9,8 +9,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import ARRAY, ENUM, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from .base import Base, IntId
-from .enums import BEAN_SOURCES, MACHINE_BRANDS
+from .base import Base, IntId, pg_enum
+from .enums import BEAN_SOURCES, MACHINE_BRANDS, ShipsTo
 
 
 machine_brand = ENUM(*MACHINE_BRANDS, name="machine_brand", create_type=False)
@@ -52,6 +52,14 @@ class Shop(Base):
     offers_shipping: Mapped[bool] = mapped_column(default=True, server_default=sa.text("true"))
     offers_pickup: Mapped[bool] = mapped_column(default=False, server_default=sa.text("false"))
     pickup_instructions: Mapped[str | None] = mapped_column()
+    # Stripe Connect account; null until the seller finishes payout setup.
+    stripe_account_id: Mapped[str | None] = mapped_column(unique=True)
+    ship_flat_rate_cents: Mapped[int] = mapped_column(default=0, server_default=sa.text("0"))
+    ship_free_over_cents: Mapped[int | None] = mapped_column()  # null = no free-shipping threshold
+    ships_within_days: Mapped[int] = mapped_column(sa.SmallInteger, default=2, server_default=sa.text("2"))
+    ships_to: Mapped[ShipsTo] = mapped_column(pg_enum(ShipsTo, "ships_to"), default=ShipsTo.US, server_default=sa.text("'US'"))
+    pickup_ready_minutes: Mapped[int] = mapped_column(default=20, server_default=sa.text("20"))
+    pickup_hours: Mapped[str | None] = mapped_column()  # free text, e.g. "Mon–Fri 8am–3pm"
     updated_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), server_default=sa.text("now()"))
 
     # Per-viewer flags from shop_bookmarks/shop_visits; plain attributes, not

@@ -316,6 +316,42 @@ export function fetchShopLite(id: string) {
   ).then((d) => d.shop)
 }
 
+// Drawer extras on top of the list's copy: ownership, counts, delivery,
+// and the storefront listings. No photo payloads; covers come with the
+// storefront page, not the preview.
+export interface ShopPreview {
+  ownerId: string | null
+  ownedByMe: boolean
+  photoCount: number
+  reportCount: number
+  owner: { name: string; picture: string | null } | null
+  deliverySettings: DeliverySettings
+  products: ShopPreviewProduct[]
+  latestReport: { createdAt: string; reporter: { name: string } | null } | null
+}
+
+export type ShopPreviewProduct = Pick<Product, 'id' | 'name' | 'price' | 'subtitle' | 'status'>
+
+export function fetchShopPreview(id: string) {
+  type Row = Omit<ShopPreview, 'latestReport'> & { reports: NonNullable<ShopPreview['latestReport']>[] }
+  return gql<{ shop: Row | null }>(
+    `query ShopPreview($id: ID!) {
+      shop(id: $id) {
+        ownerId ownedByMe photoCount reportCount
+        owner { name picture }
+        deliverySettings { shipping pickup pickupInstructions }
+        products { id name price subtitle status }
+        reports(limit: 1) { createdAt reporter { name } }
+      }
+    }`,
+    { id },
+  ).then((d): ShopPreview | null => {
+    if (!d.shop) return null
+    const { reports, ...rest } = d.shop
+    return { ...rest, latestReport: reports[0] ?? null }
+  })
+}
+
 export function submitReport(input: ReportInput) {
   return gql<{ submitReport: { id: string } }>(
     `mutation Submit($input: ReportInput!) { submitReport(input: $input) { id } }`,
@@ -462,7 +498,7 @@ export function claimShop(shopId: string, application: SellerApplicationInput) {
 
 // MARK: Seller hub
 
-export type OrderStatus = 'PLACED' | 'SHIPPED' | 'DELIVERED' | 'READY_FOR_PICKUP' | 'PICKED_UP' | 'CANCELED'
+export type OrderStatus = 'PLACED' | 'PACKED' | 'SHIPPED' | 'DELIVERED' | 'READY_FOR_PICKUP' | 'PICKED_UP' | 'CANCELED'
 export type Fulfillment = 'SHIP' | 'PICKUP'
 export type ShipmentStatus = 'LABEL_READY' | 'READY_FOR_DROPOFF' | 'IN_TRANSIT' | 'DELIVERED'
 
@@ -475,13 +511,50 @@ export interface ProductCounts {
   hidden: number
 }
 
+export type AttributeValueType = 'TEXT' | 'INT' | 'DECIMAL' | 'BOOL' | 'ENUM' | 'ENUM_MULTI' | 'TEXT_LIST'
+// FORMAT = size/form/condition card; DETAILS = origin/roast/materials card.
+export type AttributeSection = 'FORMAT' | 'DETAILS'
+
+export interface AttributeOption {
+  value: string
+  label: string
+}
+
+// One field of a category's listing form; the server decides type, options, and required.
+export interface CategoryField {
+  key: string
+  label: string
+  valueType: AttributeValueType
+  unit: string | null
+  help: string | null
+  options: AttributeOption[]
+  required: boolean
+  showInSubtitle: boolean
+  section: AttributeSection
+}
+
+export interface Category {
+  id: string
+  slug: string
+  label: string
+  fields: CategoryField[]
+  subtitleTemplate: string | null // "{weight_g} {form} · {roast_level}"; keys are field keys
+}
+
+// Values keyed by CategoryField.key; typed per valueType (number, boolean, string, string[]).
+export type ProductAttributes = Record<string, unknown>
+
 export interface Product {
   id: string
   shopId: string
   name: string
-  variant: string | null
+  categoryId: string
+  category: { id: string; slug: string; label: string }
+  attributes: ProductAttributes
+  subtitle: string | null // server-rendered from the category's subtitle fields
+  description: string | null
   price: number
-  stockQty: number
+  quantity: number
   lowStockThreshold: number
   lowStock: boolean
   active: boolean
@@ -502,11 +575,27 @@ export const MAX_PRODUCT_PHOTOS = 6
 
 export interface ProductInput {
   name?: string
-  variant?: string | null
+  categoryId?: string
+  attributes?: ProductAttributes // replaces the whole object
+  description?: string | null
   price?: number
-  stockQty?: number
+  quantity?: number
   lowStockThreshold?: number
   active?: boolean
+}
+
+const CATEGORY_FIELDS = `id slug label subtitleTemplate fields { key label valueType unit help options { value label } required showInSubtitle section }`
+
+// Drives the listing form: one call, cached for the session (taxonomy changes by migration).
+let categoriesPromise: Promise<Category[]> | null = null
+export function fetchCategories() {
+  categoriesPromise ??= gql<{ categories: Category[] }>(`query Categories { categories { ${CATEGORY_FIELDS} } }`)
+    .then((d) => d.categories)
+    .catch((e: Error) => {
+      categoriesPromise = null
+      throw e
+    })
+  return categoriesPromise
 }
 
 export interface OrderItem {
@@ -521,6 +610,7 @@ export interface Order {
   number: number
   status: OrderStatus
   fulfillment: Fulfillment
+  shop: { id: string; name: string }
   buyer: { name: string; picture: string | null } | null
   items: OrderItem[]
   total: number
@@ -536,11 +626,11 @@ export interface Shipment {
   shipBy: string | null
   status: ShipmentStatus
   createdAt: string
-  order?: { number: number; buyer: { name: string } | null; items: OrderItem[] }
+  order?: { number: number; shop: { id: string; name: string }; buyer: { name: string } | null; items: OrderItem[] }
 }
 
-const PRODUCT_FIELDS = `id shopId name variant price stockQty lowStockThreshold lowStock active status coverPhoto { id data position } createdAt updatedAt`
-const ORDER_FIELDS = `id number status fulfillment buyer { name picture } items { productId name qty unitPrice } total createdAt
+const PRODUCT_FIELDS = `id shopId name categoryId category { id slug label } attributes subtitle description price quantity lowStockThreshold lowStock active status coverPhoto { id data position } createdAt updatedAt`
+const ORDER_FIELDS = `id number status fulfillment shop { id name } buyer { name picture } items { productId name qty unitPrice } total createdAt
   shipment { id orderId carrier tracking shipBy status createdAt }`
 
 // Shops the viewer owns; drives the Seller Hub entry and shop switcher.
@@ -548,6 +638,73 @@ export function fetchMyShops() {
   return gql<{ myShops: { id: string; name: string; city: string }[] }>(
     `query MyShops { myShops { id name city } }`,
   ).then((d) => d.myShops)
+}
+
+export interface SellerWorkload {
+  toFulfill: number
+  toShip: number
+  lowStock: number
+}
+
+// Switcher row and overview card: identity, setup state, and open work.
+export interface SellerShop {
+  id: string
+  name: string
+  address: string
+  city: string
+  sellerOnboarded: boolean
+  workload: SellerWorkload | null
+}
+
+export interface PendingClaim {
+  id: string
+  shop: { id: string; name: string; city: string }
+}
+
+export interface Seller {
+  shops: SellerShop[]
+  workload: SellerWorkload
+  pendingClaims: PendingClaim[]
+}
+
+const WORKLOAD_FIELDS = `workload { toFulfill toShip lowStock }`
+
+// Everything the shop switcher and all-shops overview need in one round trip.
+export function fetchMySeller() {
+  return gql<{
+    mySeller: { shops: SellerShop[]; workload: SellerWorkload } | null
+    myClaims: { id: string; status: 'PENDING' | 'APPROVED' | 'REJECTED'; shop: PendingClaim['shop'] }[]
+  }>(
+    `query MySeller {
+      mySeller { shops { id name address city sellerOnboarded ${WORKLOAD_FIELDS} } ${WORKLOAD_FIELDS} }
+      myClaims { id status shop { id name city } }
+    }`,
+  ).then((d): Seller | null =>
+    d.mySeller
+      ? { ...d.mySeller, pendingClaims: d.myClaims.filter((c) => c.status === 'PENDING').map(({ id, shop }) => ({ id, shop })) }
+      : null,
+  )
+}
+
+// One aliased myProductCounts per shop; the overview's "Active listings" total.
+export function fetchProductCountsByShop(shopIds: string[]) {
+  if (shopIds.length === 0) return Promise.resolve({} as Record<string, ProductCounts>)
+  const vars = shopIds.map((_, i) => `$s${i}: ID!`).join(', ')
+  const fields = shopIds.map((_, i) => `c${i}: myProductCounts(shopId: $s${i}) { total inStock lowStock hidden }`).join('\n')
+  return gql<Record<string, ProductCounts>>(
+    `query CountsByShop(${vars}) { ${fields} }`,
+    Object.fromEntries(shopIds.map((id, i) => [`s${i}`, id])),
+  ).then((d) => Object.fromEntries(shopIds.map((id, i) => [id, d[`c${i}`]])))
+}
+
+// Duplicates listings into a sibling shop; copies start hidden with quantity 0.
+export function copyProducts(fromShopId: string, toShopId: string, productIds?: string[]) {
+  return gql<{ copyProducts: { id: string }[] }>(
+    `mutation CopyProducts($fromShopId: ID!, $toShopId: ID!, $productIds: [ID!]) {
+      copyProducts(fromShopId: $fromShopId, toShopId: $toShopId, productIds: $productIds) { id }
+    }`,
+    { fromShopId, toShopId, productIds: productIds ?? null },
+  ).then((d) => d.copyProducts)
 }
 
 // Hub payload: the full shop plus seller-only extras (delivery settings, owner).
@@ -601,7 +758,7 @@ export function updateDeliverySettings(
 // Seller Hub tables page with limit/offset; the server caps limit at 100.
 export const SELLER_PAGE_SIZE = 25
 
-export function fetchMyProducts(shopId: string, status?: ListingStatus, offset = 0) {
+export function fetchMyProducts(shopId: string, status?: ListingStatus, offset = 0, limit = SELLER_PAGE_SIZE) {
   return gql<{ myProducts: { products: Product[]; total: number }; myProductCounts: ProductCounts }>(
     `query MyProducts($shopId: ID!, $status: ListingStatus, $limit: Int!, $offset: Int!) {
       myProducts(shopId: $shopId, status: $status, limit: $limit, offset: $offset) {
@@ -610,56 +767,58 @@ export function fetchMyProducts(shopId: string, status?: ListingStatus, offset =
       }
       myProductCounts(shopId: $shopId) { total inStock lowStock hidden }
     }`,
-    { shopId, status: status ?? null, limit: SELLER_PAGE_SIZE, offset },
+    { shopId, status: status ?? null, limit, offset },
   )
 }
 
-export interface SellerWorkload {
-  toFulfill: number
-  toShip: number
-  lowStock: number
-}
-
-const WORKLOAD = `shop(id: $shopId) { workload { toFulfill toShip lowStock } }`
+// Per-shop counts when a shop is selected; the seller-wide sum for "All shops".
+const WORKLOAD = `workload: shop(id: $shopId) { ${WORKLOAD_FIELDS} }`
+const ALL_WORKLOAD = `workload: mySeller { ${WORKLOAD_FIELDS} }`
+type WorkloadPayload = { workload: { workload: SellerWorkload | null } | null }
 
 // Overview cards: counts only, no rows.
 export function fetchHubStats(shopId: string) {
-  return gql<{ shop: { workload: SellerWorkload | null } | null; myProductCounts: ProductCounts }>(
+  return gql<WorkloadPayload & { myProductCounts: ProductCounts }>(
     `query HubStats($shopId: ID!) {
       ${WORKLOAD}
       myProductCounts(shopId: $shopId) { total inStock lowStock hidden }
     }`,
     { shopId },
-  ).then((d) => ({ workload: d.shop?.workload ?? null, counts: d.myProductCounts }))
+  ).then((d) => ({ workload: d.workload?.workload ?? null, counts: d.myProductCounts }))
 }
 
-export function fetchMyOrders(shopId: string, offset = 0) {
-  return gql<{ myOrders: { orders: Order[]; total: number }; shop: { workload: SellerWorkload | null } | null }>(
-    `query MyOrders($shopId: ID!, $limit: Int!, $offset: Int!) {
-      myOrders(shopId: $shopId, limit: $limit, offset: $offset) { orders { ${ORDER_FIELDS} } total }
-      ${WORKLOAD}
-    }`,
-    { shopId, limit: SELLER_PAGE_SIZE, offset },
-  ).then((d) => ({ ...d.myOrders, workload: d.shop?.workload ?? null }))
+// shopId null = every owned shop (the "All shops" view).
+export function fetchMyOrders(shopId: string | null, offset = 0, limit = SELLER_PAGE_SIZE) {
+  return gql<WorkloadPayload & { myOrders: { orders: Order[]; total: number } }>(
+    shopId
+      ? `query MyOrders($shopId: ID!, $limit: Int!, $offset: Int!) {
+          myOrders(shopId: $shopId, limit: $limit, offset: $offset) { orders { ${ORDER_FIELDS} } total }
+          ${WORKLOAD}
+        }`
+      : `query AllOrders($limit: Int!, $offset: Int!) {
+          myOrders(limit: $limit, offset: $offset) { orders { ${ORDER_FIELDS} } total }
+          ${ALL_WORKLOAD}
+        }`,
+    { ...(shopId ? { shopId } : {}), limit, offset },
+  ).then((d) => ({ ...d.myOrders, workload: d.workload?.workload ?? null }))
 }
 
-export function fetchMyShipments(shopId: string, status?: ShipmentStatus, offset = 0) {
-  return gql<{
-    myShipments: { shipments: Shipment[]; total: number }
-    shop: { workload: SellerWorkload | null } | null
-  }>(
-    `query MyShipments($shopId: ID!, $status: ShipmentStatus, $limit: Int!, $offset: Int!) {
-      myShipments(shopId: $shopId, status: $status, limit: $limit, offset: $offset) {
-        shipments {
-          id orderId carrier tracking shipBy status createdAt
-          order { number buyer { name } items { productId name qty unitPrice } }
-        }
-        total
-      }
-      ${WORKLOAD}
-    }`,
-    { shopId, status: status ?? null, limit: SELLER_PAGE_SIZE, offset },
-  ).then((d) => ({ ...d.myShipments, workload: d.shop?.workload ?? null }))
+const SHIPMENT_FIELDS = `id orderId carrier tracking shipBy status createdAt
+  order { number shop { id name } buyer { name } items { productId name qty unitPrice } }`
+
+export function fetchMyShipments(shopId: string | null, status?: ShipmentStatus, offset = 0) {
+  return gql<WorkloadPayload & { myShipments: { shipments: Shipment[]; total: number } }>(
+    shopId
+      ? `query MyShipments($shopId: ID!, $status: ShipmentStatus, $limit: Int!, $offset: Int!) {
+          myShipments(shopId: $shopId, status: $status, limit: $limit, offset: $offset) { shipments { ${SHIPMENT_FIELDS} } total }
+          ${WORKLOAD}
+        }`
+      : `query AllShipments($status: ShipmentStatus, $limit: Int!, $offset: Int!) {
+          myShipments(status: $status, limit: $limit, offset: $offset) { shipments { ${SHIPMENT_FIELDS} } total }
+          ${ALL_WORKLOAD}
+        }`,
+    { ...(shopId ? { shopId } : {}), status: status ?? null, limit: SELLER_PAGE_SIZE, offset },
+  ).then((d) => ({ ...d.myShipments, workload: d.workload?.workload ?? null }))
 }
 
 export function createProduct(shopId: string, input: ProductInput) {
@@ -732,10 +891,7 @@ export function updateShipment(
 ) {
   return gql<{ updateShipment: Shipment }>(
     `mutation UpdateShipment($id: ID!, $carrier: String, $tracking: String, $status: ShipmentStatus) {
-      updateShipment(id: $id, carrier: $carrier, tracking: $tracking, status: $status) {
-        id orderId carrier tracking shipBy status createdAt
-        order { number buyer { name } items { productId name qty unitPrice } }
-      }
+      updateShipment(id: $id, carrier: $carrier, tracking: $tracking, status: $status) { ${SHIPMENT_FIELDS} }
     }`,
     { id, carrier: patch.carrier ?? null, tracking: patch.tracking ?? null, status: patch.status ?? null },
   ).then((d) => d.updateShipment)

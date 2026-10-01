@@ -152,7 +152,14 @@ export default function App() {
     if (!localStorage.getItem(TOKEN_KEY)) return
     fetchMe()
       .then((me) => {
-        if (!me) return
+        if (!me) {
+          // Token no longer maps to a user: drop the cached login.
+          localStorage.removeItem(TOKEN_KEY)
+          localStorage.removeItem(USER_KEY)
+          setUser(null)
+          setMyShops([])
+          return
+        }
         localStorage.setItem(USER_KEY, JSON.stringify(me))
         setUser(me)
       })
@@ -236,6 +243,24 @@ export default function App() {
             </div>
           </button>
           <div className="flex-1" />
+          {user && myShops.length > 0 && (
+            // One click to the hub, and back. The drawer keeps its own entry.
+            <button
+              type="button"
+              onClick={() => setHubOpen((o) => !o)}
+              aria-pressed={hubOpen}
+              className={`flex h-9 shrink-0 items-center gap-2 rounded-full border px-3 text-xs font-semibold shadow-sm transition ${
+                hubOpen
+                  ? 'border-espresso-700 bg-espresso-700 text-cream-50 hover:bg-espresso-900'
+                  : 'border-cream-200 bg-white text-espresso-700 hover:border-crema-400'
+              }`}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-4">
+                <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4ZM3 6h18M16 10a4 4 0 0 1-8 0" />
+              </svg>
+              <span className="hidden sm:inline">{hubOpen ? 'Back to shops' : 'Seller Hub'}</span>
+            </button>
+          )}
           <ThemeToggle />
           <AuthButton
             user={user}
@@ -410,6 +435,10 @@ export default function App() {
           onShopChanged={onShopChanged}
           onShopDeleted={onShopDeleted}
           onOpenShop={setSelectedId}
+          onOpenSellerHub={() => {
+            setSelectedId(null)
+            setHubOpen(true)
+          }}
           onClose={() => setSelectedId(null)}
         />
       )}

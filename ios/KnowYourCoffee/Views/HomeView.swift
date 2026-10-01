@@ -1,10 +1,11 @@
 import SwiftUI
 
 struct HomeView: View {
-    // Embedded = inside RootView's tab bar: the hamburger, profile sheet, and
-    // list/map toggle disappear (Map and You are tabs of their own).
+    // Embedded = inside RootView's tab bar: the hamburger and profile sheet
+    // disappear (Me is a tab of its own).
     var embedded = false
-    // Set for the Saved tab: pins the filter and swaps the tab strip for a title.
+    // Set for the Saved tab: pins the filter, swaps the tab strip for a title,
+    // and hides the list/map toggle and add button.
     var pinnedList: ShopStore.ListFilter? = nil
 
     @State private var store = ShopStore()
@@ -26,7 +27,7 @@ struct HomeView: View {
                 header
                 if let message = store.errorMessage {
                     errorBanner(message)
-                } else if store.viewMode == .list || embedded {
+                } else if store.viewMode == .list || pinnedList != nil {
                     feed
                 } else {
                     ShopMapView(shops: store.shops) { selectedShop = $0 }
@@ -34,8 +35,10 @@ struct HomeView: View {
                 }
             }
 
-            if !embedded { modeToggle }
-            if pinnedList == nil { addButton }
+            if pinnedList == nil {
+                modeToggle
+                addButton
+            }
         }
         .task {
             if let pinnedList { store.list = pinnedList }
@@ -99,7 +102,7 @@ struct HomeView: View {
             // 44pt frames keep the HIG minimum hit target; alignment pins the
             // small glyphs to the screen edges so the layout doesn't shift.
             if embedded {
-                // Profile lives in the You tab; a spacer keeps tabs centered.
+                // Profile lives in the Me tab; a spacer keeps tabs centered.
                 Color.clear.frame(width: 44, height: 44)
             } else {
                 Button {

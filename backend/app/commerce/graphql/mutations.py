@@ -6,29 +6,44 @@ from graphql import GraphQLError
 from ...core.errors import DomainError
 from ...core.graphql import is_admin, require_shop_owner, require_user
 from ...models import MAX_PHOTO_BYTES, MAX_PRODUCT_PHOTOS
-from ...models.enums import Fulfillment, OrderStatus
+from ...models.enums import Carrier, Fulfillment, OrderStatus
 
 mutation = MutationType()
 
 
-def product_changes(input: dict) -> dict:
-    """ProductInput keys -> products column values; only keys the client sent."""
+def product_changes(info, input: dict, current=None) -> dict:
+    """ProductInput keys -> products column values; only keys the client sent.
+    A category or attributes change re-validates the whole attributes object
+    against the (new) category, so required fields cannot be dropped."""
     columns = {
         "name": "name",
-        "variant": "variant",
+        "categoryId": "category_id",
+        "description": "description",
         "price": "price",
-        "stockQty": "stock_qty",
+        "quantity": "quantity",
         "lowStockThreshold": "low_stock_threshold",
         "active": "active",
     }
-    return {columns[key]: value for key, value in input.items() if key in columns}
+    changes = {columns[key]: value for key, value in input.items() if key in columns}
+    if "description" in changes:
+        changes["description"] = (changes["description"] or "").strip() or None
+    if "categoryId" in input or "attributes" in input:
+        category_id = input.get("categoryId") or (current.category_id if current else None)
+        attributes = input.get("attributes") if "attributes" in input else (current.attributes if current else {})
+        if not isinstance(attributes, dict):
+            raise GraphQLError("attributes must be an object keyed by field.")
+        try:
+            changes["attributes"] = info.context["services"].products.clean_attributes(str(category_id), attributes)
+        except DomainError as e:
+            raise GraphQLError(str(e))
+    return changes
 
 
 def check_product_input(input: dict) -> None:
     if input.get("price") is not None and input["price"] < 0:
         raise GraphQLError("Price must not be negative.")
-    if input.get("stockQty") is not None and input["stockQty"] < 0:
-        raise GraphQLError("Stock must not be negative.")
+    if input.get("quantity") is not None and input["quantity"] < 0:
+        raise GraphQLError("Quantity must not be negative.")
 
 
 @mutation.field("createProduct")
@@ -36,8 +51,11 @@ def resolve_create_product(_, info, shopId, input):
     require_shop_owner(info, shopId)
     if not input.get("name") or input.get("price") is None:
         raise GraphQLError("A new product needs a name and a price.")
+    if not input.get("categoryId"):
+        raise GraphQLError("Pick a category for this listing.")
     check_product_input(input)
-    return info.context["repos"].products.create(shopId, product_changes(input))
+    input = {"attributes": {}, **input}
+    return info.context["repos"].products.create(shopId, product_changes(info, input))
 
 
 @mutation.field("updateProduct")
@@ -48,7 +66,7 @@ def resolve_update_product(_, info, id, input):
         raise GraphQLError(f"Product {id} not found")
     require_shop_owner(info, str(product.shop_id))
     check_product_input(input)
-    return repos.products.update(id, product_changes(input))
+    return repos.products.update(id, product_changes(info, input, current=product))
 
 
 @mutation.field("deleteProduct")
@@ -103,10 +121,12 @@ def resolve_copy_products(_, info, fromShopId, toShopId, productIds=None):
             toShopId,
             {
                 "name": product.name,
-                "variant": product.variant,
+                "category_id": product.category_id,
+                "attributes": dict(product.attributes),
+                "description": product.description,
                 "price": product.price,
                 "low_stock_threshold": product.low_stock_threshold,
-                "stock_qty": 0,
+                "quantity": 0,
                 "active": False,
             },
         )
@@ -201,7 +221,10 @@ def resolve_update_shipment(_, info, id, carrier=None, tracking=None, status=Non
     require_shop_owner(info, str(order.shop_id))
     changes = {
         column: value
-        for column, value in (("carrier", carrier), ("tracking", tracking), ("status", status))
+        for column, value in (("tracking", tracking), ("status", status))
         if value is not None
     }
+    if carrier is not None:
+        # Column is the carrier enum; clients still send free text.
+        changes["carrier"] = Carrier.__members__.get(carrier.strip().upper(), Carrier.OTHER)
     return repos.shipments.update(id, changes)

@@ -306,6 +306,41 @@ struct OwnedShop: Codable, Identifiable, Hashable {
     let city: String
 }
 
+// Counts of open seller work; badges in the shop switcher and all-shops summary.
+struct SellerWorkload: Codable, Hashable {
+    let toFulfill: Int
+    let toShip: Int
+    let lowStock: Int
+
+    static let zero = SellerWorkload(toFulfill: 0, toShip: 0, lowStock: 0)
+}
+
+// One row of the shop switcher: identity, setup state, open work.
+struct SellerShop: Codable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let address: String
+    let city: String
+    let sellerOnboarded: Bool
+    let workload: SellerWorkload?
+
+    var owned: OwnedShop { OwnedShop(id: id, name: name, city: city) }
+}
+
+// mySeller plus the viewer's pending claims, for the switcher and all-shops view.
+struct SellerAccount: Hashable {
+    let shops: [SellerShop]
+    let workload: SellerWorkload
+    let pendingClaims: [ShopClaim]
+}
+
+// The Me tab payload. `me` nil with a stored token means the session is dead.
+struct Account: Hashable {
+    let me: User?
+    let seller: SellerAccount?
+    let claims: [ShopClaim]
+}
+
 // One offset page of a seller list plus the unpaged match count.
 struct Page<Item> {
     let items: [Item]
@@ -329,13 +364,142 @@ struct HubStats {
     let products: ProductCounts
 }
 
+enum ListingStatus: String, Codable, Hashable, CaseIterable {
+    case inStock = "IN_STOCK"
+    case lowStock = "LOW_STOCK"
+    case hidden = "HIDDEN"
+
+    var label: String {
+        switch self {
+        case .inStock: "In stock"
+        case .lowStock: "Low stock"
+        case .hidden: "Hidden"
+        }
+    }
+}
+
+// Value of one product attribute; the GraphQL JSON scalar is untyped.
+indirect enum JSONValue: Codable, Hashable {
+    case string(String)
+    case number(Double)
+    case bool(Bool)
+    case list([JSONValue])
+    case object([String: JSONValue])
+    case null
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if c.decodeNil() { self = .null }
+        else if let b = try? c.decode(Bool.self) { self = .bool(b) }
+        else if let n = try? c.decode(Double.self) { self = .number(n) }
+        else if let s = try? c.decode(String.self) { self = .string(s) }
+        else if let l = try? c.decode([JSONValue].self) { self = .list(l) }
+        else { self = .object(try c.decode([String: JSONValue].self)) }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        switch self {
+        case .string(let s): try c.encode(s)
+        case .number(let n): try c.encode(n)
+        case .bool(let b): try c.encode(b)
+        case .list(let l): try c.encode(l)
+        case .object(let o): try c.encode(o)
+        case .null: try c.encodeNil()
+        }
+    }
+
+    /// Foundation value for JSONSerialization when sent as a GraphQL variable.
+    var any: Any {
+        switch self {
+        case .string(let s): s
+        case .number(let n): n == n.rounded() && abs(n) < 1e15 ? Int(n) : n
+        case .bool(let b): b
+        case .list(let l): l.map(\.any)
+        case .object(let o): o.mapValues(\.any)
+        case .null: NSNull()
+        }
+    }
+}
+
+enum AttributeValueType: String, Codable, Hashable {
+    case text = "TEXT"
+    case int = "INT"
+    case decimal = "DECIMAL"
+    case bool = "BOOL"
+    case single = "ENUM"
+    case multi = "ENUM_MULTI"
+    case textList = "TEXT_LIST"
+}
+
+// FORMAT = size/form/condition; DETAILS = origin/roast/materials.
+enum AttributeSection: String, Codable, Hashable, CaseIterable {
+    case format = "FORMAT"
+    case details = "DETAILS"
+
+    var title: String {
+        switch self {
+        case .format: "Size and format"
+        case .details: "Details"
+        }
+    }
+}
+
+struct AttributeOption: Codable, Hashable {
+    let value: String
+    let label: String
+}
+
+// One field of a category's listing form; the server decides type, options, and required.
+struct CategoryField: Codable, Hashable, Identifiable {
+    let key: String
+    let label: String
+    let valueType: AttributeValueType
+    let unit: String?
+    let help: String?
+    let options: [AttributeOption]
+    let isRequired: Bool
+    let showInSubtitle: Bool
+    let section: AttributeSection
+
+    var id: String { key }
+
+    enum CodingKeys: String, CodingKey {
+        case key, label, valueType, unit, help, options, showInSubtitle, section
+        case isRequired = "required"
+    }
+
+    func optionLabel(_ value: String) -> String {
+        options.first { $0.value == value }?.label ?? value
+    }
+}
+
+struct Category: Codable, Hashable, Identifiable {
+    let id: String
+    let slug: String
+    let label: String
+    let fields: [CategoryField]
+    let subtitleTemplate: String?
+}
+
 struct Product: Codable, Identifiable, Hashable {
+    struct CategoryRef: Codable, Hashable {
+        let id: String
+        let slug: String
+        let label: String
+    }
+
     let id: String
     let shopId: String
     var name: String
-    var variant: String?
+    var categoryId: String
+    var category: CategoryRef
+    var attributes: [String: JSONValue]
+    /// Server-rendered from the category's subtitle template, e.g. "340 g Whole bean · Light".
+    var subtitle: String?
+    var description: String?
     var price: Double
-    var stockQty: Int
+    var quantity: Int
     var lowStockThreshold: Int
     var lowStock: Bool
     var active: Bool
@@ -354,6 +518,7 @@ struct OrderItem: Codable, Hashable {
 // SHIP orders advance through their shipment; PICKUP orders through the pickup steps.
 enum OrderStatus: String, Codable, Hashable {
     case placed = "PLACED"
+    case packed = "PACKED"
     case shipped = "SHIPPED"
     case delivered = "DELIVERED"
     case readyForPickup = "READY_FOR_PICKUP"
@@ -383,10 +548,17 @@ enum ShipmentStatus: String, Codable, Hashable {
 }
 
 struct Order: Codable, Identifiable, Hashable {
+    struct ShopRef: Codable, Hashable {
+        let id: String
+        let name: String
+    }
+
     let id: String
     let number: Int
     var status: OrderStatus
     let fulfillment: Fulfillment
+    // Named in cross-shop lists; absent on older payloads.
+    let shop: ShopRef?
     let buyer: Reporter?
     let items: [OrderItem]
     let total: Double
@@ -416,6 +588,7 @@ struct Order: Codable, Identifiable, Hashable {
 struct Shipment: Codable, Identifiable, Hashable {
     struct OrderRef: Codable, Hashable {
         let number: Int
+        let shop: Order.ShopRef?
         let buyer: Reporter?
         let items: [OrderItem]
     }

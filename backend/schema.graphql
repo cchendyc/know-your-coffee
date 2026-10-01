@@ -18,6 +18,8 @@ enum ClaimStatus {
 enum OrderStatus {
   "Auto-accepted at checkout; sellers never accept or decline."
   PLACED
+  "Ship only: items boxed, label printed, not yet scanned by the carrier."
+  PACKED
   SHIPPED
   DELIVERED
   "Pickup only: packed and waiting at the counter."
@@ -295,16 +297,82 @@ type User implements Node {
   beenCount: Int!
 }
 
-"Something a shop sells online, e.g. a 12 oz bag of Urcunina."
+"JSON object of category field values keyed by CategoryField.key, each typed per its valueType."
+scalar JSON
+
+enum AttributeValueType {
+  TEXT
+  INT
+  DECIMAL
+  BOOL
+  "One of the field's options, sent as the option value."
+  ENUM
+  "Any number of the field's options, sent as a list of option values."
+  ENUM_MULTI
+  "Free-text list, e.g. tasting notes."
+  TEXT_LIST
+}
+
+"Which card of the listing form shows a field."
+enum AttributeSection {
+  "Size, form, condition: what tells one option from another."
+  FORMAT
+  "Origin, roast, materials: what the thing is."
+  DETAILS
+}
+
+"One choice of an ENUM or ENUM_MULTI field."
+type AttributeOption {
+  value: String!
+  label: String!
+}
+
+"One field of a category's listing form, in display order."
+type CategoryField {
+  "Key in Product.attributes and ProductInput.attributes."
+  key: String!
+  label: String!
+  valueType: AttributeValueType!
+  "Unit for INT and DECIMAL fields, e.g. g or ml."
+  unit: String
+  help: String
+  "Choices for ENUM and ENUM_MULTI; empty otherwise."
+  options: [AttributeOption!]!
+  required: Boolean!
+  "Part of Product.subtitle."
+  showInSubtitle: Boolean!
+  section: AttributeSection!
+}
+
+"What a shop can sell: Beans, Drink, Gear, Merch. Each category has its own fields."
+type Category implements Node {
+  id: ID!
+  slug: String!
+  label: String!
+  fields: [CategoryField!]!
+  """
+  How Product.subtitle is built, e.g. "{weight_g} {form} · {roast_level}".
+  Tokens are field keys; a " · " segment whose tokens are all empty is dropped.
+  Clients use it to preview the subtitle while editing.
+  """
+  subtitleTemplate: String
+}
+
+"Something a shop sells online, e.g. a 340 g bag of Urcunina."
 type Product implements Node {
   id: ID!
   shopId: ID!
   name: String!
-  "Size or packaging, e.g. 12 oz whole bean."
-  variant: String
+  categoryId: ID!
+  category: Category!
+  "Values for the category's fields, keyed by CategoryField.key."
+  attributes: JSON!
+  "One line under the name built from the category's subtitle fields, e.g. 340 g Whole bean · Light."
+  subtitle: String
+  description: String
   price: Float!
-  stockQty: Int!
-  "stockQty at or below this marks the product low stock."
+  quantity: Int!
+  "quantity at or below this marks the product low stock."
   lowStockThreshold: Int!
   lowStock: Boolean!
   "Inactive products are hidden from buyers; order history keeps them."
@@ -321,7 +389,7 @@ type Product implements Node {
 "Derived from active and stock; HIDDEN wins over stock level."
 enum ListingStatus {
   IN_STOCK
-  "Active with stockQty at or below lowStockThreshold, including 0."
+  "Active with quantity at or below lowStockThreshold, including 0."
   LOW_STOCK
   HIDDEN
 }
@@ -353,14 +421,20 @@ input ProductPhotoInput {
 }
 
 """
-Shared by create and update. Create requires name and price and defaults
-stockQty 0, lowStockThreshold 5, active true. Update keeps omitted fields.
+Shared by create and update. Create requires name, price, and categoryId
+and defaults quantity 0, lowStockThreshold 5, active true. Update keeps
+omitted fields. attributes always replaces the whole object and is
+validated against the category's fields: unknown keys, bad option values,
+and missing required fields are rejected.
 """
 input ProductInput {
   name: String
-  variant: String
+  categoryId: ID
+  "Category field values keyed by CategoryField.key."
+  attributes: JSON
+  description: String
   price: Float
-  stockQty: Int
+  quantity: Int
   lowStockThreshold: Int
   active: Boolean
 }
@@ -593,6 +667,8 @@ type Query {
   mySeller: Seller
   "The signed-in viewer's ownership claims, newest first."
   myClaims: [ShopClaim!]!
+  "Listing categories with their fields, in display order. Drives the listing form."
+  categories: [Category!]!
   "One product by id. Hidden products are visible only to the shop owner."
   product(id: ID!): Product
   "A shop's products including inactive ones, oldest first. Requires shop ownership. limit is capped at 100."
@@ -656,8 +732,9 @@ type Mutation {
   setProductPhotos(productId: ID!, photos: [ProductPhotoInput!]!): Product!
   """
   Duplicate listings from one owned shop into another. Omit productIds to copy
-  every listing. Copies keep name, variant, price, threshold, and photos;
-  stock starts at 0 and the copy is hidden until the seller lists it.
+  every listing. Copies keep name, category, fields, description, price,
+  threshold, and photos; quantity starts at 0 and the copy is hidden until
+  the seller lists it.
   Requires ownership of both shops.
   """
   copyProducts(fromShopId: ID!, toShopId: ID!, productIds: [ID!]): [Product!]!

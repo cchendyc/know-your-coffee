@@ -6,6 +6,7 @@ from ariadne import ObjectType
 from ...core.graphql import is_admin
 from .seller import workload
 
+category = ObjectType("Category")
 product = ObjectType("Product")
 order = ObjectType("Order")
 order_item = ObjectType("OrderItem")
@@ -13,9 +14,24 @@ shipment = ObjectType("Shipment")
 coffee_shop = ObjectType("CoffeeShop")
 
 
+@category.field("fields")
+def resolve_category_fields(category_row, info):
+    return info.context["repos"].categories.fields(str(category_row.id))
+
+
+@product.field("category")
+def resolve_product_category(product_row, info):
+    return info.context["repos"].categories.get(str(product_row.category_id))
+
+
+@product.field("subtitle")
+def resolve_product_subtitle(product_row, info):
+    return info.context["services"].products.subtitle(product_row)
+
+
 @product.field("lowStock")
 def resolve_low_stock(product_row, _info):
-    return product_row.stock_qty <= product_row.low_stock_threshold
+    return product_row.quantity <= product_row.low_stock_threshold
 
 
 @product.field("photos")
@@ -59,15 +75,14 @@ def resolve_order_created_at(order_row, _info):
     return order_row.created_at.isoformat()
 
 
-# Order items are stored jsonb snapshots with camelCase keys.
-@order_item.field("productId")
-def resolve_product_id(item, _info):
-    return item["productId"]
+@order_item.field("qty")
+def resolve_item_qty(item, _info):
+    return item.quantity
 
 
 @order_item.field("unitPrice")
 def resolve_unit_price(item, _info):
-    return item["unitPrice"]
+    return item.unit_price_cents / 100
 
 
 @shipment.field("order")

@@ -51,7 +51,7 @@ class ProductRepository:
 
     def create(self, shop_id: str, values: dict) -> m.Product:
         """values: products column names -> values; unset columns get defaults."""
-        defaults = {"stock_qty": 0, "low_stock_threshold": 5, "active": True}
+        defaults = {"attributes": {}, "quantity": 0, "low_stock_threshold": 5, "active": True}
         with self._session.begin() as s:
             row = m.Product(shop_id=shop_id, **{**defaults, **values})
             s.add(row)

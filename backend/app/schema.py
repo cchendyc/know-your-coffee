@@ -16,7 +16,14 @@ from graphql import GraphQLInputObjectType, GraphQLSchema
 from .accounts.graphql import bindables as accounts_bindables
 from .claims.graphql import bindables as claims_bindables
 from .commerce.graphql import bindables as commerce_bindables
-from .models.enums import Fulfillment, ListingStatus, OrderStatus, ShipmentStatus
+from .models.enums import (
+    AttributeSection,
+    AttributeValueType,
+    Fulfillment,
+    ListingStatus,
+    OrderStatus,
+    ShipmentStatus,
+)
 from .shops.graphql import bindables as shops_bindables
 
 
@@ -37,6 +44,8 @@ def create_schema():
         EnumType("Fulfillment", Fulfillment),
         EnumType("ShipmentStatus", ShipmentStatus),
         EnumType("ListingStatus", ListingStatus),
+        EnumType("AttributeValueType", AttributeValueType),
+        EnumType("AttributeSection", AttributeSection),
     ]
     return make_executable_schema(
         type_defs,

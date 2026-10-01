@@ -1,28 +1,44 @@
 import SwiftUI
 
-// Seller Hub home: one owned shop's Products, Orders, and Shipments.
-// Mirrors the web Seller Hub; reached from the profile sheet.
+// Seller Hub home: Products, Orders, and Shipments for one owned shop, or
+// totals across every shop. Mirrors the web Seller Hub; reached from the
+// Seller Hub tab and the profile sheet.
 struct SellerHubView: View {
-    let shop: OwnedShop
+    let shops: [OwnedShop]
 
+    @State private var selection: HubSelection
+    @State private var seller: SellerAccount?
     @State private var stats: HubStats?
     @State private var error: String?
+    @State private var switching = false
+    @State private var addingShop = false
+    @State private var copying = false
+    @State private var flash: String?
+
+    // One shop opens directly; several open on All shops unless a shop is given.
+    init(shops: [OwnedShop], selected: OwnedShop? = nil) {
+        self.shops = shops
+        let initial: HubSelection = selected.map { .shop($0.id) } ?? (shops.count == 1 ? .shop(shops[0].id) : .all)
+        _selection = State(initialValue: initial)
+    }
+
+    private var sellerShops: [SellerShop] {
+        seller?.shops ?? shops.map { SellerShop(id: $0.id, name: $0.name, address: "", city: $0.city, sellerOnboarded: true, workload: nil) }
+    }
+
+    private var currentShop: SellerShop? {
+        guard let id = selection.shopID else { return nil }
+        return sellerShops.first { $0.id == id }
+    }
+
+    private var copyTargets: [SellerShop] {
+        sellerShops.filter { $0.id != selection.shopID }
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 6) {
-                    Text(shop.name)
-                        .font(.kycSecondaryBold)
-                        .foregroundStyle(Color.ink)
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color.savedGreen)
-                    Text("Verified owner")
-                        .font(.kycMeta)
-                        .foregroundStyle(Color.savedGreen)
-                }
-                .padding(.horizontal, 24)
+                header.padding(.horizontal, 24)
 
                 if let error {
                     Text(error)
@@ -30,35 +46,203 @@ struct SellerHubView: View {
                         .foregroundStyle(.red)
                         .padding(.horizontal, 24)
                 }
-
-                VStack(spacing: 10) {
-                    hubRow(title: "Products", detail: productsDetail, icon: "shippingbox") {
-                        ProductsListView(shop: shop)
-                    }
-                    hubRow(
-                        title: "Orders",
-                        detail: stats.map { "\($0.workload?.toFulfill ?? 0) to fulfill" } ?? "…",
-                        icon: "bag"
-                    ) {
-                        OrdersListView(shop: shop)
-                    }
-                    hubRow(
-                        title: "Shipments",
-                        detail: stats.map { "\($0.workload?.toShip ?? 0) to ship" } ?? "…",
-                        icon: "truck.box"
-                    ) {
-                        ShipmentsListView(shop: shop)
-                    }
+                if let flash {
+                    Text(flash)
+                        .font(.kycSecondary)
+                        .foregroundStyle(Color.savedGreen)
+                        .padding(.horizontal, 24)
                 }
-                .padding(.horizontal, 24)
+
+                if let shop = currentShop {
+                    shopRows(shop).padding(.horizontal, 24)
+                } else {
+                    allShopsBody.padding(.horizontal, 24)
+                }
             }
             .padding(.vertical, 16)
         }
         .background(Color.cream50)
         .navigationTitle("Seller Hub")
         .navigationBarTitleDisplayMode(.inline)
-        .task { await load() }
+        .task(id: selection) { await load() }
         .refreshable { await load() }
+        .sheet(isPresented: $switching) {
+            if let seller {
+                ShopSwitcherSheet(seller: seller, selection: selection, onSelect: { selection = $0 }, onAddShop: { addingShop = true })
+            }
+        }
+        .sheet(isPresented: $addingShop) {
+            SellerApplicationFlow()
+        }
+        .sheet(isPresented: $copying) {
+            if let shop = currentShop {
+                CopyListingsSheet(from: shop, targets: copyTargets) { count, to in
+                    flash = "Copied \(count) \(count == 1 ? "listing" : "listings") to \(to.name). They stay hidden with stock 0 until you list them."
+                    Task { await load() }
+                }
+            }
+        }
+    }
+
+    // Shop name plus "1 of 3 shops"; tapping opens the switcher when there is
+    // more than one shop. Single-shop sellers keep the plain verified line.
+    private var header: some View {
+        Button {
+            switching = true
+        } label: {
+            HStack(spacing: 6) {
+                if let shop = currentShop {
+                    Text(shop.name)
+                        .font(.kycSecondaryBold)
+                        .foregroundStyle(Color.ink)
+                    if shops.count > 1 {
+                        Text("· \(shop.city)")
+                            .font(.kycSecondary)
+                            .foregroundStyle(Color.inkMuted)
+                    }
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.savedGreen)
+                    Text(shops.count > 1 ? "\(index(of: shop)) of \(shops.count) shops" : "Verified owner")
+                        .font(.kycMeta)
+                        .foregroundStyle(Color.savedGreen)
+                } else {
+                    Text("All shops")
+                        .font(.kycSecondaryBold)
+                        .foregroundStyle(Color.ink)
+                    Text("· \(shops.count) shops")
+                        .font(.kycSecondary)
+                        .foregroundStyle(Color.inkMuted)
+                }
+                if shops.count > 1 {
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Color.inkMuted)
+                }
+                Spacer()
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(shops.count == 1 || seller == nil)
+    }
+
+    private func index(of shop: SellerShop) -> Int {
+        (sellerShops.firstIndex { $0.id == shop.id } ?? 0) + 1
+    }
+
+    private func shopRows(_ shop: SellerShop) -> some View {
+        VStack(spacing: 10) {
+            hubRow(title: "Products", detail: productsDetail, icon: "shippingbox") {
+                ProductsListView(shop: shop.owned)
+            }
+            hubRow(
+                title: "Orders",
+                detail: stats.map { "\($0.workload?.toFulfill ?? 0) to fulfill" } ?? "…",
+                icon: "bag"
+            ) {
+                OrdersListView(shopID: shop.id)
+            }
+            hubRow(
+                title: "Shipments",
+                detail: stats.map { "\($0.workload?.toShip ?? 0) to ship" } ?? "…",
+                icon: "truck.box"
+            ) {
+                ShipmentsListView(shopID: shop.id)
+            }
+            if !copyTargets.isEmpty, (stats?.products.total ?? 0) > 0 {
+                Button { copying = true } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 17))
+                            .foregroundStyle(Color.espresso700)
+                            .frame(width: 28)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Copy listings to another shop")
+                                .font(.kycBodyBold)
+                                .foregroundStyle(Color.ink)
+                            Text("Reuse this shop's catalog at a second location")
+                                .font(.kycSecondary)
+                                .foregroundStyle(Color.inkMuted)
+                        }
+                        Spacer()
+                    }
+                    .padding(14)
+                    .cardStyle()
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    // Totals, a card per shop, then cross-shop Orders and Shipments.
+    private var allShopsBody: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            let workload = seller?.workload ?? .zero
+            HStack(spacing: 0) {
+                total(value: workload.toFulfill, label: "To fulfill", tint: .crema500)
+                Divider().frame(height: 30)
+                total(value: workload.toShip, label: "To ship", tint: .ink)
+                Divider().frame(height: 30)
+                total(value: workload.lowStock, label: "Low stock", tint: .markerOrange)
+            }
+            .padding(.vertical, 14)
+            .cardStyle()
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Your shops")
+                    .font(.kycSection)
+                    .foregroundStyle(Color.ink)
+                ForEach(sellerShops) { shop in
+                    Button { selection = .shop(shop.id) } label: {
+                        HStack(spacing: 12) {
+                            ShopMonogram(name: shop.name)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(shop.name).font(.kycBodyBold).foregroundStyle(Color.ink)
+                                Text("\(shop.address) · \(shop.city)")
+                                    .font(.kycSecondary)
+                                    .foregroundStyle(Color.inkMuted)
+                                    .lineLimit(1)
+                                let badges = shop.badges.isEmpty ? [Badge(text: "Verified owner", tone: .ok)] : shop.badges
+                                HStack(spacing: 6) {
+                                    ForEach(badges, id: \.text) { $0.pill }
+                                }
+                                .padding(.top, 2)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(Color.inkFaint)
+                        }
+                        .padding(14)
+                        .cardStyle()
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            VStack(spacing: 10) {
+                hubRow(title: "Orders", detail: "\(workload.toFulfill) to fulfill · all shops", icon: "bag") {
+                    OrdersListView(shopID: nil)
+                }
+                hubRow(title: "Shipments", detail: "\(workload.toShip) to ship · all shops", icon: "truck.box") {
+                    ShipmentsListView(shopID: nil)
+                }
+            }
+        }
+    }
+
+    private func total(value: Int, label: String, tint: Color) -> some View {
+        VStack(spacing: 2) {
+            Text("\(value)")
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(value > 0 ? tint : Color.ink)
+            Text(label)
+                .font(.kycMeta)
+                .foregroundStyle(Color.inkMuted)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var productsDetail: String {
@@ -68,8 +252,15 @@ struct SellerHubView: View {
 
     private func load() async {
         do {
-            stats = try await CoffeeAPI.fetchHubStats(shopID: shop.id)
+            // Badges go stale as orders are handled; refetch with every visit.
+            seller = try await CoffeeAPI.fetchMySeller()
+            if let id = selection.shopID {
+                stats = try await CoffeeAPI.fetchHubStats(shopID: id)
+            } else {
+                stats = nil
+            }
             error = nil
+        } catch is CancellationError {
         } catch {
             self.error = error.localizedDescription
         }
@@ -173,9 +364,10 @@ struct ProductsListView: View {
                     .font(.kycBodyBold)
                     .foregroundStyle(product.active ? Color.ink : Color.inkFaint)
                 HStack(spacing: 6) {
-                    if let variant = product.variant {
-                        Text(variant).font(.kycSecondary).foregroundStyle(Color.inkMuted)
-                    }
+                    Text(product.subtitle ?? product.category.label)
+                        .font(.kycSecondary)
+                        .foregroundStyle(Color.inkMuted)
+                        .lineLimit(1)
                     Text(product.price, format: .currency(code: "USD"))
                         .font(.kycSecondaryBold)
                         .foregroundStyle(Color.inkMuted)
@@ -202,15 +394,15 @@ struct ProductsListView: View {
     private func stepper(_ product: Product) -> some View {
         HStack(spacing: 10) {
             stockButton("minus") {
-                update(product, input: ["stockQty": max(0, product.stockQty - 1)])
+                update(product, input: ["quantity": max(0, product.quantity - 1)])
             }
-            Text("\(product.stockQty)")
+            Text("\(product.quantity)")
                 .font(.kycBodyBold)
                 .monospacedDigit()
                 .frame(minWidth: 24)
                 .foregroundStyle(Color.ink)
             stockButton("plus") {
-                update(product, input: ["stockQty": product.stockQty + 1])
+                update(product, input: ["quantity": product.quantity + 1])
             }
         }
     }
@@ -248,38 +440,63 @@ struct ProductsListView: View {
     }
 }
 
+// The seller picks a category; its fields come from the server, grouped by section.
 private struct AddProductSheet: View {
     let shop: OwnedShop
     let onAdded: (Product) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @State private var categories: [Category] = []
+    @State private var categoryID: String?
     @State private var name = ""
-    @State private var variant = ""
+    @State private var texts: [String: String] = [:]
+    @State private var flags: [String: Bool] = [:]
+    @State private var picks: [String: Set<String>] = [:]
+    @State private var description = ""
     @State private var price = ""
-    @State private var stock = ""
+    @State private var quantity = ""
     @State private var saving = false
     @State private var error: String?
 
+    private var category: Category? { categories.first { $0.id == categoryID } }
     private var priceValue: Double? { Double(price.replacingOccurrences(of: "$", with: "")) }
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Product") {
+                Section("What is it?") {
+                    Picker("Category", selection: $categoryID) {
+                        Text("Choose…").tag(String?.none)
+                        ForEach(categories) { Text($0.label).tag(Optional($0.id)) }
+                    }
+                    .pickerStyle(.menu)
                     TextField("Name, e.g. Urcunina", text: $name)
-                    TextField("Variant, e.g. 12 oz whole bean", text: $variant)
                 }
-                Section("Pricing & stock") {
+                if let category {
+                    ForEach(AttributeSection.allCases, id: \.self) { section in
+                        let fields = category.fields.filter { $0.section == section }
+                        if !fields.isEmpty {
+                            Section(section.title) {
+                                ForEach(fields) { fieldRow($0) }
+                            }
+                        }
+                    }
+                    Section("Description") {
+                        TextField("Brewing tips, roast date, the farm's story", text: $description, axis: .vertical)
+                            .lineLimit(2...6)
+                    }
+                }
+                Section("Price and quantity") {
                     TextField("Price, e.g. 22.00", text: $price)
                         .keyboardType(.decimalPad)
-                    TextField("Stock on hand", text: $stock)
+                    TextField("Quantity on hand", text: $quantity)
                         .keyboardType(.numberPad)
                 }
                 if let error {
                     Text(error).font(.kycSecondary).foregroundStyle(.red)
                 }
             }
-            .navigationTitle("Add product")
+            .navigationTitle("Add listing")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -289,11 +506,125 @@ private struct AddProductSheet: View {
                     ToolbarTextButton(label: saving ? "Saving…" : "Save", weight: .semibold) { save() }
                 }
             }
+            // Fields differ per category; nothing carries over.
+            .onChange(of: categoryID) { _, _ in
+                texts = [:]
+                flags = [:]
+                picks = [:]
+            }
+            .task {
+                do { categories = try await CoffeeAPI.fetchCategories() }
+                catch { self.error = error.localizedDescription }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func fieldRow(_ field: CategoryField) -> some View {
+        let title = field.isRequired ? "\(field.label) *" : field.label
+        switch field.valueType {
+        case .single:
+            Picker(title, selection: Binding(
+                get: { picks[field.key]?.first },
+                set: { picks[field.key] = $0.map { [$0] } ?? [] }
+            )) {
+                if !field.isRequired { Text("—").tag(String?.none) }
+                ForEach(field.options, id: \.value) { Text($0.label).tag(Optional($0.value)) }
+            }
+        case .multi:
+            NavigationLink {
+                MultiPickView(title: field.label, options: field.options, chosen: Binding(
+                    get: { picks[field.key] ?? [] },
+                    set: { picks[field.key] = $0 }
+                ))
+            } label: {
+                LabeledContent(title) {
+                    let chosen = picks[field.key] ?? []
+                    Text(chosen.isEmpty ? "None" : field.options.filter { chosen.contains($0.value) }.map(\.label).joined(separator: ", "))
+                        .foregroundStyle(Color.inkMuted)
+                        .lineLimit(1)
+                }
+            }
+        case .bool:
+            Toggle(field.label, isOn: Binding(
+                get: { flags[field.key] ?? false },
+                set: { flags[field.key] = $0 }
+            ))
+        case .int, .decimal:
+            LabeledContent(title) {
+                HStack(spacing: 4) {
+                    TextField("0", text: textBinding(field.key))
+                        .keyboardType(field.valueType == .int ? .numberPad : .decimalPad)
+                        .multilineTextAlignment(.trailing)
+                    if let unit = field.unit { Text(unit).foregroundStyle(Color.inkMuted) }
+                }
+            }
+        case .textList:
+            TextField("\(title), comma-separated", text: textBinding(field.key))
+        case .text:
+            TextField(title, text: textBinding(field.key))
+        }
+        if let help = field.help {
+            Text(help).font(.kycMeta).foregroundStyle(Color.inkFaint)
+        }
+    }
+
+    private func textBinding(_ key: String) -> Binding<String> {
+        Binding(get: { texts[key] ?? "" }, set: { texts[key] = $0 })
+    }
+
+    /// Typed ProductInput.attributes; blanks are omitted. The server re-validates.
+    private func attributes(for category: Category) throws -> [String: Any] {
+        var out: [String: Any] = [:]
+        for field in category.fields {
+            let raw = (texts[field.key] ?? "").trimmingCharacters(in: .whitespaces)
+            switch field.valueType {
+            case .text:
+                if !raw.isEmpty { out[field.key] = raw }
+            case .int:
+                if !raw.isEmpty {
+                    guard let n = Int(raw) else { throw ListingError.notANumber(field.label) }
+                    out[field.key] = n
+                }
+            case .decimal:
+                if !raw.isEmpty {
+                    guard let n = Double(raw) else { throw ListingError.notANumber(field.label) }
+                    out[field.key] = n
+                }
+            case .bool:
+                if flags[field.key] == true { out[field.key] = true }
+            case .single:
+                if let v = picks[field.key]?.first { out[field.key] = v }
+            case .multi:
+                if let v = picks[field.key], !v.isEmpty { out[field.key] = Array(v).sorted() }
+            case .textList:
+                let parts = raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+                if !parts.isEmpty { out[field.key] = parts }
+            }
+            if field.isRequired, out[field.key] == nil { throw ListingError.missing(field.label) }
+        }
+        return out
+    }
+
+    private enum ListingError: LocalizedError {
+        case missing(String)
+        case notANumber(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .missing(let label): "\(label) is required."
+            case .notANumber(let label): "\(label) must be a number."
+            }
         }
     }
 
     private func save() {
-        guard !name.trimmingCharacters(in: .whitespaces).isEmpty, let priceValue else {
+        guard let category else {
+            error = "Pick what kind of item this is."
+            return
+        }
+        let trimmedName = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmedName.isEmpty, let priceValue, priceValue > 0 else {
             error = "A name and a price are required."
             return
         }
@@ -301,13 +632,16 @@ private struct AddProductSheet: View {
         Task {
             defer { saving = false }
             do {
-                let product = try await CoffeeAPI.createProduct(
-                    shopID: shop.id,
-                    name: name.trimmingCharacters(in: .whitespaces),
-                    variant: variant.trimmingCharacters(in: .whitespaces),
-                    price: priceValue,
-                    stockQty: Int(stock) ?? 0
-                )
+                var input: [String: Any] = [
+                    "name": trimmedName,
+                    "categoryId": category.id,
+                    "attributes": try attributes(for: category),
+                    "price": priceValue,
+                    "quantity": Int(quantity) ?? 0,
+                ]
+                let trimmedDescription = description.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmedDescription.isEmpty { input["description"] = trimmedDescription }
+                let product = try await CoffeeAPI.createProduct(shopID: shop.id, input: input)
                 onAdded(product)
                 dismiss()
             } catch { self.error = error.localizedDescription }
@@ -315,10 +649,35 @@ private struct AddProductSheet: View {
     }
 }
 
+private struct MultiPickView: View {
+    let title: String
+    let options: [AttributeOption]
+    @Binding var chosen: Set<String>
+
+    var body: some View {
+        List(options, id: \.value) { option in
+            Button {
+                if chosen.contains(option.value) { chosen.remove(option.value) } else { chosen.insert(option.value) }
+            } label: {
+                HStack {
+                    Text(option.label).foregroundStyle(Color.ink)
+                    Spacer()
+                    if chosen.contains(option.value) {
+                        Image(systemName: "checkmark").foregroundStyle(Color.espresso700)
+                    }
+                }
+            }
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
 // MARK: - Orders
 
+// shopID nil = every owned shop; rows then name their shop.
 struct OrdersListView: View {
-    let shop: OwnedShop
+    let shopID: String?
 
     @State private var orders: [Order] = []
     @State private var total = 0
@@ -373,7 +732,7 @@ struct OrdersListView: View {
         loading = true
         defer { loading = false }
         do {
-            let page = try await CoffeeAPI.fetchMyOrders(shopID: shop.id, offset: reset ? 0 : orders.count)
+            let page = try await CoffeeAPI.fetchMyOrders(shopID: shopID, offset: reset ? 0 : orders.count)
             let seen = reset ? [] : Set(orders.map(\.id))
             orders = (reset ? [] : orders) + page.items.filter { !seen.contains($0.id) }
             total = page.total
@@ -394,6 +753,12 @@ struct OrdersListView: View {
                 Spacer()
                 Pill(text: order.isPickup ? "Pickup" : "Ship", fill: .cream100, foreground: .inkMuted)
                 statusPill(order.status)
+            }
+            if shopID == nil, let shop = order.shop {
+                HStack(spacing: 6) {
+                    ShopMonogram(name: shop.name, size: 18)
+                    Text(shop.name).font(.kycMeta).foregroundStyle(Color.inkMuted)
+                }
             }
             Text(order.itemsSummary)
                 .font(.kycSecondary)
@@ -429,6 +794,7 @@ struct OrdersListView: View {
     private func statusPill(_ status: OrderStatus) -> some View {
         switch status {
         case .placed: Pill(text: "To fulfill", fill: .crema400.opacity(0.18), foreground: .crema500)
+        case .packed: Pill(text: "Packed", fill: .crema400.opacity(0.18), foreground: .crema500)
         case .shipped: Pill(text: "Shipped", fill: .cream100, foreground: .espresso700)
         case .delivered: Pill(text: "Delivered", fill: .savedGreen.opacity(0.12), foreground: .savedGreen)
         case .readyForPickup: Pill(text: "Ready for pickup", fill: .cream100, foreground: .espresso700)
@@ -459,7 +825,7 @@ struct OrdersListView: View {
 // MARK: - Shipments
 
 struct ShipmentsListView: View {
-    let shop: OwnedShop
+    let shopID: String?
 
     @State private var shipments: [Shipment] = []
     @State private var total = 0
@@ -517,7 +883,7 @@ struct ShipmentsListView: View {
         defer { loading = false }
         do {
             let page = try await CoffeeAPI.fetchMyShipments(
-                shopID: shop.id, status: filter, offset: reset ? 0 : shipments.count
+                shopID: shopID, status: filter, offset: reset ? 0 : shipments.count
             )
             let seen = reset ? [] : Set(shipments.map(\.id))
             shipments = (reset ? [] : shipments) + page.items.filter { !seen.contains($0.id) }
@@ -539,6 +905,12 @@ struct ShipmentsListView: View {
                 }
                 Spacer()
                 statusPill(shipment)
+            }
+            if shopID == nil, let shop = shipment.order?.shop {
+                HStack(spacing: 6) {
+                    ShopMonogram(name: shop.name, size: 18)
+                    Text(shop.name).font(.kycMeta).foregroundStyle(Color.inkMuted)
+                }
             }
             if let items = shipment.order?.items {
                 Text(items.map { "\($0.qty)× \($0.name)" }.joined(separator: " · "))

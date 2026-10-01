@@ -23,10 +23,15 @@ class MemoryStore:
     visits: set = field(default_factory=set)  # (user_id, shop_id)
     claims: dict[str, m.ShopClaim] = field(default_factory=dict)
     login_codes: dict[str, dict] = field(default_factory=dict)
+    categories: dict[str, m.Category] = field(default_factory=dict)
+    category_fields: dict[str, list[m.CategoryField]] = field(default_factory=dict)  # by category id
     products: dict[str, m.Product] = field(default_factory=dict)
     product_photos: dict[str, list[m.ProductPhoto]] = field(default_factory=dict)  # by product id
     orders: dict[str, m.Order] = field(default_factory=dict)
+    order_items: dict[str, list[m.OrderItem]] = field(default_factory=dict)  # by order id
+    order_events: dict[str, list[m.OrderEvent]] = field(default_factory=dict)  # by order id
     shipments: dict[str, m.Shipment] = field(default_factory=dict)
+    addresses: dict[str, m.Address] = field(default_factory=dict)
     order_seq: int = 1000
     _ids: count = field(default_factory=lambda: count(1))
 

@@ -2,23 +2,35 @@ import { useEffect, useRef, useState } from 'react'
 import {
   createProduct,
   deleteProduct,
+  fetchCategories,
   fetchProduct,
   MAX_PRODUCT_PHOTOS,
   setProductPhotos,
   updateProduct,
+  type AttributeSection,
+  type Category,
+  type CategoryField,
   type Product,
 } from '../api'
 import { downscaleImage } from '../image'
+import { fieldProblem, fromAttributes, previewSubtitle, toAttributes, unitHint, type FieldValue, type FieldValues } from '../listingFields'
 
 // Full-pane listing form for the Seller Hub: create or edit one product,
-// with a live preview of the card buyers see. Replaces the old inline row.
+// with a live preview of the card buyers see. The seller picks a category;
+// its fields come from the server (Category.fields), grouped by section.
 
 const input =
   'w-full rounded-xl border border-cream-200 bg-white px-3.5 py-2.5 text-sm outline-none placeholder:text-espresso-500/60 focus:border-crema-400'
 const fieldLabel = 'flex flex-col gap-1.5 text-xs font-semibold text-espresso-500'
 const card = 'rounded-2xl border border-cream-200 bg-white p-5 shadow-sm'
+const pill = (on: boolean) =>
+  `rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+    on ? 'border-espresso-700 bg-espresso-700 text-cream-50' : 'border-cream-200 bg-white text-espresso-700 hover:border-crema-400'
+  }`
 
 const money = (n: number) => `$${n.toFixed(2)}`
+
+const SECTION_TITLES: Record<AttributeSection, string> = { FORMAT: 'Size and format', DETAILS: 'Details' }
 
 // id is set for photos already on the server; new uploads carry only data.
 type Slot = { key: string; id?: string; data: string }
@@ -36,10 +48,13 @@ export function ListingEditor({
   onDone: () => void
   onCancel: () => void
 }) {
+  const [categories, setCategories] = useState<Category[] | null>(null)
+  const [categoryId, setCategoryId] = useState<string | null>(product?.categoryId ?? null)
+  const [values, setValues] = useState<FieldValues>({})
   const [name, setName] = useState(product?.name ?? '')
-  const [variant, setVariant] = useState(product?.variant ?? '')
+  const [description, setDescription] = useState(product?.description ?? '')
   const [price, setPrice] = useState(product ? String(product.price) : '')
-  const [stockQty, setStockQty] = useState(product ? String(product.stockQty) : '1')
+  const [quantity, setQuantity] = useState(product ? String(product.quantity) : '1')
   const [threshold, setThreshold] = useState(product ? String(product.lowStockThreshold) : '5')
   const [active, setActive] = useState(product?.active ?? true)
   const [photos, setPhotos] = useState<Slot[]>([])
@@ -50,6 +65,29 @@ export function ListingEditor({
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
+
+  const category = categories?.find((c) => c.id === categoryId) ?? null
+  const fields = category?.fields ?? []
+
+  // Field definitions come from the server; an existing listing's values are
+  // mapped onto them once both have loaded.
+  useEffect(() => {
+    fetchCategories()
+      .then((cats) => {
+        setCategories(cats)
+        const current = cats.find((c) => c.id === product?.categoryId)
+        if (product && current) setValues(fromAttributes(current.fields, product.attributes))
+      })
+      .catch((e: Error) => setError(e.message))
+  }, [product])
+
+  const pickCategory = (id: string) => {
+    if (id === categoryId) return
+    setCategoryId(id)
+    setValues({}) // fields differ per category; nothing carries over
+  }
+
+  const setValue = (key: string, v: FieldValue) => setValues((prev) => ({ ...prev, [key]: v }))
 
   // The list query only carries the cover; the editor needs every photo.
   useEffect(() => {
@@ -104,27 +142,32 @@ export function ListingEditor({
   }
 
   const priceNum = parseFloat(price)
-  const stockNum = parseInt(stockQty, 10)
+  const quantityNum = parseInt(quantity, 10)
   const thresholdNum = parseInt(threshold, 10)
+  const attributes = toAttributes(fields, values)
   const problems = [
+    !categoryId && 'Pick what kind of item this is.',
     !name.trim() && 'Give the listing a name.',
+    fieldProblem(fields, values),
     (Number.isNaN(priceNum) || priceNum <= 0) && 'Price must be more than $0.',
-    (Number.isNaN(stockNum) || stockNum < 0) && 'Quantity must be 0 or more.',
+    (Number.isNaN(quantityNum) || quantityNum < 0) && 'Quantity must be 0 or more.',
     (Number.isNaN(thresholdNum) || thresholdNum < 0) && 'Low-stock alert must be 0 or more.',
   ].filter((p): p is string => Boolean(p))
 
   const save = async () => {
-    if (problems.length) {
-      setError(problems[0])
+    if (problems.length || !categoryId) {
+      setError(problems[0] ?? null)
       return
     }
     setBusy(true)
     setError(null)
     const payload = {
       name: name.trim(),
-      variant: variant.trim() || null,
+      categoryId,
+      attributes,
+      description: description.trim() || null,
       price: priceNum,
-      stockQty: stockNum,
+      quantity: quantityNum,
       lowStockThreshold: thresholdNum,
       active,
     }
@@ -155,7 +198,11 @@ export function ListingEditor({
     }
   }
 
-  const previewLow = !Number.isNaN(stockNum) && !Number.isNaN(thresholdNum) && stockNum <= thresholdNum
+  const previewLow = !Number.isNaN(quantityNum) && !Number.isNaN(thresholdNum) && quantityNum <= thresholdNum
+  const subtitle = category ? previewSubtitle(category, attributes) : ''
+  const sections = (['FORMAT', 'DETAILS'] as AttributeSection[])
+    .map((section) => [section, fields.filter((f) => f.section === section)] as const)
+    .filter(([, list]) => list.length > 0)
 
   return (
     <section>
@@ -245,21 +292,53 @@ export function ListingEditor({
 
           <div className={card}>
             <h3 className="font-bold">The item</h3>
-            <div className="mt-4 flex flex-col gap-3">
+            <div className="mt-4 flex flex-col gap-4">
+              <div className={fieldLabel}>
+                What is it?
+                <div className="flex flex-wrap gap-2">
+                  {categories ? (
+                    categories.map((c) => (
+                      <button key={c.id} type="button" onClick={() => pickCategory(c.id)} className={pill(c.id === categoryId)}>
+                        {c.label}
+                      </button>
+                    ))
+                  ) : (
+                    <span className="h-7 w-48 animate-pulse rounded-full bg-cream-100" />
+                  )}
+                </div>
+              </div>
               <label className={fieldLabel}>
                 Name
                 <input className={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Urcunina, Colombia" autoFocus />
               </label>
-              <label className={fieldLabel}>
-                Variant (optional)
-                <input className={input} value={variant} onChange={(e) => setVariant(e.target.value)} placeholder="12 oz whole bean" />
-                <span className="font-normal text-espresso-500/80">Size, grind, roast date — anything that tells one option from another.</span>
-              </label>
             </div>
           </div>
 
+          {sections.map(([section, list]) => (
+            <div key={section} className={card}>
+              <h3 className="font-bold">{SECTION_TITLES[section]}</h3>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                {list.map((f) => (
+                  <AttributeInput key={f.key} field={f} value={values[f.key]} onChange={(v) => setValue(f.key, v)} />
+                ))}
+              </div>
+            </div>
+          ))}
+
+          {category && (
+            <div className={card}>
+              <h3 className="font-bold">Description</h3>
+              <textarea
+                className={`${input} mt-4 min-h-24 resize-y`}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Anything else buyers should know: brewing tips, roast date, story of the farm."
+              />
+            </div>
+          )}
+
           <div className={card}>
-            <h3 className="font-bold">Price and stock</h3>
+            <h3 className="font-bold">Price and quantity</h3>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <label className={fieldLabel}>
                 Price
@@ -276,7 +355,7 @@ export function ListingEditor({
               </label>
               <label className={fieldLabel}>
                 Quantity
-                <input className={input} value={stockQty} onChange={(e) => setStockQty(e.target.value)} inputMode="numeric" />
+                <input className={input} value={quantity} onChange={(e) => setQuantity(e.target.value)} inputMode="numeric" />
               </label>
               <label className={fieldLabel}>
                 Low-stock alert at
@@ -284,7 +363,7 @@ export function ListingEditor({
               </label>
             </div>
             <p className="mt-3 text-[11px] text-espresso-500">
-              Stock drops automatically with each order and comes back if a buyer cancels.
+              Quantity drops automatically with each order and comes back if a buyer cancels.
             </p>
           </div>
 
@@ -368,15 +447,15 @@ export function ListingEditor({
               <div className="flex h-40 items-center justify-center rounded-xl bg-cream-100 text-3xl">☕️</div>
             )}
             <p className="mt-3 truncate font-semibold">{name.trim() || 'Listing name'}</p>
-            <p className="truncate text-xs text-espresso-500">{variant.trim() || shopName}</p>
+            <p className="truncate text-xs text-espresso-500">{subtitle || category?.label || shopName}</p>
             <div className="mt-3 flex items-center justify-between">
               <span className="text-lg font-bold tabular-nums">{Number.isNaN(priceNum) ? '$—' : money(priceNum)}</span>
               {!active ? (
                 <span className="rounded-full bg-cream-100 px-2.5 py-1 text-xs font-semibold text-espresso-500">Hidden</span>
-              ) : stockNum === 0 ? (
+              ) : quantityNum === 0 ? (
                 <span className="rounded-full bg-cream-100 px-2.5 py-1 text-xs font-semibold text-espresso-500">Sold out</span>
               ) : previewLow ? (
-                <span className="rounded-full bg-warn-100 px-2.5 py-1 text-xs font-semibold text-warn-700">Only {stockNum} left</span>
+                <span className="rounded-full bg-warn-100 px-2.5 py-1 text-xs font-semibold text-warn-700">Only {quantityNum} left</span>
               ) : (
                 <span className="rounded-full bg-ok-100 px-2.5 py-1 text-xs font-semibold text-ok-700">In stock</span>
               )}
@@ -386,4 +465,88 @@ export function ListingEditor({
       </div>
     </section>
   )
+}
+
+// One category field, rendered by its server-declared type.
+function AttributeInput({
+  field: f,
+  value,
+  onChange,
+}: {
+  field: CategoryField
+  value: FieldValue | undefined
+  onChange: (v: FieldValue) => void
+}) {
+  const label = (
+    <span>
+      {f.label}
+      {f.required && <span className="text-crema-500"> *</span>}
+      {f.unit && <span className="font-normal text-espresso-500/70"> ({f.unit})</span>}
+    </span>
+  )
+  const help = f.help && <span className="font-normal text-espresso-500/80">{f.help}</span>
+
+  switch (f.valueType) {
+    case 'ENUM':
+    case 'ENUM_MULTI': {
+      const chosen = f.valueType === 'ENUM_MULTI' ? ((value as string[] | undefined) ?? []) : value ? [value as string] : []
+      const toggle = (v: string) => {
+        if (f.valueType === 'ENUM') onChange(chosen[0] === v && !f.required ? '' : v)
+        else onChange(chosen.includes(v) ? chosen.filter((x) => x !== v) : [...chosen, v])
+      }
+      return (
+        <div className={`${fieldLabel} sm:col-span-2`}>
+          {label}
+          <div className="flex flex-wrap gap-2">
+            {f.options.map((o) => (
+              <button key={o.value} type="button" onClick={() => toggle(o.value)} className={pill(chosen.includes(o.value))}>
+                {o.label}
+              </button>
+            ))}
+          </div>
+          {help}
+        </div>
+      )
+    }
+    case 'BOOL': {
+      const on = value === true
+      return (
+        <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-cream-200 px-3.5 py-2.5 sm:col-span-2">
+          <input type="checkbox" checked={on} onChange={(e) => onChange(e.target.checked)} className="size-4 accent-espresso-700" />
+          <span className="flex flex-col text-xs font-semibold text-espresso-500">
+            {f.label}
+            {help}
+          </span>
+        </label>
+      )
+    }
+    case 'INT':
+    case 'DECIMAL': {
+      const raw = (value as string | undefined) ?? ''
+      const hint = unitHint(f, raw)
+      return (
+        <label className={fieldLabel}>
+          {label}
+          <input className={input} value={raw} onChange={(e) => onChange(e.target.value)} inputMode={f.valueType === 'INT' ? 'numeric' : 'decimal'} />
+          {hint ? <span className="font-normal text-espresso-500/80">{hint}</span> : help}
+        </label>
+      )
+    }
+    case 'TEXT_LIST':
+      return (
+        <label className={`${fieldLabel} sm:col-span-2`}>
+          {label}
+          <input className={input} value={(value as string | undefined) ?? ''} onChange={(e) => onChange(e.target.value)} placeholder="Cherry, cocoa, honey" />
+          {help ?? <span className="font-normal text-espresso-500/80">Comma-separated.</span>}
+        </label>
+      )
+    default:
+      return (
+        <label className={fieldLabel}>
+          {label}
+          <input className={input} value={(value as string | undefined) ?? ''} onChange={(e) => onChange(e.target.value)} />
+          {help}
+        </label>
+      )
+  }
 }

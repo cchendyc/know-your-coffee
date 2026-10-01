@@ -4,6 +4,7 @@ import {
   fetchHubStats,
   fetchMyOrders,
   fetchMyProducts,
+  fetchMySeller,
   fetchMyShipments,
   fetchSellerShop,
   markPickedUp,
@@ -19,19 +20,38 @@ import {
   type OrderStatus,
   type Product,
   type ProductCounts,
+  type Seller,
   type Shipment,
   type ShipmentStatus,
   type User,
 } from '../api'
+import { AllShopsPane } from './AllShopsPane'
+import { CopyListingsModal } from './CopyListingsModal'
+import {
+  cardCls,
+  EmptyRow,
+  ErrorNote,
+  inputCls,
+  money,
+  ORDER_PILLS,
+  PaneHeader,
+  primaryBtn,
+  secondaryBtn,
+  ShopAvatar,
+  StatusPill,
+  Table,
+  td,
+  type Tone,
+} from './hubBits'
 import { ListingEditor } from './ListingEditor'
+import { SellerApplicationModal } from './SellerApplication'
 import { SellerOnboarding } from './SellerOnboarding'
+import { ALL_SHOPS, ShopSwitcher, type HubView } from './ShopSwitcher'
 
 type Tab = 'overview' | 'products' | 'orders' | 'shipments'
 
 // The app header (73px) stays visible above the hub; the sidebar pins below it.
 const BELOW_HEADER = 'top-[73px] h-[calc(100vh-73px)]'
-
-const money = (n: number) => `$${n.toFixed(2)}`
 
 const SHIPMENT_LABELS: Record<ShipmentStatus, string> = {
   LABEL_READY: 'Label ready',
@@ -47,15 +67,6 @@ const NEXT_SHIPMENT_STEP: Partial<Record<ShipmentStatus, { to: ShipmentStatus; l
   IN_TRANSIT: { to: 'DELIVERED', label: 'Mark delivered' },
 }
 
-const ORDER_PILLS: Record<OrderStatus, { tone: Tone; label: string }> = {
-  PLACED: { tone: 'accent', label: 'To fulfill' },
-  SHIPPED: { tone: 'warn', label: 'Shipped' },
-  DELIVERED: { tone: 'ok', label: 'Delivered' },
-  READY_FOR_PICKUP: { tone: 'warn', label: 'Ready for pickup' },
-  PICKED_UP: { tone: 'ok', label: 'Picked up' },
-  CANCELED: { tone: 'muted', label: 'Canceled' },
-}
-
 // Shipped orders advance through their shipment, so only pickup has steps here.
 const NEXT_PICKUP_STEP: Partial<Record<OrderStatus, { run: (id: string) => Promise<Order>; label: string }>> = {
   PLACED: { run: markReadyForPickup, label: 'Mark ready' },
@@ -63,8 +74,6 @@ const NEXT_PICKUP_STEP: Partial<Record<OrderStatus, { run: (id: string) => Promi
 }
 
 const CANCELABLE: OrderStatus[] = ['PLACED', 'READY_FOR_PICKUP']
-
-type Tone = 'accent' | 'warn' | 'ok' | 'muted'
 
 const LISTING_LABELS: Record<ListingStatus, string> = {
   IN_STOCK: 'In stock',
@@ -78,48 +87,19 @@ const LISTING_COUNT_KEY: Record<ListingStatus, keyof ProductCounts> = {
   HIDDEN: 'hidden',
 }
 
-function StatusPill({ tone, children }: { tone: Tone; children: string }) {
-  const classes = {
-    accent: 'bg-crema-400/20 text-crema-500',
-    warn: 'bg-warn-100 text-warn-700',
-    ok: 'bg-ok-100 text-ok-700',
-    muted: 'bg-cream-100 text-espresso-500',
-  }[tone]
-  return (
-    <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap ${classes}`}>
-      {children}
-    </span>
-  )
-}
-
 function shipmentTone(status: ShipmentStatus): Tone {
   return status === 'LABEL_READY' ? 'accent' : status === 'DELIVERED' ? 'ok' : 'warn'
 }
 
-const th = 'px-4 py-3 text-left text-[11px] font-semibold tracking-wider text-espresso-500 uppercase'
-const td = 'px-4 py-3.5 text-sm'
-const inputCls =
-  'rounded-lg border border-cream-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-crema-400'
-const cardCls = 'rounded-2xl border border-cream-200 bg-white p-5 shadow-sm'
-const primaryBtn =
-  'rounded-xl bg-espresso-700 px-4 py-2.5 text-sm font-semibold text-cream-50 transition hover:bg-espresso-900 disabled:opacity-40'
-
-function Table({ headers, children }: { headers: string[]; children: React.ReactNode }) {
+// Order and shipment rows in the All-shops view name the shop they belong to.
+function ShopCell({ name }: { name: string }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-cream-200 bg-white shadow-sm">
-      <table className="w-full min-w-160">
-        <thead className="bg-cream-100/60">
-          <tr>
-            {headers.map((h) => (
-              <th key={h} className={th}>
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-cream-200">{children}</tbody>
-      </table>
-    </div>
+    <td className={td}>
+      <span className="flex items-center gap-2">
+        <ShopAvatar name={name} size="sm" />
+        <span className="truncate">{name}</span>
+      </span>
+    </td>
   )
 }
 
@@ -323,10 +303,13 @@ function ProductsPane({
   shopId,
   onNew,
   onEdit,
+  onCopy,
 }: {
   shopId: string
   onNew: () => void
   onEdit: (product: Product) => void
+  // Undefined when the seller owns no other shop to copy into.
+  onCopy?: () => void
 }) {
   const [filter, setFilter] = useState<ListingStatus | ''>('')
   const [offset, setOffset] = useState(0)
@@ -372,6 +355,11 @@ function ProductsPane({
         title="Listings"
         subtitle={counts ? `${counts.total} total${counts.lowStock ? ` · ${counts.lowStock} low on stock` : ''}` : '…'}
       >
+        {onCopy && (counts?.total ?? 0) > 0 && (
+          <button onClick={onCopy} className={secondaryBtn}>
+            Copy listings
+          </button>
+        )}
         <button onClick={onNew} className={primaryBtn}>
           + New listing
         </button>
@@ -395,7 +383,7 @@ function ProductsPane({
         </div>
       )}
       {products && (
-        <Table headers={['Listing', 'Price', 'Stock', 'Status', '']}>
+        <Table headers={['Listing', 'Price', 'Quantity', 'Status', '']}>
           {products.map((p) => (
             <tr key={p.id} className={p.active ? '' : 'opacity-50'}>
               <td className={td}>
@@ -409,16 +397,16 @@ function ProductsPane({
                     <button onClick={() => onEdit(p)} className="text-left font-semibold hover:text-crema-500">
                       {p.name}
                     </button>
-                    {p.variant && <div className="text-xs text-espresso-500">{p.variant}</div>}
+                    <div className="text-xs text-espresso-500">{p.subtitle ?? p.category.label}</div>
                   </div>
                 </div>
               </td>
               <td className={td}>{money(p.price)}</td>
               <td className={td}>
                 <div className="flex items-center gap-1.5">
-                  <StockButton label="−" onClick={() => act(() => updateProduct(p.id, { stockQty: Math.max(0, p.stockQty - 1) }))} />
-                  <span className="w-8 text-center font-medium tabular-nums">{p.stockQty}</span>
-                  <StockButton label="+" onClick={() => act(() => updateProduct(p.id, { stockQty: p.stockQty + 1 }))} />
+                  <StockButton label="−" onClick={() => act(() => updateProduct(p.id, { quantity: Math.max(0, p.quantity - 1) }))} />
+                  <span className="w-8 text-center font-medium tabular-nums">{p.quantity}</span>
+                  <StockButton label="+" onClick={() => act(() => updateProduct(p.id, { quantity: p.quantity + 1 }))} />
                 </div>
               </td>
               <td className={td}>
@@ -488,7 +476,8 @@ function StockButton({ label, onClick }: { label: string; onClick: () => void })
 
 // MARK: Orders
 
-function OrdersPane({ shopId }: { shopId: string }) {
+// shopId null = every owned shop, with a Shop column.
+function OrdersPane({ shopId }: { shopId: string | null }) {
   const [offset, setOffset] = useState(0)
   const [orders, setOrders] = useState<Order[] | null>(null)
   const [total, setTotal] = useState(0)
@@ -510,17 +499,23 @@ function OrdersPane({ shopId }: { shopId: string }) {
   const run = (fn: Promise<Order>) =>
     fn.then(() => setReload((n) => n + 1)).catch((e: Error) => setError(e.message))
 
+  const headers = ['Order', ...(shopId ? [] : ['Shop']), 'Buyer', 'Items', 'Total', 'Method', 'Status', '']
+
   return (
     <section>
-      <PaneHeader title="Orders" subtitle={orders ? `${total} total · ${toFulfill} to fulfill` : '…'} />
+      <PaneHeader
+        title="Orders"
+        subtitle={orders ? `${shopId ? '' : 'All shops · '}${total} total · ${toFulfill} to fulfill` : '…'}
+      />
       {error && <ErrorNote message={error} onDismiss={() => setError(null)} />}
       {orders && (
-        <Table headers={['Order', 'Buyer', 'Items', 'Total', 'Method', 'Status', '']}>
+        <Table headers={headers}>
           {orders.map((o) => {
             const step = o.fulfillment === 'PICKUP' ? NEXT_PICKUP_STEP[o.status] : undefined
             return (
               <tr key={o.id}>
                 <td className={`${td} font-semibold`}>#{o.number}</td>
+                {!shopId && <ShopCell name={o.shop.name} />}
                 <td className={td}>{o.buyer?.name ?? '—'}</td>
                 <td className={`${td} text-espresso-500`}>
                   {o.items.map((i) => `${i.qty}× ${i.name}`).join(' · ')}
@@ -554,7 +549,7 @@ function OrdersPane({ shopId }: { shopId: string }) {
               </tr>
             )
           })}
-          {orders.length === 0 && <EmptyRow colSpan={7} message="No orders yet. They appear here the moment a buyer checks out." />}
+          {orders.length === 0 && <EmptyRow colSpan={headers.length} message="No orders yet. They appear here the moment a buyer checks out." />}
         </Table>
       )}
       <Pager offset={offset} total={total} onChange={setOffset} />
@@ -564,7 +559,7 @@ function OrdersPane({ shopId }: { shopId: string }) {
 
 // MARK: Shipments
 
-function ShipmentsPane({ shopId }: { shopId: string }) {
+function ShipmentsPane({ shopId }: { shopId: string | null }) {
   const [shipments, setShipments] = useState<Shipment[] | null>(null)
   const [total, setTotal] = useState(0)
   const [toShip, setToShip] = useState(0)
@@ -598,10 +593,11 @@ function ShipmentsPane({ shopId }: { shopId: string }) {
   const visible = shipments
   const cellInput =
     'w-full min-w-24 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm outline-none placeholder:text-espresso-500/50 hover:border-cream-200 focus:border-crema-400 focus:bg-cream-100'
+  const headers = ['Order', ...(shopId ? [] : ['Shop']), 'Items', 'Ship by', 'Carrier', 'Tracking', 'Status', '']
 
   return (
     <section>
-      <PaneHeader title="Shipments" subtitle={shipments ? `${toShip} to ship` : '…'} />
+      <PaneHeader title="Shipments" subtitle={shipments ? `${shopId ? '' : 'All shops · '}${toShip} to ship` : '…'} />
       {error && <ErrorNote message={error} onDismiss={() => setError(null)} />}
       {shipments && (
         <>
@@ -622,13 +618,14 @@ function ShipmentsPane({ shopId }: { shopId: string }) {
               ),
             )}
           </div>
-          <Table headers={['Order', 'Items', 'Ship by', 'Carrier', 'Tracking', 'Status', '']}>
+          <Table headers={headers}>
             {visible!.map((s) => (
               <tr key={s.id}>
                 <td className={td}>
                   <div className="font-semibold">#{s.order?.number}</div>
                   <div className="text-xs text-espresso-500">{s.order?.buyer?.name ?? '—'}</div>
                 </td>
+                {!shopId && <ShopCell name={s.order?.shop.name ?? '—'} />}
                 <td className={`${td} text-espresso-500`}>
                   {s.order?.items.map((i) => `${i.qty}× ${i.name}`).join(' · ')}
                 </td>
@@ -674,48 +671,13 @@ function ShipmentsPane({ shopId }: { shopId: string }) {
               </tr>
             ))}
             {visible!.length === 0 && (
-              <EmptyRow colSpan={7} message={filter ? 'Nothing in this state.' : 'No shipments yet. Every new order creates one automatically.'} />
+              <EmptyRow colSpan={headers.length} message={filter ? 'Nothing in this state.' : 'No shipments yet. Every new order creates one automatically.'} />
             )}
           </Table>
           <Pager offset={offset} total={total} onChange={setOffset} />
         </>
       )}
     </section>
-  )
-}
-
-// MARK: Shared pane bits
-
-function PaneHeader({ title, subtitle, children }: { title: string; subtitle: string; children?: React.ReactNode }) {
-  return (
-    <div className="mb-5 flex items-center justify-between gap-3">
-      <div>
-        <h2 className="text-xl font-bold tracking-tight">{title}</h2>
-        <p className="mt-0.5 text-sm text-espresso-500">{subtitle}</p>
-      </div>
-      {children}
-    </div>
-  )
-}
-
-function ErrorNote({ message, onDismiss }: { message: string; onDismiss: () => void }) {
-  return (
-    <div className="mb-4 flex items-center justify-between rounded-xl border border-danger-200 bg-danger-100 px-4 py-3 text-sm text-danger-700">
-      {message}
-      <button onClick={onDismiss} className="ml-3 font-semibold">
-        ✕
-      </button>
-    </div>
-  )
-}
-
-function EmptyRow({ colSpan, message }: { colSpan: number; message: string }) {
-  return (
-    <tr>
-      <td colSpan={colSpan} className="px-4 py-10 text-center text-sm text-espresso-500">
-        {message}
-      </td>
-    </tr>
   )
 }
 
@@ -746,6 +708,9 @@ const NAV: { key: Tab; label: string; icon: React.ReactNode }[] = [
   },
 ]
 
+// Last-opened shop per device; the PRD leaves server-side persistence open.
+const VIEW_KEY = 'kyc_hub_view'
+
 // Renders below the persistent app header (no overlay): the logo in the
 // header is the way back to the explorer.
 export function SellerHub({
@@ -755,25 +720,51 @@ export function SellerHub({
   shops: { id: string; name: string; city: string }[]
   user: User
 }) {
-  const [shopId, setShopId] = useState(shops[0].id)
+  const [view, setView] = useState<HubView>(() => {
+    if (shops.length === 1) return shops[0].id
+    const saved = localStorage.getItem(VIEW_KEY)
+    return saved && (saved === ALL_SHOPS || shops.some((s) => s.id === saved)) ? saved : ALL_SHOPS
+  })
+  const shopId = view === ALL_SHOPS ? null : view
   const [tab, setTab] = useState<Tab>('overview')
   // Listing editor page within the Products tab: 'new' or the product being edited.
   const [listing, setListing] = useState<'new' | Product | null>(null)
   const [detail, setDetail] = useState<CoffeeShop | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [refresh, setRefresh] = useState(0)
+  // Switcher badges and the All-shops overview; the shops prop is the fallback until it loads.
+  const [seller, setSeller] = useState<Seller | null>(null)
+  const [addingShop, setAddingShop] = useState(false)
+  const [copyFrom, setCopyFrom] = useState<string | null>(null)
+  const [flash, setFlash] = useState<string | null>(null)
 
   useEffect(() => {
     setDetail(null)
     setLoadError(null)
+    if (!shopId) return
     fetchSellerShop(shopId)
       .then(setDetail)
       .catch((e: Error) => setLoadError(e.message))
   }, [shopId, refresh])
 
-  const selectShop = (id: string) => {
-    setShopId(id)
-    setTab('overview')
+  // Badges go stale as orders are handled; refetch whenever the seller moves around.
+  useEffect(() => {
+    fetchMySeller()
+      .then((s) => s && setSeller(s))
+      .catch(() => {})
+  }, [view, tab, refresh])
+
+  const sellerView: Seller = seller ?? {
+    shops: shops.map((s) => ({ ...s, address: '', sellerOnboarded: true, workload: null })),
+    workload: { toFulfill: 0, toShip: 0, lowStock: 0 },
+    pendingClaims: [],
+  }
+  const otherShops = sellerView.shops.filter((s) => s.id !== shopId)
+
+  const selectView = (next: HubView, nextTab: Tab = 'overview') => {
+    setView(next)
+    if (shops.length > 1) localStorage.setItem(VIEW_KEY, next)
+    setTab(nextTab)
     setListing(null)
   }
 
@@ -782,9 +773,32 @@ export function SellerHub({
     setListing(null)
   }
 
+  const say = (message: string) => {
+    setFlash(message)
+    setTimeout(() => setFlash(null), 3000)
+  }
+
+  const modals = (
+    <>
+      {addingShop && <SellerApplicationModal isSeller onClose={() => setAddingShop(false)} />}
+      {copyFrom && sellerView.shops.length > 1 && (
+        <CopyListingsModal
+          shops={sellerView.shops}
+          initialFromId={copyFrom}
+          onClose={() => setCopyFrom(null)}
+          onCopied={(n, to) => {
+            setCopyFrom(null)
+            setRefresh((k) => k + 1)
+            say(`Copied ${n} ${n === 1 ? 'listing' : 'listings'} to ${to.name}. They are hidden with quantity 0 until you list them.`)
+          }}
+        />
+      )}
+    </>
+  )
+
   // Server-owned flag: completeSellerOnboarding already ran inside the
   // walkthrough, so a refetch is enough to flip it everywhere.
-  if (!detail?.sellerOnboarded) {
+  if (shopId && !detail?.sellerOnboarded) {
     if (detail) return <SellerOnboarding shop={detail} onFinished={() => setRefresh((n) => n + 1)} />
     // Same full-page layer the walkthrough uses, so the header never
     // flashes through while the shop loads.
@@ -807,32 +821,18 @@ export function SellerHub({
     )
   }
 
+  // Listings need one shop; the All-shops view drops that tab.
+  const nav = shopId ? NAV : NAV.filter((n) => n.key !== 'products')
+
   return (
     <div className="flex min-h-[calc(100vh-73px)]">
-      <aside className={`sticky ${BELOW_HEADER} flex w-60 shrink-0 flex-col border-r border-cream-200 bg-white/60 p-4`}>
+      <aside className={`sticky ${BELOW_HEADER} flex w-72 shrink-0 flex-col border-r border-cream-200 bg-white/60 p-4`}>
         <p className="mb-3 px-1 text-[11px] font-semibold tracking-wider text-espresso-500 uppercase">Seller Hub</p>
 
-        {shops.length > 1 ? (
-          <select
-            value={shopId}
-            onChange={(e) => selectShop(e.target.value)}
-            className="mb-4 rounded-xl border border-cream-200 bg-cream-100 px-3 py-2.5 text-sm font-semibold outline-none"
-          >
-            {shops.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <div className="mb-4 rounded-xl border border-cream-200 bg-cream-100 px-3 py-2.5">
-            <div className="text-sm font-semibold">{shops[0].name}</div>
-            <div className="text-[11px] text-ok-700">✓ Verified owner</div>
-          </div>
-        )}
+        <ShopSwitcher seller={sellerView} view={view} onSelect={(v) => selectView(v)} onAddShop={() => setAddingShop(true)} />
 
         <nav className="flex flex-col gap-0.5">
-          {NAV.map(({ key, label, icon }) => (
+          {nav.map(({ key, label, icon }) => (
             <button
               key={key}
               onClick={() => openTab(key)}
@@ -865,16 +865,23 @@ export function SellerHub({
         </div>
       </aside>
 
-      <main className="flex-1 px-8 py-7">
-        {tab === 'overview' && (
-          <OverviewPane
-            key={shopId}
-            shop={detail}
-            user={user}
-            onShopChanged={setDetail}
-          />
-        )}
+      <main className="min-w-0 flex-1 px-8 py-7">
+        {flash && <p className="mb-5 rounded-xl bg-ok-100 px-4 py-2.5 text-sm font-medium text-ok-700">{flash}</p>}
+        {tab === 'overview' &&
+          (shopId ? (
+            <OverviewPane key={shopId} shop={detail} user={user} onShopChanged={setDetail} />
+          ) : (
+            <AllShopsPane
+              seller={sellerView}
+              user={user}
+              onOpenShop={(id) => selectView(id)}
+              onOpenOrders={() => openTab('orders')}
+              onAddShop={() => setAddingShop(true)}
+              onCopyListings={() => setCopyFrom(sellerView.shops.find((s) => s.sellerOnboarded)?.id ?? sellerView.shops[0].id)}
+            />
+          ))}
         {tab === 'products' &&
+          shopId &&
           (listing ? (
             <ListingEditor
               key={listing === 'new' ? 'new' : listing.id}
@@ -885,11 +892,18 @@ export function SellerHub({
               onCancel={() => setListing(null)}
             />
           ) : (
-            <ProductsPane key={shopId} shopId={shopId} onNew={() => setListing('new')} onEdit={setListing} />
+            <ProductsPane
+              key={`${shopId}-${refresh}`}
+              shopId={shopId}
+              onNew={() => setListing('new')}
+              onEdit={setListing}
+              onCopy={otherShops.length > 0 ? () => setCopyFrom(shopId) : undefined}
+            />
           ))}
-        {tab === 'orders' && <OrdersPane key={shopId} shopId={shopId} />}
-        {tab === 'shipments' && <ShipmentsPane key={shopId} shopId={shopId} />}
+        {tab === 'orders' && <OrdersPane key={view} shopId={shopId} />}
+        {tab === 'shipments' && <ShipmentsPane key={view} shopId={shopId} />}
       </main>
+      {modals}
     </div>
   )
 }

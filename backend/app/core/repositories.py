@@ -13,10 +13,12 @@ class Repositories:
     photos: Any
     users: Any
     claims: Any
+    categories: Any
     products: Any
     product_photos: Any
     orders: Any
     shipments: Any
+    addresses: Any
 
 
 def create_repositories() -> Repositories:
@@ -25,6 +27,8 @@ def create_repositories() -> Repositories:
     if settings.DATABASE_URL:
         from ..accounts.repositories.user_repository import UserRepository
         from ..claims.repositories.claim_repository import ClaimRepository
+        from ..commerce.repositories.address_repository import AddressRepository
+        from ..commerce.repositories.category_repository import CategoryRepository
         from ..commerce.repositories.order_repository import OrderRepository
         from ..commerce.repositories.product_photo_repository import ProductPhotoRepository
         from ..commerce.repositories.product_repository import ProductRepository
@@ -44,10 +48,12 @@ def create_repositories() -> Repositories:
             photos=PhotoRepository(session),
             users=UserRepository(session),
             claims=ClaimRepository(session),
+            categories=CategoryRepository(session),
             products=ProductRepository(session),
             product_photos=ProductPhotoRepository(session),
             orders=OrderRepository(session),
             shipments=ShipmentRepository(session),
+            addresses=AddressRepository(session),
         )
 
     from .memory import MemoryStore
@@ -61,6 +67,8 @@ def create_memory_repositories(store) -> Repositories:
     from ..accounts.repositories.memory import MemoryUserRepository
     from ..claims.repositories.memory import MemoryClaimRepository
     from ..commerce.repositories.memory import (
+        MemoryAddressRepository,
+        MemoryCategoryRepository,
         MemoryOrderRepository,
         MemoryProductPhotoRepository,
         MemoryProductRepository,
@@ -80,8 +88,10 @@ def create_memory_repositories(store) -> Repositories:
         photos=MemoryPhotoRepository(store),
         users=MemoryUserRepository(store),
         claims=MemoryClaimRepository(store),
+        categories=MemoryCategoryRepository(store),
         products=MemoryProductRepository(store),
         product_photos=MemoryProductPhotoRepository(store),
         orders=MemoryOrderRepository(store),
         shipments=MemoryShipmentRepository(store),
+        addresses=MemoryAddressRepository(store),
     )
