@@ -102,6 +102,18 @@ _GENERIC_SLUGS = {
 }
 
 
+_CITY_ALIASES = {"saint helena": "St. Helena", "st helena": "St. Helena"}
+
+
+def norm_city(city: str) -> str:
+    """Yelp returns cities as typed by the business ("WINDSOR", "Santa Rosa ",
+    "Saint Helena"); fold them onto one spelling so filters and counts agree."""
+    cleaned = " ".join(city.split())
+    if cleaned.lower() in _CITY_ALIASES:
+        return _CITY_ALIASES[cleaned.lower()]
+    return cleaned.title() if cleaned.isupper() else cleaned
+
+
 def norm_name(name: str) -> str:
     """"Caffè" and "Caffe" must normalize identically, so strip diacritics
     (NFKD) before dropping non-alphanumerics."""

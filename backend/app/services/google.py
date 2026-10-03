@@ -8,6 +8,7 @@ from graphql import GraphQLError
 
 from .. import settings
 from ..shops.records import NewShop
+from ..shops.text import norm_city
 
 _SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
 
@@ -146,22 +147,24 @@ async def fetch_shops_from_google(location: str) -> list[NewShop]:
         places = await _search(
             client,
             f"coffee shop in {location}",
-            "places.displayName,places.location,places.addressComponents",
+            "places.displayName,places.location,places.addressComponents,places.types",
             20,
         )
 
     shops: list[NewShop] = []
     for p in places:
+        name = p["displayName"]["text"]
         street_number = _component(p, "street_number")
         route = _component(p, "route")
         city = _component(p, "locality")
-        if not route or not city:
+        # "coffee shop in <city>" also returns 7-Elevens and McDonald's.
+        if not route or not city or not _is_coffee_shop(name, p.get("types") or []):
             continue
         shops.append(
             {
-                "name": p["displayName"]["text"],
+                "name": name,
                 "address": " ".join(x for x in [street_number, route] if x),
-                "city": city,
+                "city": norm_city(city),
                 "lat": p["location"]["latitude"],
                 "lng": p["location"]["longitude"],
                 **_empty_shop_fields(),

@@ -5,6 +5,7 @@ from graphql import GraphQLError
 
 from .. import settings
 from ..shops.records import NewShop
+from ..shops.text import norm_city
 
 
 async def fetch_shops_from_yelp(location: str) -> list[NewShop]:
@@ -28,7 +29,7 @@ async def fetch_shops_from_yelp(location: str) -> list[NewShop]:
             {
                 "name": b["name"],
                 "address": b["location"]["address1"],
-                "city": b["location"]["city"],
+                "city": norm_city(b["location"]["city"]),
                 "lat": b["coordinates"]["latitude"],
                 "lng": b["coordinates"]["longitude"],
                 "machine": "UNKNOWN",
