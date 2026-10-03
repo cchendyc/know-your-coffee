@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link, Navigate, useNavigate, useParams } from 'react-router'
 import {
   cancelOrder,
   fetchHubStats,
@@ -6,6 +7,7 @@ import {
   fetchMyProducts,
   fetchMySeller,
   fetchMyShipments,
+  fetchProduct,
   fetchSellerShop,
   markPickedUp,
   markReadyForPickup,
@@ -46,9 +48,8 @@ import {
 import { ListingEditor } from './ListingEditor'
 import { SellerApplicationModal } from './SellerApplication'
 import { SellerOnboarding } from './SellerOnboarding'
+import { hubPath, parseHubPath, rememberHubShop, type HubTab as Tab } from '../routes'
 import { ALL_SHOPS, ShopSwitcher, type HubView } from './ShopSwitcher'
-
-type Tab = 'overview' | 'products' | 'orders' | 'shipments'
 
 // The app header (73px) stays visible above the hub; the sidebar pins below it.
 const BELOW_HEADER = 'top-[73px] h-[calc(100vh-73px)]'
@@ -209,7 +210,11 @@ function OverviewPane({
 
   return (
     <section className="flex flex-col gap-5">
-      <PaneHeader title={shop.name} subtitle={`${shop.address}, ${shop.city}`} />
+      <PaneHeader title={shop.name} subtitle={`${shop.address}, ${shop.city}`}>
+        <Link to={`/shops/${shop.id}`} className={secondaryBtn}>
+          View shop page
+        </Link>
+      </PaneHeader>
       {error && <ErrorNote message={error} onDismiss={() => setError(null)} />}
       {saved && (
         <p className="rounded-xl bg-ok-100 px-4 py-2.5 text-sm font-medium text-ok-700">{saved}</p>
@@ -690,7 +695,7 @@ const NAV: { key: Tab; label: string; icon: React.ReactNode }[] = [
     icon: <path d="M3 10.5 12 3l9 7.5V21h-6v-6h-6v6H3z" />,
   },
   {
-    key: 'products',
+    key: 'listings',
     label: 'Listings',
     icon: <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4" />,
   },
@@ -708,11 +713,9 @@ const NAV: { key: Tab; label: string; icon: React.ReactNode }[] = [
   },
 ]
 
-// Last-opened shop per device; the PRD leaves server-side persistence open.
-const VIEW_KEY = 'kyc_hub_view'
-
 // Renders below the persistent app header (no overlay): the logo in the
-// header is the way back to the explorer.
+// header is the way back to the explorer. Mounted at /dashboard/*; the shop,
+// tab and open listing all live in the URL (see routes.ts).
 export function SellerHub({
   shops,
   user,
@@ -720,15 +723,13 @@ export function SellerHub({
   shops: { id: string; name: string; city: string }[]
   user: User
 }) {
-  const [view, setView] = useState<HubView>(() => {
-    if (shops.length === 1) return shops[0].id
-    const saved = localStorage.getItem(VIEW_KEY)
-    return saved && (saved === ALL_SHOPS || shops.some((s) => s.id === saved)) ? saved : ALL_SHOPS
-  })
-  const shopId = view === ALL_SHOPS ? null : view
-  const [tab, setTab] = useState<Tab>('overview')
-  // Listing editor page within the Products tab: 'new' or the product being edited.
-  const [listing, setListing] = useState<'new' | Product | null>(null)
+  const navigate = useNavigate()
+  const { shopId, tab, listing } = parseHubPath(useParams()['*'] ?? '')
+  const view: HubView = shopId ?? ALL_SHOPS
+  const knownShop = !shopId || shops.some((s) => s.id === shopId)
+  // The product being edited. ProductsPane hands over the row it has so the
+  // editor opens at once; a deep link fetches it instead.
+  const [editing, setEditing] = useState<Product | null>(null)
   const [detail, setDetail] = useState<CoffeeShop | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [refresh, setRefresh] = useState(0)
@@ -747,6 +748,17 @@ export function SellerHub({
       .catch((e: Error) => setLoadError(e.message))
   }, [shopId, refresh])
 
+  useEffect(() => {
+    if (shops.length > 1 && knownShop) rememberHubShop(shopId)
+  }, [shopId, shops.length, knownShop])
+
+  useEffect(() => {
+    if (!listing || listing === 'new' || editing?.id === listing) return
+    fetchProduct(listing)
+      .then(setEditing)
+      .catch((e: Error) => setLoadError(e.message))
+  }, [listing, editing?.id])
+
   // Badges go stale as orders are handled; refetch whenever the seller moves around.
   useEffect(() => {
     fetchMySeller()
@@ -761,17 +773,13 @@ export function SellerHub({
   }
   const otherShops = sellerView.shops.filter((s) => s.id !== shopId)
 
-  const selectView = (next: HubView, nextTab: Tab = 'overview') => {
-    setView(next)
-    if (shops.length > 1) localStorage.setItem(VIEW_KEY, next)
-    setTab(nextTab)
-    setListing(null)
+  const selectView = (next: HubView, nextTab: Tab = 'overview') => navigate(hubPath(next === ALL_SHOPS ? null : next, nextTab))
+  const openTab = (key: Tab) => navigate(hubPath(shopId, key))
+  const openListing = (product: Product | 'new') => {
+    setEditing(product === 'new' ? null : product)
+    navigate(hubPath(shopId, 'listings', product === 'new' ? 'new' : product.id))
   }
-
-  const openTab = (key: Tab) => {
-    setTab(key)
-    setListing(null)
-  }
+  const closeListing = () => navigate(hubPath(shopId, 'listings'))
 
   const say = (message: string) => {
     setFlash(message)
@@ -795,6 +803,9 @@ export function SellerHub({
       )}
     </>
   )
+
+  // Unknown shop id, or a tab that needs one shop, falls back to all shops.
+  if (!knownShop || (!shopId && tab === 'listings')) return <Navigate to={hubPath(null)} replace />
 
   // Server-owned flag: completeSellerOnboarding already ran inside the
   // walkthrough, so a refetch is enough to flip it everywhere.
@@ -822,7 +833,7 @@ export function SellerHub({
   }
 
   // Listings need one shop; the All-shops view drops that tab.
-  const nav = shopId ? NAV : NAV.filter((n) => n.key !== 'products')
+  const nav = shopId ? NAV : NAV.filter((n) => n.key !== 'listings')
 
   return (
     <div className="flex min-h-[calc(100vh-73px)]">
@@ -880,23 +891,25 @@ export function SellerHub({
               onCopyListings={() => setCopyFrom(sellerView.shops.find((s) => s.sellerOnboarded)?.id ?? sellerView.shops[0].id)}
             />
           ))}
-        {tab === 'products' &&
+        {tab === 'listings' &&
           shopId &&
-          (listing ? (
+          (listing === 'new' || (listing && editing?.id === listing) ? (
             <ListingEditor
-              key={listing === 'new' ? 'new' : listing.id}
+              key={listing}
               shopId={shopId}
               shopName={detail?.name ?? shops.find((s) => s.id === shopId)?.name ?? 'your shop'}
-              product={listing === 'new' ? null : listing}
-              onDone={() => setListing(null)}
-              onCancel={() => setListing(null)}
+              product={listing === 'new' ? null : editing}
+              onDone={closeListing}
+              onCancel={closeListing}
             />
+          ) : listing ? (
+            loadError ? <ErrorNote message={loadError} onDismiss={closeListing} /> : <p className="text-sm text-espresso-500">Loading listing…</p>
           ) : (
             <ProductsPane
               key={`${shopId}-${refresh}`}
               shopId={shopId}
-              onNew={() => setListing('new')}
-              onEdit={setListing}
+              onNew={() => openListing('new')}
+              onEdit={openListing}
               onCopy={otherShops.length > 0 ? () => setCopyFrom(shopId) : undefined}
             />
           ))}

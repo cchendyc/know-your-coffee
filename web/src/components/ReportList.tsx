@@ -1,5 +1,5 @@
 import type { Report } from '../api'
-import { AMENITIES, machineDisplay } from '../labels'
+import { reportSummary } from '../labels'
 
 export function ReportList({ reports }: { reports: Report[] }) {
   if (reports.length === 0) {
@@ -16,27 +16,7 @@ export function ReportList({ reports }: { reports: Report[] }) {
             {r.reporter ? `${r.reporter.name} · ` : ''}
             {new Date(r.createdAt).toLocaleString()} · {r.source === 'PHOTO' ? 'via photo' : 'via text'}
           </p>
-          <p className="mt-1">
-            {[
-              r.machines?.length
-                ? `Machine${r.machines.length > 1 ? 's' : ''}: ${r.machines
-                    .map((m) => machineDisplay(m.brand, m.model))
-                    .join(', ')}`
-                : r.machine && `Machine: ${machineDisplay(r.machine, r.machineModel)}`,
-              r.roaster && `Roaster: ${r.roaster}`,
-              r.beanOrigins?.length && `Origins: ${r.beanOrigins.join(', ')}`,
-              r.grinders?.length && `Grinders: ${r.grinders.join(', ')}`,
-              r.drinks?.length &&
-                `Drinks: ${r.drinks
-                  .map((d) => (d.price != null ? `${d.name} $${d.price.toFixed(2)}` : d.name))
-                  .join(', ')}`,
-              r.milkBrands?.length && `Milk: ${r.milkBrands.join(', ')}`,
-              ...AMENITIES.map((a) => r[a.key] !== null && (r[a.key] ? a.label : a.no)),
-              r.note,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          </p>
+          <p className="mt-1">{reportSummary(r)}</p>
         </li>
       ))}
     </ul>

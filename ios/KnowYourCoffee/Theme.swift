@@ -17,6 +17,9 @@ extension Color {
     static let savedGreen = dynamic(light: 0x2E9E4F, dark: 0x6FBF8F)
     /// Card surface: white on cream in light, elevated umber on espresso black in dark.
     static let surface = dynamic(light: 0xFFFFFF, dark: 0x271A11)
+    /// Soft fills behind status chips (Figma accent-soft / warning-soft).
+    static let accentSoft = dynamic(light: 0xF7EAD6, dark: 0x3E2F13)
+    static let warnSoft = dynamic(light: 0xFDEADD, dark: 0x44261A)
     /// Shadows stay espresso-dark in both themes; a light shadow reads as a glow.
     static let shadowInk = Color(hex: 0x2B1D14)
 

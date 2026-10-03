@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { fetchMe, fetchMyShops, fetchShops, TOKEN_KEY, USER_KEY, type CoffeeShop, type MachineBrand, type User } from './api'
+import { HUB_ROOT, hubHome, hubPath } from './routes'
 import { MACHINE_BRANDS, MACHINE_LABELS } from './labels'
 import { ShopCard } from './components/ShopCard'
 import { ShopDrawer } from './components/ShopDrawer'
@@ -7,8 +9,14 @@ import { MapView } from './components/MapView'
 import { AuthButton, loadStoredUser } from './components/AuthButton'
 import { AddShopModal } from './components/AddShopModal'
 import { SellerApplicationModal } from './components/SellerApplication'
-import { SellerHub } from './components/SellerHub'
 import { getThemePref, setThemePref, type ThemePref } from './theme'
+
+// Own chunks: the explorer does not pay for the hub or the shop page, and
+// a shared /shops/:id link does not download Leaflet.
+const SellerHub = lazy(() => import('./components/SellerHub').then((m) => ({ default: m.SellerHub })))
+const ShopPage = lazy(() => import('./shop/ShopPage').then((m) => ({ default: m.ShopPage })))
+
+const routeFallback = <p className="p-10 text-center text-sm text-espresso-500">Loading…</p>
 
 // Cycles System → Light → Dark Roast. System follows the OS appearance.
 function ThemeToggle() {
@@ -112,33 +120,31 @@ export default function App() {
   const [shops, setShops] = useState<CoffeeShop[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  // ?shop=<id> deep links (also what the iOS share sheet sends out).
-  const [selectedId, setSelectedId] = useState<string | null>(
-    () => new URLSearchParams(window.location.search).get('shop'),
-  )
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
+  const inHub = pathname.startsWith(HUB_ROOT)
+  // Older share links used /?shop=<id>; they now land on the shop page.
+  const legacyShopId = useSearchParams()[0].get('shop')
+  // Map-pin preview. In-memory only: the shareable URL is /shops/:id.
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  // The drawer links into /shops/:id; leaving the explorer dismisses it.
+  useEffect(() => setSelectedId(null), [pathname])
+  const openShopPage = (shop: CoffeeShop) => navigate(`/shops/${shop.id}`, { state: { shop } })
   const [view, setView] = useState<'list' | 'map'>('list')
   const [user, setUser] = useState<User | null>(loadStoredUser)
   const [adding, setAdding] = useState(false)
-  // Owned shops unlock the Seller Hub button; empty for buyer-only users.
-  const [myShops, setMyShops] = useState<{ id: string; name: string; city: string }[]>([])
-  const [hubOpen, setHubOpen] = useState(false)
+  // Owned shops unlock the Seller Hub; null until loaded so a /dashboard
+  // refresh waits instead of bouncing to the explorer.
+  const [myShops, setMyShops] = useState<{ id: string; name: string; city: string }[] | null>(user ? null : [])
+  const isSeller = !!myShops && myShops.length > 0
   const [applying, setApplying] = useState(false)
   useEffect(() => {
     if (!user) {
       setMyShops([])
-      setHubOpen(false)
       return
     }
     fetchMyShops().then(setMyShops).catch(() => setMyShops([]))
   }, [user])
-
-  // Keep ?shop=<id> in the URL so the open shop stays shareable.
-  useEffect(() => {
-    const url = new URL(window.location.href)
-    if (selectedId) url.searchParams.set('shop', selectedId)
-    else url.searchParams.delete('shop')
-    window.history.replaceState(null, '', url)
-  }, [selectedId])
 
   // api.ts clears the stored login when the server rejects the session token.
   useEffect(() => {
@@ -215,22 +221,12 @@ export default function App() {
     )
   }
 
-  const onShopDeleted = (id: string) => {
-    setShops((prev) => prev.filter((s) => s.id !== id))
-    setTotal((n) => Math.max(0, n - 1))
-    setSelectedId(null)
-  }
-
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 border-b border-cream-200 bg-cream-50/90 backdrop-blur">
         <div className="flex items-center gap-3 px-4 py-4 sm:px-5">
           {/* The logo is the way back to the explorer from the Seller Hub. */}
-          <button
-            type="button"
-            onClick={() => setHubOpen(false)}
-            className="flex items-center gap-3 text-left"
-          >
+          <button type="button" onClick={() => navigate('/')} className="flex items-center gap-3 text-left">
             <img
               // BASE_URL keeps this working at github.io/<repo>/ and at the custom domain root.
               src={`${import.meta.env.BASE_URL}icon-192.png`}
@@ -239,18 +235,18 @@ export default function App() {
             />
             <div>
               <h1 className="text-lg font-bold tracking-tight">Know Your Coffee</h1>
-              <p className="text-xs text-espresso-500">{hubOpen ? 'seller hub' : 'coffee snobs'}</p>
+              <p className="text-xs text-espresso-500">{inHub ? 'seller hub' : 'coffee snobs'}</p>
             </div>
           </button>
           <div className="flex-1" />
-          {user && myShops.length > 0 && (
+          {user && isSeller && (
             // One click to the hub, and back. The drawer keeps its own entry.
             <button
               type="button"
-              onClick={() => setHubOpen((o) => !o)}
-              aria-pressed={hubOpen}
+              onClick={() => navigate(inHub ? '/' : hubHome(myShops))}
+              aria-pressed={inHub}
               className={`flex h-9 shrink-0 items-center gap-2 rounded-full border px-3 text-xs font-semibold shadow-sm transition ${
-                hubOpen
+                inHub
                   ? 'border-espresso-700 bg-espresso-700 text-cream-50 hover:bg-espresso-900'
                   : 'border-cream-200 bg-white text-espresso-700 hover:border-crema-400'
               }`}
@@ -258,15 +254,15 @@ export default function App() {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-4">
                 <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4ZM3 6h18M16 10a4 4 0 0 1-8 0" />
               </svg>
-              <span className="hidden sm:inline">{hubOpen ? 'Back to shops' : 'Seller Hub'}</span>
+              <span className="hidden sm:inline">{inHub ? 'Back to shops' : 'Seller Hub'}</span>
             </button>
           )}
           <ThemeToggle />
           <AuthButton
             user={user}
             onChange={setUser}
-            isSeller={myShops.length > 0}
-            onOpenSellerHub={() => setHubOpen(true)}
+            isSeller={isSeller}
+            onOpenSellerHub={() => navigate(hubHome(myShops ?? []))}
             onBecomeSeller={() => setApplying(true)}
           />
         </div>
@@ -274,9 +270,35 @@ export default function App() {
 
       {applying && <SellerApplicationModal onClose={() => setApplying(false)} />}
 
-      {hubOpen && myShops.length > 0 && user ? (
-        <SellerHub shops={myShops} user={user} />
-      ) : (
+      <Routes>
+        <Route
+          path="/shops/:shopId"
+          element={
+            <Suspense fallback={routeFallback}>
+              <ShopPage user={user} onShopChanged={onShopChanged} />
+            </Suspense>
+          }
+        />
+        <Route
+          path={`${HUB_ROOT}/*`}
+          element={
+            !user || (myShops && myShops.length === 0) ? (
+              <Navigate to="/" replace />
+            ) : !myShops ? (
+              <p className="p-10 text-center text-sm text-espresso-500">Loading your shops…</p>
+            ) : (
+              <Suspense fallback={routeFallback}>
+                <SellerHub shops={myShops} user={user} />
+              </Suspense>
+            )
+          }
+        />
+        <Route
+          path="*"
+          element={
+        legacyShopId ? (
+          <Navigate to={`/shops/${legacyShopId}`} replace />
+        ) : (
         <>
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
         <div className="flex flex-col gap-3 sm:flex-row">
@@ -375,13 +397,7 @@ export default function App() {
             ) : (
               <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {shops.map((shop) => (
-                  <ShopCard
-                    key={shop.id}
-                    shop={shop}
-                    user={user}
-                    onClick={() => setSelectedId(shop.id)}
-                    onChanged={onShopChanged}
-                  />
+                  <ShopCard key={shop.id} shop={shop} user={user} onClick={() => openShopPage(shop)} onChanged={onShopChanged} />
                 ))}
               </div>
             )}
@@ -419,26 +435,24 @@ export default function App() {
           onAdded={(id) => {
             setAdding(false)
             setRefresh((n) => n + 1)
-            setSelectedId(id)
+            navigate(`/shops/${id}`)
           }}
         />
       )}
         </>
-      )}
+        )
+          }
+        />
+      </Routes>
 
       {selectedId && (
         <ShopDrawer
           shopId={selectedId}
           initialShop={shops.find((s) => s.id === selectedId)}
           user={user}
-          isSeller={myShops.length > 0}
           onShopChanged={onShopChanged}
-          onShopDeleted={onShopDeleted}
-          onOpenShop={setSelectedId}
-          onOpenSellerHub={() => {
-            setSelectedId(null)
-            setHubOpen(true)
-          }}
+          // "Manage" on an owned shop lands on that shop's own dashboard.
+          onOpenSellerHub={() => navigate(hubPath(selectedId))}
           onClose={() => setSelectedId(null)}
         />
       )}

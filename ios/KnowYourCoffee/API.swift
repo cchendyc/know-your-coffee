@@ -113,6 +113,9 @@ enum CoffeeAPI {
                 \(shopFields)
                 photoCount
                 reportCount
+                ownerId ownedByMe
+                deliverySettings { shipping pickup pickupInstructions }
+                products { id name price subtitle status coverPhoto { id data } }
                 photos { id kind data createdAt uploader { name picture } }
                 reports {
                   id machine machineModel machines { brand model }
@@ -121,7 +124,7 @@ enum CoffeeAPI {
                   milkBrands dogFriendly wifi outdoorSeating note source createdAt
                   reporter { name picture }
                 }
-                chain { id name shops { id name address city } }
+                chain { id name shops { id name address city photoUrl machine machineModel machines { brand model } beanSource } }
               }
             }
             """

@@ -115,12 +115,21 @@ export function isAdmin(user: User | null | undefined): boolean {
   return user?.role === 'ADMIN'
 }
 
+// Enough of a shop to draw a rail card; shared by chain siblings and,
+// later, similar-shop suggestions.
 export interface ChainLocation {
   id: string
   name: string
   address: string
   city: string
+  photoUrl: string | null
+  machine: MachineBrand
+  machineModel: string | null
+  machines: Machine[]
+  beanSource: BeanSource
 }
+
+export const RELATED_SHOP_FIELDS = 'id name address city photoUrl machine machineModel machines { brand model } beanSource'
 
 export interface CoffeeShop {
   id: string
@@ -288,23 +297,44 @@ const REPORT_FIELDS = `
   milkBrands dogFriendly wifi outdoorSeating note source createdAt reporter { name picture }
 `
 
-// Expanded-view payload: the full shop with all photos, reports, and chain.
-// The drawer never calls this — it paints from the list's copy.
-export function fetchShop(id: string) {
-  return gql<{ shop: CoffeeShop | null }>(
-    `query Shop($id: ID!) {
+// Everything above the fold on /shops/:id in one round trip: the full shop,
+// ownership, listings with covers, and the first reports. Community photos
+// are base64 blobs, so fetchShopPhotos loads them only when scrolled near.
+export type ShopPageProduct = Pick<Product, 'id' | 'name' | 'price' | 'subtitle' | 'status' | 'coverPhoto'>
+
+export interface ShopPageData extends CoffeeShop {
+  ownerId: string | null
+  ownedByMe: boolean
+  deliverySettings: DeliverySettings
+  products: ShopPageProduct[]
+  photoCount: number
+  reports: Report[]
+  reportCount: number
+}
+
+export function fetchShopPage(id: string) {
+  return gql<{ shop: ShopPageData | null }>(
+    `query ShopPage($id: ID!) {
       shop(id: $id) {
         ${SHOP_FIELDS}
-        photoCount
-        reportCount
-        owner { name picture }
-        photos { id kind data createdAt uploader { name picture } }
-        reports { ${REPORT_FIELDS} }
-        chain { id name shops { id name address city } }
+        ownerId ownedByMe photoCount reportCount
+        deliverySettings { shipping pickup pickupInstructions }
+        products { id name price subtitle status coverPhoto { id data position } }
+        reports(limit: 20) { ${REPORT_FIELDS} }
+        chain { id name shops { ${RELATED_SHOP_FIELDS} } }
       }
     }`,
     { id },
   ).then((d) => d.shop)
+}
+
+export function fetchShopPhotos(id: string, limit = 12) {
+  return gql<{ shop: { photos: ShopPhoto[] } | null }>(
+    `query ShopPhotos($id: ID!, $limit: Int!) {
+      shop(id: $id) { photos(limit: $limit) { id kind data createdAt uploader { name picture } } }
+    }`,
+    { id, limit },
+  ).then((d) => d.shop?.photos ?? [])
 }
 
 // Drawer fallback for shops missing from the loaded list (e.g. a chain

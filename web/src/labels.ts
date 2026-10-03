@@ -1,4 +1,4 @@
-import type { BeanSource, Coffee, CoffeeProcess, CoffeeType, MachineBrand, PhotoKind, RoastLevel } from './api'
+import type { BeanSource, Coffee, CoffeeProcess, CoffeeType, MachineBrand, PhotoKind, Report, RoastLevel } from './api'
 
 export const PHOTO_KIND_LABELS: Record<PhotoKind, string> = {
   MACHINE: 'Machine',
@@ -150,3 +150,21 @@ export const AMENITIES = [
 ] as const
 
 export type AmenityKey = (typeof AMENITIES)[number]['key']
+
+// One-line "what changed" text for a report, in field order.
+export function reportSummary(r: Report): string {
+  return [
+    r.machines?.length
+      ? `Machine${r.machines.length > 1 ? 's' : ''}: ${r.machines.map((m) => machineDisplay(m.brand, m.model)).join(', ')}`
+      : r.machine && `Machine: ${machineDisplay(r.machine, r.machineModel)}`,
+    r.roaster && `Roaster: ${r.roaster}`,
+    r.beanOrigins?.length && `Origins: ${r.beanOrigins.join(', ')}`,
+    r.grinders?.length && `Grinders: ${r.grinders.join(', ')}`,
+    r.drinks?.length && `Drinks: ${r.drinks.map((d) => (d.price != null ? `${d.name} $${d.price.toFixed(2)}` : d.name)).join(', ')}`,
+    r.milkBrands?.length && `Milk: ${r.milkBrands.join(', ')}`,
+    ...AMENITIES.map((a) => r[a.key] !== null && (r[a.key] ? a.label : a.no)),
+    r.note,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}

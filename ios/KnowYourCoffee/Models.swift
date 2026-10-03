@@ -183,17 +183,91 @@ struct Report: Codable, Identifiable, Hashable {
     let createdAt: String
 }
 
+// Enough of a shop to draw a rail card; chain siblings now, similar shops later.
 struct ChainLocation: Codable, Identifiable, Hashable {
     let id: String
     let name: String
     let address: String
     let city: String
+    var photoUrl: String?
+    var machine: MachineBrand?
+    var machineModel: String?
+    var machines: [Machine]?
+    var beanSource: BeanSource?
+
+    var photoURL: URL? { photoUrl.flatMap(URL.init(string:)) }
+
+    var knownMachine: Machine? {
+        let list = (machines?.isEmpty == false) ? machines! : machine.map { [Machine(brand: $0, model: machineModel)] } ?? []
+        return list.first { $0.brand != .unknown }
+    }
 }
 
 struct Chain: Codable, Hashable {
     let id: String
     let name: String
     let shops: [ChainLocation]
+}
+
+struct DeliverySettings: Codable, Hashable {
+    let shipping: Bool
+    let pickup: Bool
+    let pickupInstructions: String?
+
+    /// "Ships to you · Pickup in Berkeley", or "" when neither is on.
+    func copy(city: String) -> String {
+        [shipping ? "Ships to you" : nil, pickup ? "Pickup in \(city)" : nil]
+            .compactMap { $0 }
+            .joined(separator: " · ")
+    }
+}
+
+struct ListingCover: Codable, Hashable {
+    let id: String
+    let data: String // data URL
+
+    var imageData: Data? {
+        guard let comma = data.firstIndex(of: ",") else { return Data(base64Encoded: data) }
+        return Data(base64Encoded: String(data[data.index(after: comma)...]))
+    }
+}
+
+// Buyer-facing listing on the shop page; the seller's Product carries more.
+struct ShopListing: Codable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let price: Double
+    let subtitle: String?
+    let status: String // IN_STOCK / LOW_STOCK / OUT_OF_STOCK / HIDDEN
+    let coverPhoto: ListingCover?
+}
+
+extension Report {
+    // One-line "what changed", in field order. Mirrors web reportSummary().
+    var summary: String {
+        var parts: [String] = []
+        if let machines, !machines.isEmpty {
+            parts.append("Machine\(machines.count > 1 ? "s" : ""): \(machines.map(\.display).joined(separator: ", "))")
+        } else if let machine, machine != .unknown {
+            parts.append("Machine: \(Machine(brand: machine, model: machineModel).display)")
+        }
+        if let roaster, !roaster.isEmpty { parts.append("Roaster: \(roaster)") }
+        if let beanOrigins, !beanOrigins.isEmpty { parts.append("Origins: \(beanOrigins.joined(separator: ", "))") }
+        if let grinders, !grinders.isEmpty { parts.append("Grinders: \(grinders.joined(separator: ", "))") }
+        if let drinks, !drinks.isEmpty {
+            let list = drinks.map { d -> String in
+                if let price = d.price { return "\(d.name) $\(String(format: "%.2f", price))" }
+                return d.name
+            }
+            parts.append("Drinks: \(list.joined(separator: ", "))")
+        }
+        if let milkBrands, !milkBrands.isEmpty { parts.append("Milk: \(milkBrands.joined(separator: ", "))") }
+        if let dogFriendly { parts.append(dogFriendly ? "Dog friendly" : "No dogs") }
+        if let wifi { parts.append(wifi ? "Wi-Fi" : "No Wi-Fi") }
+        if let outdoorSeating { parts.append(outdoorSeating ? "Outdoor seating" : "No outdoor seating") }
+        if let note, !note.isEmpty { parts.append(note) }
+        return parts.joined(separator: " · ")
+    }
 }
 
 struct CoffeeShop: Codable, Identifiable, Hashable {
@@ -228,6 +302,29 @@ struct CoffeeShop: Codable, Identifiable, Hashable {
     var reports: [Report]?
     var reportCount: Int?
     var chain: Chain?
+    var ownerId: String?
+    var ownedByMe: Bool?
+    var deliverySettings: DeliverySettings?
+    var products: [ShopListing]?
+
+    /// Owner has claimed the shop and published at least one listing.
+    var sellsOnline: Bool { ownerId != nil && !(products ?? []).isEmpty }
+
+    /// Carries the detail-only fields over a core-fields payload (e.g. the
+    /// setShopStatus response) so the page does not blank them.
+    func keepingDetails(from other: CoffeeShop) -> CoffeeShop {
+        var copy = self
+        copy.photos = other.photos
+        copy.photoCount = other.photoCount
+        copy.reports = other.reports
+        copy.reportCount = other.reportCount
+        copy.chain = other.chain
+        copy.ownerId = other.ownerId
+        copy.ownedByMe = other.ownedByMe
+        copy.deliverySettings = other.deliverySettings
+        copy.products = other.products
+        return copy
+    }
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: lat, longitude: lng)
