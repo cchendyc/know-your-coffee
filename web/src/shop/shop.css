@@ -1,0 +1,598 @@
+/*
+ * /shops/:id — Figma "Web / Shop Page — Unified". Reads the theme tokens
+ * from index.css so Dark Roast re-skins it without extra rules. Layout
+ * utilities stay inline in the components; this file holds the pieces the
+ * design names (profile card, product card, record, pills, tabs).
+ */
+.sp {
+  --sp-surface: #fff;
+  --sp-ink: var(--color-espresso-900);
+  --sp-muted: var(--color-espresso-500);
+  --sp-line: var(--color-cream-200);
+  --sp-primary: var(--color-espresso-700);
+  --sp-on-primary: var(--color-cream-50);
+  --sp-accent: var(--color-crema-500);
+  --sp-accent-soft: color-mix(in srgb, var(--color-crema-400) 25%, transparent);
+  --sp-shadow: 0 8px 24px rgb(43 28 20 / 0.1);
+  --sp-max: 1216px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: var(--sp-ink);
+}
+
+[data-theme='dark'] .sp {
+  --sp-surface: #271a11;
+  --sp-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+}
+
+.sp-wrap {
+  width: 100%;
+  max-width: var(--sp-max);
+  padding-inline: 24px;
+}
+
+/* Cover + profile card */
+.sp-cover {
+  height: 260px;
+  width: 100%;
+  background-size: cover;
+  background-position: center;
+}
+
+.sp-profile {
+  position: relative;
+  z-index: 1;
+  margin-top: -96px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px 24px 0;
+  border: 1px solid var(--sp-line);
+  border-radius: 16px;
+  background: var(--sp-surface);
+  box-shadow: var(--sp-shadow);
+}
+
+.sp-avatar {
+  position: relative;
+  display: flex;
+  width: 104px;
+  height: 104px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 4px solid var(--sp-surface);
+  border-radius: 9999px;
+  background: var(--sp-accent-soft);
+  font-size: 34px;
+  font-weight: 700;
+  color: var(--sp-primary);
+}
+
+.sp-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.sp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 9999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sp-primary);
+  background: var(--sp-accent-soft);
+}
+
+.sp-badge--dark {
+  background: var(--sp-primary);
+  color: var(--sp-on-primary);
+  padding-left: 8px;
+}
+
+.sp-badge--ok {
+  background: var(--color-ok-100);
+}
+
+.sp-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--sp-muted);
+}
+
+.sp-stats b {
+  font-weight: 600;
+  color: var(--sp-ink);
+}
+
+/* Buttons */
+.sp-pill {
+  display: inline-flex;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 9999px;
+  padding-inline: 16px;
+  font-size: 14px;
+  font-weight: 600;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    opacity 0.15s;
+}
+
+.sp-pill--light {
+  background: var(--color-cream-100);
+  color: var(--sp-ink);
+}
+
+.sp-pill--light:hover {
+  background: var(--sp-line);
+}
+
+.sp-pill--dark {
+  background: var(--sp-primary);
+  color: var(--sp-on-primary);
+}
+
+.sp-pill--dark:hover {
+  background: var(--sp-ink);
+}
+
+.sp-pill--outline {
+  border: 1.5px solid var(--sp-line);
+  background: var(--sp-surface);
+  color: var(--sp-ink);
+}
+
+.sp-pill--outline:hover {
+  border-color: var(--color-crema-400);
+}
+
+.sp-pill--sm {
+  height: 36px;
+  font-size: 13px;
+}
+
+.sp-pill:disabled,
+.sp-icon-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.sp-icon-btn {
+  display: flex;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: var(--color-cream-100);
+  color: var(--sp-primary);
+  transition: background-color 0.15s;
+}
+
+.sp-icon-btn:hover {
+  background: var(--sp-line);
+}
+
+.sp-icon-btn.is-on {
+  background: var(--color-ok-700);
+  color: #fff;
+}
+
+.sp-link {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sp-accent);
+}
+
+.sp-link:hover {
+  text-decoration: underline;
+}
+
+/* Tabs */
+.sp-tabs {
+  display: flex;
+  gap: 24px;
+  overflow-x: auto;
+}
+
+.sp-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--sp-muted);
+  white-space: nowrap;
+}
+
+.sp-tab > span:first-child {
+  padding-inline: 4px;
+}
+
+.sp-tab > span:last-child {
+  height: 3px;
+  border-radius: 2px;
+}
+
+.sp-tab:hover {
+  color: var(--sp-ink);
+}
+
+.sp-tab.is-active {
+  font-weight: 600;
+  color: var(--sp-ink);
+}
+
+.sp-tab.is-active > span:last-child {
+  background: var(--sp-primary);
+}
+
+/* Sections */
+.sp-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 40px;
+}
+
+.sp-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.sp-section-head h2 {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.sp-section-head p {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--sp-muted);
+}
+
+.sp-card {
+  border: 1px solid var(--sp-line);
+  border-radius: 12px;
+  background: var(--sp-surface);
+}
+
+.sp-eyebrow {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sp-muted);
+}
+
+.sp-chip {
+  border-radius: 9999px;
+  background: var(--color-cream-100);
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--sp-muted);
+}
+
+.sp-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-block: 5px;
+  font-size: 13px;
+}
+
+/* Listings */
+.sp-listings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (min-width: 640px) {
+  .sp-listings {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .sp-listings {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .sp-listings {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+.sp-product {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sp-product-img {
+  position: relative;
+  display: flex;
+  height: 236px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.sp-product-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Stand-in bag label until the seller uploads a cover. */
+.sp-bag {
+  display: flex;
+  width: 96px;
+  height: 132px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 8px;
+  padding-inline: 8px;
+  background: #fbf8f3;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.sp-bag-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.72px;
+}
+
+.sp-bag-shop {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 7px;
+  font-weight: 500;
+  letter-spacing: 0.84px;
+}
+
+.sp-product-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-crema-400) 90%, transparent);
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-espresso-900);
+}
+
+.sp-product-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+}
+
+.sp-price {
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.sp-ship {
+  font-size: 11px;
+  color: var(--color-ok-700);
+}
+
+/* Records */
+.sp-report-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px dashed var(--sp-accent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-crema-400) 15%, transparent);
+  padding: 12px;
+}
+
+@media (min-width: 640px) {
+  .sp-report-bar {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+.sp-record {
+  display: flex;
+  gap: 12px;
+  padding: 14px 18px;
+}
+
+.sp-avatar-sm {
+  display: flex;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* Menu */
+.sp-menu-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--sp-line);
+  padding-block: 12px;
+  font-size: 14px;
+}
+
+.sp-menu-row:first-child {
+  border-top: 0;
+}
+
+/* Misc */
+.sp-notice {
+  position: fixed;
+  top: 80px;
+  z-index: 50;
+  border-radius: 9999px;
+  background: var(--color-espresso-900);
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-cream-50);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.2);
+}
+
+.sp-skeleton {
+  border-radius: 12px;
+  background: var(--color-cream-100);
+  animation: sp-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes sp-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Related shops rail (chain siblings now, similar shops later) */
+
+.sp-related {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 40px;
+}
+
+.sp-related .sp-section-head h2 {
+  font-size: 16px;
+}
+
+.sp-rail {
+  display: flex;
+  gap: 12px;
+  margin-inline: -24px;
+  padding-inline: 24px;
+  padding-bottom: 4px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+
+.sp-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.sp-rail li {
+  flex: 0 0 188px;
+  scroll-snap-align: start;
+}
+
+.sp-rail-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--sp-ink);
+}
+
+.sp-rail-art {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 10;
+  margin-bottom: 5px;
+  border: 1px solid var(--sp-line);
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, var(--color-espresso-900), var(--color-espresso-500) 60%, var(--color-crema-500)) center / cover;
+  color: var(--color-cream-50);
+  font-size: 20px;
+  font-weight: 700;
+  transition: transform 0.15s ease;
+}
+
+.sp-rail-card:hover .sp-rail-art {
+  transform: translateY(-2px);
+}
+
+.sp-rail-tag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  border-radius: 9999px;
+  background: rgb(27 18 12 / 0.55);
+  padding: 3px 8px;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 600;
+  color: #fff;
+}
+
+.sp-rail-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.sp-rail-meta {
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--sp-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sp-footer {
+  margin-top: 40px;
+  width: 100%;
+  border-top: 1px solid var(--sp-line);
+  background: var(--sp-surface);
+  padding-block: 48px;
+  font-size: 12px;
+  color: var(--sp-muted);
+}
+
+.sp-footer a:hover,
+.sp-footer button:hover {
+  color: var(--sp-ink);
+}

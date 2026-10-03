@@ -4,13 +4,13 @@ tier (aistudio.google.com) is the closest no-cost equivalent."""
 import json
 import re
 
-import httpx
 from graphql import GraphQLError
 
 from typing import TypedDict
 
 from .. import settings
 from ..models.enums import MACHINE_BRANDS
+from .gemini import GeminiError, generate_json
 
 
 # What machine a photo probably shows.
