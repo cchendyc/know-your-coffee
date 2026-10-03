@@ -3,12 +3,9 @@ finds nothing, Gemini maps the query onto the structured shop filter."""
 
 import json
 
-import httpx
-
 from .. import settings
 from ..models.enums import MACHINE_BRANDS
-
-_GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent"
+from .gemini import GeminiError, generate_json
 
 # Repeat queries are common (retyping, pagination); parsing is deterministic
 # enough to memoize. Cleared wholesale when it grows past 256 entries.
@@ -40,22 +37,9 @@ async def parse_search(query: str) -> dict | None:
     )
 
     try:
-        async with httpx.AsyncClient(timeout=20) as client:
-            res = await client.post(
-                _GEMINI_URL,
-                headers={"content-type": "application/json", "x-goog-api-key": settings.GEMINI_API_KEY},
-                json={
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"response_mime_type": "application/json"},
-                },
-            )
-        if res.status_code != 200:
-            # Quota/outage is transient: skip the cache so recovery works.
-            return None
-        candidates = res.json().get("candidates") or []
-        parts = candidates[0]["content"]["parts"] if candidates else []
-        parsed = json.loads(parts[0]["text"]) if parts else {}
-    except (httpx.HTTPError, KeyError, ValueError):
+        parsed = json.loads(await generate_json([{"text": prompt}], timeout=20))
+    except (GeminiError, KeyError, ValueError):
+        # Quota/outage is transient: skip the cache so recovery works.
         # A broken fallback should never break search itself.
         return None
 

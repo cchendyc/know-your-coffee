@@ -25,7 +25,6 @@ class DrinkItem(TypedDict):
     name: str
     price: float | None
 
-_GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent"
 _DATA_URL_RE = re.compile(r"^data:(image/[a-z+]+);base64,(.*)$", re.S)
 
 
@@ -34,23 +33,13 @@ async def _gemini_vision(prompt: str, image_base64: str) -> str:
     mime_type = match.group(1) if match else "image/jpeg"
     data = match.group(2) if match else image_base64
 
-    async with httpx.AsyncClient(timeout=60) as client:
-        res = await client.post(
-            _GEMINI_URL,
-            headers={"content-type": "application/json", "x-goog-api-key": settings.GEMINI_API_KEY},
-            json={
-                "contents": [{"parts": [{"text": prompt}, {"inline_data": {"mime_type": mime_type, "data": data}}]}],
-                "generationConfig": {"response_mime_type": "application/json"},
-            },
+    try:
+        return await generate_json(
+            [{"text": prompt}, {"inline_data": {"mime_type": mime_type, "data": data}}],
+            timeout=60,
         )
-    if res.status_code != 200:
-        raise GraphQLError(f"Gemini vision request failed: {res.status_code} {res.text}")
-    candidates = res.json().get("candidates") or []
-    parts = candidates[0]["content"]["parts"] if candidates else []
-    text = parts[0].get("text") if parts else None
-    if not text:
-        raise GraphQLError("Gemini returned no answer for this photo.")
-    return text
+    except GeminiError as exc:
+        raise GraphQLError(f"Gemini vision request failed: {exc}") from exc
 
 
 async def identify_machine(image_base64: str) -> MachineGuess:
