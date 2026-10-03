@@ -39,6 +39,7 @@ from .photo import ShopPhoto
 from .product import Product
 from .product_photo import MAX_PHOTO_BYTES, MAX_PRODUCT_PHOTOS, ProductPhoto
 from .report import Report
+from .review import Review
 from .shipment import Shipment
 from .shop import Shop
 from .user import LoginCode, User
@@ -85,6 +86,7 @@ __all__ = [
     "ProductAttributeOption",
     "ProductPhoto",
     "Report",
+    "Review",
     "Shipment",
     "ShipmentStatus",
     "ShipsTo",

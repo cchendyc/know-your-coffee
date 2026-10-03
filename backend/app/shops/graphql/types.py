@@ -11,6 +11,7 @@ coffee_shop = ObjectType("CoffeeShop")
 coffee = ObjectType("Coffee")
 chain = ObjectType("Chain")
 report = ObjectType("Report")
+review = ObjectType("Review")
 shop_photo = ObjectType("ShopPhoto")
 
 
@@ -68,6 +69,31 @@ def resolve_shop_report_count(shop, info):
     return info.context["repos"].reports.count(str(shop.id))
 
 
+@coffee_shop.field("reviews")
+def resolve_shop_reviews(shop, info, limit=None):
+    return info.context["repos"].reviews.list(str(shop.id), limit)
+
+
+@coffee_shop.field("reviewCount")
+def resolve_shop_review_count(shop, info):
+    count, _average = info.context["repos"].reviews.summary(str(shop.id))
+    return count
+
+
+@coffee_shop.field("ratingAverage")
+def resolve_shop_rating_average(shop, info):
+    _count, average = info.context["repos"].reviews.summary(str(shop.id))
+    return average
+
+
+@coffee_shop.field("myReview")
+def resolve_shop_my_review(shop, info):
+    user_id = viewer_id(info)
+    if not user_id:
+        return None
+    return info.context["repos"].reviews.for_user(str(shop.id), user_id)
+
+
 @coffee_shop.field("photos")
 def resolve_shop_photos(shop, info, limit=None):
     return info.context["repos"].photos.list(str(shop.id), limit)
@@ -107,6 +133,21 @@ def resolve_report_coffees(report_row, _info):
 @report.field("createdAt")
 def resolve_report_created_at(report_row, _info):
     return report_row.created_at.isoformat()
+
+
+@review.field("author")
+def resolve_review_author(review_row, _info):
+    return review_row.user
+
+
+@review.field("createdAt")
+def resolve_review_created_at(review_row, _info):
+    return review_row.created_at.isoformat()
+
+
+@review.field("updatedAt")
+def resolve_review_updated_at(review_row, _info):
+    return review_row.updated_at.isoformat()
 
 
 @shop_photo.field("uploader")

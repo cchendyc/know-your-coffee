@@ -225,6 +225,13 @@ type CoffeeShop implements Node {
   reports(limit: Int): [Report!]!
   "Counts the same reports the reports field returns, so it also excludes ADMIN reports."
   reportCount: Int!
+  "Visitor reviews, newest first. Any signed-in user can review any shop."
+  reviews(limit: Int): [Review!]!
+  reviewCount: Int!
+  "Mean rating. Null when there are no reviews."
+  ratingAverage: Float
+  "The signed-in viewer's review, if they wrote one."
+  myReview: Review
   updatedAt: String!
 }
 
@@ -581,6 +588,24 @@ type Report implements Node {
   createdAt: String!
 }
 
+"A visitor's review of a shop. One per signed-in user; submitting again replaces it."
+type Review implements Node {
+  id: ID!
+  rating: Int!
+  body: String
+  author: Reporter
+  createdAt: String!
+  updatedAt: String!
+}
+
+input ReviewInput {
+  shopId: ID!
+  "Whole number from 1 to 5."
+  rating: Int!
+  "Optional. At most 2000 characters."
+  body: String
+}
+
 type ShopPhoto implements Node {
   id: ID!
   kind: PhotoKind!
@@ -706,6 +731,8 @@ type Mutation {
   addShopFromPlace(placeId: ID!): CoffeeShop!
   "Submit a community report. Requires sign-in."
   submitReport(input: ReportInput!): Report!
+  "Create or replace the signed-in user's review of any shop. Requires sign-in. Verified-buyer badges from delivered orders are not applied yet."
+  submitReview(input: ReviewInput!): Review!
   "Bookmark (saved) or mark visited (been). Omitted flags are left unchanged. Requires sign-in."
   setShopStatus(shopId: ID!, saved: Boolean, been: Boolean): CoffeeShop!
   "Attach community photos to a shop, grouped by what they show. Requires sign-in."
@@ -754,11 +781,11 @@ type Mutation {
   markPickedUp(id: ID!): Order!
   "Set carrier, tracking, or status. IN_TRANSIT marks the order SHIPPED; DELIVERED marks it DELIVERED. Requires shop ownership."
   updateShipment(id: ID!, carrier: String, tracking: String, status: ShipmentStatus): Shipment!
-  "Remove a shop that is not a coffee shop. Cascades reports, photos, and claims. Requires ADMIN."
+  "Remove a shop that is not a coffee shop. Cascades reports, reviews, photos, and claims. Requires ADMIN."
   deleteShop(id: ID!): Boolean!
   """
   Delete the signed-in user's account (App Store guideline 5.1.1(v)).
-  Contributed reports and photos stay but are anonymized; saves, claims,
+  Contributed reports, reviews, and photos stay but are anonymized; saves, claims,
   and shop ownership are removed. The session token stops working.
   """
   deleteAccount: Boolean!

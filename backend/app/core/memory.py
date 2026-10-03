@@ -1,7 +1,7 @@
 """Shared state for the in-memory repositories (local dev without a database).
 
 One store is shared by every memory repository so cross-domain cascades
-(deleting a user anonymizes reports, deleting a shop drops its orders) see
+(deleting a user anonymizes reports and reviews, deleting a shop drops its orders) see
 the same data. Stores hold app.models instances that are never flushed, so
 constructors must set every column explicitly (SQLAlchemy defaults only
 apply on flush)."""
@@ -17,6 +17,7 @@ class MemoryStore:
     shops: dict[str, m.Shop] = field(default_factory=dict)
     chains: dict[str, m.Chain] = field(default_factory=dict)
     reports: dict[str, list[m.Report]] = field(default_factory=dict)  # by shop id
+    reviews: dict[str, list[m.Review]] = field(default_factory=dict)  # by shop id
     photos: dict[str, list[m.ShopPhoto]] = field(default_factory=dict)  # by shop id
     users: dict[str, m.User] = field(default_factory=dict)
     bookmarks: set = field(default_factory=set)  # (user_id, shop_id)

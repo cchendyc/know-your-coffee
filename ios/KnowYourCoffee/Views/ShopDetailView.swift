@@ -36,6 +36,7 @@ struct ShopDetailView: View {
                     onToggleSaved: { gated { toggle(saved: !shop.savedByMe) } },
                     onToggleBeen: { gated { toggle(been: !shop.beenByMe) } },
                     onUpdate: { gated { showReportForm = true } },
+                    onReload: { Task { await loadFull() } },
                     onClaim: shop.ownerId == nil ? { gated { showClaim = true } } : nil,
                     onDelete: auth.user?.isAdmin == true ? { confirmDelete = true } : nil
                 )
@@ -143,7 +144,10 @@ private struct ChainLocationPage: View {
     var body: some View {
         Group {
             if let shop {
-                ShopPageView(shop: shop, actions: ShopPageActions(onBack: { dismiss() }))
+                ShopPageView(shop: shop, actions: ShopPageActions(
+                    onBack: { dismiss() },
+                    onReload: { Task { await reload() } }
+                ))
             } else if let error {
                 Text(error)
                     .font(.kycSecondary)
@@ -158,12 +162,14 @@ private struct ChainLocationPage: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
-        .task {
-            do {
-                shop = try await CoffeeAPI.fetchShop(id: locationID)
-            } catch {
-                self.error = error.localizedDescription
-            }
+        .task { await reload() }
+    }
+
+    private func reload() async {
+        do {
+            shop = try await CoffeeAPI.fetchShop(id: locationID)
+        } catch {
+            self.error = error.localizedDescription
         }
     }
 }

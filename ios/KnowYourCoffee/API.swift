@@ -74,6 +74,7 @@ enum CoffeeAPI {
         beanSource roaster beanOrigins coffees { \(coffeeFields) }
         grinders drinks { name price }
         milkBrands vibe dogFriendly wifi outdoorSeating photoUrl website savedByMe beenByMe updatedAt
+        ownerId products { id name price subtitle status }
         """
 
     static func fetchShops(
@@ -103,8 +104,8 @@ enum CoffeeAPI {
         ], as: Payload.self).shops
     }
 
-    // Full payload: photos, reports, chain. Only for the detail screen —
-    // photos are whole base64 images.
+    // Detail payload minus images: owner, listings, reports, chain. Photo
+    // and cover bytes come from fetchShopMedia so this returns in one RTT.
     static func fetchShop(id: String) async throws -> CoffeeShop {
         struct Payload: Decodable { let shop: CoffeeShop? }
         let query = """
@@ -113,10 +114,8 @@ enum CoffeeAPI {
                 \(shopFields)
                 photoCount
                 reportCount
-                ownerId ownedByMe
+                ownedByMe
                 deliverySettings { shipping pickup pickupInstructions }
-                products { id name price subtitle status coverPhoto { id data } }
-                photos { id kind data createdAt uploader { name picture } }
                 reports {
                   id machine machineModel machines { brand model }
                   beanSource roaster beanOrigins coffees { \(coffeeFields) }
@@ -124,6 +123,9 @@ enum CoffeeAPI {
                   milkBrands dogFriendly wifi outdoorSeating note source createdAt
                   reporter { name picture }
                 }
+                reviewCount ratingAverage
+                myReview { id rating body createdAt updatedAt author { name picture } }
+                reviews(limit: 50) { id rating body createdAt updatedAt author { name picture } }
                 chain { id name shops { id name address city photoUrl machine machineModel machines { brand model } beanSource } }
               }
             }
@@ -132,6 +134,24 @@ enum CoffeeAPI {
             throw APIError.server("Shop not found.")
         }
         return shop
+    }
+
+    // Every base64 image for a shop; a dozen photos can be several MB.
+    // Called when the photo sheet or Shop tab opens, never on page load.
+    static func fetchShopMedia(id: String) async throws -> ShopMedia {
+        struct Payload: Decodable { let shop: ShopMedia? }
+        let query = """
+            query ShopMedia($id: ID!) {
+              shop(id: $id) {
+                photos { id kind data createdAt uploader { name picture } }
+                products { id coverPhoto { id data } }
+              }
+            }
+            """
+        guard let media = try await execute(query, variables: ["id": id], as: Payload.self).shop else {
+            throw APIError.server("Shop not found.")
+        }
+        return media
     }
 
     // MARK: Auth
@@ -204,6 +224,18 @@ enum CoffeeAPI {
         return try await execute(query, variables: [
             "shopId": shopID, "saved": saved, "been": been,
         ], as: Payload.self).setShopStatus
+    }
+
+    static func submitReview(shopID: String, rating: Int, body: String?) async throws {
+        struct Payload: Decodable {
+            struct R: Decodable { let id: String }
+            let submitReview: R
+        }
+        let query = "mutation SubmitReview($input: ReviewInput!) { submitReview(input: $input) { id } }"
+        let trimmed = body?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var input: [String: Any] = ["shopId": shopID, "rating": rating]
+        if let trimmed, !trimmed.isEmpty { input["body"] = trimmed }
+        _ = try await execute(query, variables: ["input": input], as: Payload.self)
     }
 
     static func submitReport(_ input: [String: Any?]) async throws {

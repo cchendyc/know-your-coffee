@@ -12,6 +12,49 @@ export function SectionHeader({ title, subtitle, action }: { title: string; subt
   )
 }
 
+// Sub-heading inside a tab panel; the tab already names the section.
+export function SubHeader({ title, meta, action }: { title: string; meta?: string; action?: ReactNode }) {
+  return (
+    <div className="sp-subhead">
+      <div>
+        <h3>{title}</h3>
+        {meta && <p>{meta}</p>}
+      </div>
+      {action}
+    </div>
+  )
+}
+
+// About-tab card: eyebrow row (with an optional card-level note on the right), then rows.
+export function InfoCard({ eyebrow, tag, children }: { eyebrow: string; tag?: string | null; children: ReactNode }) {
+  return (
+    <div className="sp-card flex flex-col gap-1.5 px-4.5 py-4">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="sp-eyebrow">{eyebrow}</p>
+        {tag && <p className="sp-eyebrow text-right">{tag}</p>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+export function Row({ label, children }: { label: string; children?: ReactNode }) {
+  return (
+    <div className="sp-row items-start">
+      <span className="shrink-0">{label}</span>
+      <span className="flex flex-wrap items-center justify-end gap-1.5">{children}</span>
+    </div>
+  )
+}
+
+export function Chip({ children }: { children: ReactNode }) {
+  return <span className="sp-chip">{children}</span>
+}
+
+export function Empty({ children }: { children: ReactNode }) {
+  return <p className="py-1 text-sm text-espresso-500">{children}</p>
+}
+
 type IconProps = { className?: string }
 const stroke = (className: string | undefined, d: string, width = 2) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" className={className ?? 'size-4'}>
@@ -19,6 +62,7 @@ const stroke = (className: string | undefined, d: string, width = 2) => (
   </svg>
 )
 
+export const PlusIcon = ({ className }: IconProps) => stroke(className, 'M12 5v14M5 12h14', 2.5)
 export const CheckIcon = ({ className }: IconProps) => stroke(className, 'm5 12.5 4.5 4.5L19 7.5', 3)
 export const ShareIcon = ({ className }: IconProps) => stroke(className, 'M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13')
 export const DirectionsIcon = ({ className }: IconProps) => stroke(className, 'm3 11 19-9-9 19-2-8-8-2Z')

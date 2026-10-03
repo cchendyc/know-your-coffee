@@ -5,8 +5,6 @@ import { Modal } from '../components/Modal'
 import { QuickConfirm, buildConfirmFacts } from '../components/QuickConfirm'
 import { ReportForm } from '../components/ReportForm'
 import { SellerApplicationModal } from '../components/SellerApplication'
-import { deliveryCopy, hostname } from '../format'
-import { hubPath } from '../routes'
 import { AboutSection } from './AboutSection'
 import { ListingGrid } from './ListingGrid'
 import { MenuSection } from './MenuSection'
@@ -23,10 +21,8 @@ const sectionFromHash = (hash: string): Section => {
 }
 import './shop.css'
 
-// Public shop page at /shops/:shopId. Figma: "Web / Shop Page — Unified
-// (from Explore card)". The one destination per shop: About first (what is
-// on the bar), then menu, photos, and — when the owner sells online —
-// reviews and listings last. Tabs scroll within the page.
+// Public shop page at /shops/:shopId. About first, then photos when any
+// exist, reviews on every shop, and the storefront when the owner sells.
 export function ShopPage({ user, onShopChanged }: { user: User | null; onShopChanged?: (shop: CoffeeShop) => void }) {
   const { shopId = '' } = useParams()
   const navigate = useNavigate()
@@ -52,7 +48,7 @@ export function ShopPage({ user, onShopChanged }: { user: User | null; onShopCha
   const shop = full ?? (state.status === 'loading' ? state.shop : null)
   const sellsOnline = !!full?.ownerId && full.products.length > 0
   const sections: Section[] = full
-    ? (['about', full.photoCount > 0 && 'photos', sellsOnline && 'reviews', sellsOnline && 'shop'] as const).filter(
+    ? (['about', full.photoCount > 0 && 'photos', 'reviews', sellsOnline && 'shop'] as const).filter(
         (s): s is Section => Boolean(s),
       )
     : ['about']
@@ -137,8 +133,6 @@ export function ShopPage({ user, onShopChanged }: { user: User | null; onShopCha
   const machines = (shop.machines.length > 0 ? shop.machines : [{ brand: shop.machine, model: shop.machineModel }]).filter(
     (m) => m.brand !== 'UNKNOWN',
   )
-  const delivery = full && sellsOnline ? deliveryCopy(full.deliverySettings, shop.city) : ''
-
   return (
     <div className="sp">
       {notice && <p className="sp-notice">{notice}</p>}
@@ -147,7 +141,6 @@ export function ShopPage({ user, onShopChanged }: { user: User | null; onShopCha
         shop={shop}
         user={user}
         busy={busy}
-        machineCount={machines.length}
         sellsOnline={sellsOnline}
         sections={sections}
         active={tab}
@@ -178,17 +171,24 @@ export function ShopPage({ user, onShopChanged }: { user: User | null; onShopCha
                 onConfirm={() => setModal('confirm')}
                 onJumpToShop={() => jump('shop')}
               >
-                {full.drinks.length > 0 && (
-                  <div className="flex flex-col gap-4 pt-6">
-                    <MenuSection shop={full} user={user} onReport={() => setModal('report')} />
-                  </div>
-                )}
+                {full.drinks.length > 0 && <MenuSection shop={full} />}
               </AboutSection>
             )}
             {tab === 'photos' && <PhotosSection shopId={full.id} photoCount={full.photoCount} version={version} />}
-            {tab === 'reviews' && <ReviewsSection shopName={full.name} />}
+            {tab === 'reviews' && (
+              <ReviewsSection
+                shopId={full.id}
+                shopName={full.name}
+                reviews={full.reviews}
+                reviewCount={full.reviewCount}
+                ratingAverage={full.ratingAverage}
+                myReview={full.myReview}
+                user={user}
+                onSubmitted={refresh}
+              />
+            )}
             {tab === 'shop' && (
-              <ListingGrid shop={full} delivery={delivery} onAdd={() => say('Checkout is coming soon. Visit the shop or message the owner to order.')} />
+              <ListingGrid shop={full} onAdd={() => say('Checkout is coming soon. Visit the shop or message the owner to order.')} />
             )}
           </section>
 
@@ -200,26 +200,13 @@ export function ShopPage({ user, onShopChanged }: { user: User | null; onShopCha
             />
           )}
 
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pt-10 pb-4 text-[13px] text-espresso-500">
-            <span>
-              {full.address}, {full.city}
-            </span>
-            {full.website && (
-              <a href={full.website} target="_blank" rel="noreferrer" className="sp-link font-medium">
-                {hostname(full.website)} ↗
-              </a>
-            )}
-            {full.ownedByMe && (
-              <Link to={hubPath(full.id)} className="sp-pill sp-pill--dark sp-pill--sm ml-auto">
-                Manage in Seller Hub
-              </Link>
-            )}
-            {!full.ownerId && user && (
-              <button type="button" onClick={() => setModal('claim')} className="sp-pill sp-pill--outline sp-pill--sm ml-auto">
+          {!full.ownerId && user && (
+            <div className="flex justify-end pt-10 pb-4">
+              <button type="button" onClick={() => setModal('claim')} className="sp-pill sp-pill--outline sp-pill--sm">
                 Own this shop? Claim it
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -227,17 +214,9 @@ export function ShopPage({ user, onShopChanged }: { user: User | null; onShopCha
         <div className="sp-wrap mx-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-bold text-espresso-900">Know Your Coffee</p>
-            <p>
-              © {new Date().getFullYear()}
-              {full?.ownerId ? ` · ${shop.name} is a verified seller on Know Your Coffee` : ''}
-            </p>
+            <p>© {new Date().getFullYear()}</p>
           </div>
           <div className="flex gap-6 text-[13px]">
-            {user && (
-              <button type="button" onClick={() => setModal('report')}>
-                Report this shop
-              </button>
-            )}
             {isAdmin(user) && (
               <button type="button" onClick={() => setModal('delete')} className="text-danger-700">
                 Delete shop

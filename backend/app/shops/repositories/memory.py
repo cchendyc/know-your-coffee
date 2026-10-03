@@ -199,6 +199,7 @@ class MemoryShopRepository:
             return False
         del store.shops[shop_id]
         store.reports.pop(shop_id, None)
+        store.reviews.pop(shop_id, None)
         store.photos.pop(shop_id, None)
         store.bookmarks = {k for k in store.bookmarks if k[1] != shop_id}
         store.visits = {k for k in store.visits if k[1] != shop_id}
@@ -323,6 +324,50 @@ class MemoryReportRepository:
                 if value is not None:
                     setattr(shop, column, value)
             shop.updated_at = row.created_at
+        return row
+
+
+class MemoryReviewRepository:
+    def __init__(self, store: MemoryStore):
+        self._store = store
+
+    def _rows(self, shop_id: str) -> list[m.Review]:
+        return self._store.reviews.get(str(shop_id), [])
+
+    def list(self, shop_id: str, limit: int | None = None) -> list[m.Review]:
+        rows = sorted(self._rows(shop_id), key=lambda r: r.created_at, reverse=True)
+        return rows[:limit] if limit else rows
+
+    def summary(self, shop_id: str) -> tuple[int, float | None]:
+        rows = self._rows(shop_id)
+        if not rows:
+            return 0, None
+        return len(rows), sum(r.rating for r in rows) / len(rows)
+
+    def for_user(self, shop_id: str, user_id: str) -> m.Review | None:
+        return next((r for r in self._rows(shop_id) if str(r.user_id or "") == str(user_id)), None)
+
+    def upsert(self, shop_id: str, user_id: str, rating: int, body: str | None) -> m.Review:
+        store = self._store
+        row = self.for_user(shop_id, user_id)
+        now = _now()
+        if row:
+            row.rating = rating
+            row.body = body
+            row.updated_at = now
+            row.user = store.users.get(str(user_id))
+            return row
+        row = m.Review(
+            id=store.next_id(),
+            shop_id=int(shop_id),
+            user_id=int(user_id),
+            user=store.users.get(str(user_id)),
+            rating=rating,
+            body=body,
+            created_at=now,
+            updated_at=now,
+        )
+        store.reviews.setdefault(str(shop_id), []).append(row)
         return row
 
 

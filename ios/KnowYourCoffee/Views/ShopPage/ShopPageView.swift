@@ -8,6 +8,8 @@ struct ShopPageActions {
     var onToggleBeen: () -> Void = {}
     /// Opens the report-an-update form.
     var onUpdate: () -> Void = {}
+    /// Refetch the shop after a review is saved.
+    var onReload: () -> Void = {}
     /// nil when the shop already has an owner or claiming is not offered here.
     var onClaim: (() -> Void)?
     /// Admin only.
@@ -47,7 +49,7 @@ private struct ShopPageFramesKey: PreferenceKey {
 /// so the community record is the first thing a visitor reads. Reviews and
 /// Shop only exist once an owner has published listings.
 struct ShopPageView: View {
-    let shop: CoffeeShop
+    private let base: CoffeeShop
     var loadError: String?
     var isLoadingFull = false
     var actions = ShopPageActions()
@@ -55,14 +57,30 @@ struct ShopPageView: View {
     @State private var tab: ShopTab = .about
     @State private var frames = ShopPageFrames()
     @State private var showPhotos = false
+    @State private var showMore = false
+    @State private var pendingMoreAction: (() -> Void)?
     @State private var comingSoon = false
+    // Images arrive in their own request, triggered by the first panel that
+    // shows them. Overlaid on every render so a refreshed `base` keeps them.
+    @State private var media: ShopMedia?
+    @State private var mediaTask: Task<Void, Never>?
+    @Environment(\.openURL) private var openURL
+
+    init(shop: CoffeeShop, loadError: String? = nil, isLoadingFull: Bool = false, actions: ShopPageActions = ShopPageActions()) {
+        base = shop
+        self.loadError = loadError
+        self.isLoadingFull = isLoadingFull
+        self.actions = actions
+    }
+
+    private var shop: CoffeeShop { media.map(base.merging) ?? base }
 
     private static let navRowHeight: CGFloat = 44
     private static let coverHeight: CGFloat = 256
     private static let cardOverlap: CGFloat = 28
 
     private var tabs: [ShopTab] {
-        shop.sellsOnline ? [.about, .reviews, .shop] : [.about]
+        shop.sellsOnline ? [.about, .reviews, .shop] : [.about, .reviews]
     }
 
     private var listings: [ShopListing] {
@@ -111,6 +129,7 @@ struct ShopPageView: View {
                 .ignoresSafeArea(edges: .top)
                 .onPreferenceChange(ShopPageFramesKey.self) { frames = $0 }
                 .onChange(of: tab) {
+                    if tab == .shop { loadMediaIfNeeded() }
                     // Keep the header where the thumb is when switching panels
                     // from the pinned bar; otherwise the content just swaps.
                     guard tabsPinned else { return }
@@ -124,13 +143,37 @@ struct ShopPageView: View {
         }
         .background(Color.cream50)
         .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
+        .onChange(of: showPhotos) {
+            if showPhotos { loadMediaIfNeeded() }
+        }
         .sheet(isPresented: $showPhotos) {
             ShopPhotoSheet(shop: shop)
+        }
+        .sheet(isPresented: $showMore, onDismiss: {
+            // Run after the sheet is gone; presenting a second sheet while
+            // this one animates out drops the new one.
+            let action = pendingMoreAction
+            pendingMoreAction = nil
+            action?()
+        }) {
+            ShopMoreSheet(shopName: shop.name, items: moreItems) { item in
+                pendingMoreAction = item.action
+                showMore = false
+            }
         }
         .alert("Checkout is coming soon", isPresented: $comingSoon) {
             Button("OK", role: .cancel) {}
         } message: {
             Text("You’ll be able to order from \(shop.name) right here. Save the shop to get notified.")
+        }
+    }
+
+    private func loadMediaIfNeeded() {
+        guard media == nil, mediaTask == nil else { return }
+        let id = base.id
+        mediaTask = Task {
+            media = try? await CoffeeAPI.fetchShopMedia(id: id)
+            mediaTask = nil
         }
     }
 
@@ -149,18 +192,14 @@ struct ShopPageView: View {
                 .frame(maxWidth: .infinity)
                 .clipped()
 
-            HStack(spacing: 6) {
-                CoverChip(symbol: "cup.and.saucer.fill",
-                          text: "\(count(shop.coffees.count, "coffee")) · \(count(shop.knownMachines.count, "machine"))")
-                if let photos = shop.photoCount, photos > 0 {
-                    Button { showPhotos = true } label: {
-                        CoverChip(symbol: "camera.fill", text: count(photos, "photo"))
-                    }
-                    .buttonStyle(.plain)
+            if let photos = shop.photoCount, photos > 0 {
+                Button { showPhotos = true } label: {
+                    CoverChip(symbol: "camera.fill", text: count(photos, "photo"))
                 }
+                .buttonStyle(.plain)
+                .padding(.leading, 24)
+                .padding(.bottom, Self.cardOverlap + 12)
             }
-            .padding(.leading, 24)
-            .padding(.bottom, Self.cardOverlap + 12)
         }
         .background(frameReporter { ShopPageFrames(coverBottom: $0.maxY) })
     }
@@ -183,8 +222,6 @@ struct ShopPageView: View {
                 }
                 .padding(.top, 6)
             }
-
-            socialProof
 
             if let vibe = shop.vibe, !vibe.isEmpty {
                 Text(vibe)
@@ -213,18 +250,6 @@ struct ShopPageView: View {
         .background(Color.surface)
         .clipShape(UnevenRoundedRectangle(topLeadingRadius: 24, topTrailingRadius: 24, style: .continuous))
         .padding(.top, -Self.cardOverlap)
-    }
-
-    private var socialProof: some View {
-        HStack(spacing: 8) {
-            Text(count(shop.reportCount ?? shop.reports?.count ?? 0, "report"))
-            Circle().frame(width: 3, height: 3)
-            Text(count(shop.photoCount ?? 0, "photo"))
-            Circle().frame(width: 3, height: 3)
-            Text("Updated \(RelativeDate.format(shop.updatedAt))")
-        }
-        .font(.system(size: 13, weight: .medium))
-        .foregroundStyle(Color.inkMuted)
     }
 
     // MARK: Actions
@@ -276,7 +301,7 @@ struct ShopPageView: View {
                 tab = .shop
             }
         case .reviews:
-            ShopReviewsPanel(shop: shop)
+            ShopReviewsPanel(shop: shop, onReload: actions.onReload)
         case .shop:
             ShopListingsPanel(shop: shop, listings: listings) { comingSoon = true }
         }
@@ -296,15 +321,11 @@ struct ShopPageView: View {
                         .foregroundStyle(Color.ink)
                     Spacer()
                 }
-                if let url = actions.shareURL {
-                    ShareLink(item: url, subject: Text(shop.name),
-                              message: Text("\(shop.name) — \(shop.address), \(shop.city)")) {
-                        NavCircleLabel(symbol: "square.and.arrow.up")
-                    }
-                    .buttonStyle(.plain)
+                // Save and Share live in the action tiles; the nav row only
+                // carries what the tiles do not.
+                if !moreItems.isEmpty {
+                    NavCircle(symbol: "ellipsis") { showMore = true }
                 }
-                NavCircle(symbol: shop.savedByMe ? "bookmark.fill" : "bookmark", action: actions.onToggleSaved)
-                moreMenu
             }
             .padding(.horizontal, 10)
             .frame(height: Self.navRowHeight)
@@ -326,35 +347,33 @@ struct ShopPageView: View {
         .animation(.easeOut(duration: 0.15), value: solid)
     }
 
-    private var moreMenu: some View {
-        Menu {
-            Button("Report an update", systemImage: "square.and.pencil", action: actions.onUpdate)
-            if let onClaim = actions.onClaim {
-                Button("Claim this shop", systemImage: "checkmark.shield", action: onClaim)
-            }
-            if let onDelete = actions.onDelete {
-                Divider()
-                Button("Delete shop", systemImage: "trash", role: .destructive, action: onDelete)
-            }
-        } label: {
-            NavCircleLabel(symbol: "ellipsis")
+    private var moreItems: [ShopMoreItem] {
+        var items: [ShopMoreItem] = []
+        if let website = shop.website, let url = URL(string: website) {
+            items.append(ShopMoreItem(
+                symbol: "safari", title: "Visit website",
+                subtitle: url.host?.replacingOccurrences(of: "www.", with: "") ?? website
+            ) { openURL(url) })
         }
+        if let onClaim = actions.onClaim {
+            items.append(ShopMoreItem(
+                symbol: "checkmark.shield", title: "Claim this shop",
+                subtitle: "Own it? Verify to sell beans here", action: onClaim
+            ))
+        }
+        if let onDelete = actions.onDelete {
+            items.append(ShopMoreItem(
+                symbol: "trash", title: "Delete shop",
+                subtitle: "Admin · removes this listing", destructive: true, action: onDelete
+            ))
+        }
+        return items
     }
 
+    // The Shop tab already sells; only the claim prompt earns a bottom bar.
     @ViewBuilder
     private var bottomBar: some View {
-        if shop.sellsOnline, let low = listings.map(\.price).min() {
-            ShopBottomBar(
-                icon: "bag.fill",
-                badge: "\(listings.count)",
-                title: "From $\(ShopPageFormat.price(low))",
-                titleMeta: count(listings.count, "listing"),
-                subline: shop.deliverySettings?.copy(city: shop.city) ?? "",
-                sublineSymbol: "shippingbox.fill",
-                buttonLabel: "Shop",
-                buttonSymbol: "chevron.right"
-            ) { tab = .shop }
-        } else if shop.ownerId == nil, !isLoadingFull, let onClaim = actions.onClaim {
+        if shop.ownerId == nil, !isLoadingFull, let onClaim = actions.onClaim {
             ShopBottomBar(
                 icon: "storefront.fill",
                 badge: nil,

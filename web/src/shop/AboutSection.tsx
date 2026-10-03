@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import type { Coffee, Report, ShopPageData, User } from '../api'
 import { timeAgo } from '../format'
 import { AMENITIES, BEAN_SOURCE_LABELS, coffeePills, machineDisplay, reportSummary } from '../labels'
-import { SectionHeader } from './bits'
+import { Chip, Empty, InfoCard, Row, SubHeader } from './bits'
 import { plural } from './util'
 
 const RECORDS_SHOWN = 2
@@ -30,12 +30,11 @@ export function AboutSection({
 }) {
   const [allRecords, setAllRecords] = useState(false)
   const latest = shop.reports[0]
-  const inHouse = shop.beanSource === 'IN_HOUSE_ROAST'
-  const beansLabel =
+  const beanSource =
     shop.beanSource === 'UNKNOWN'
-      ? 'Beans not reported yet'
-      : inHouse
-        ? 'Roasts in-house'
+      ? null
+      : shop.beanSource === 'IN_HOUSE_ROAST'
+        ? 'Roasted in-house'
         : [BEAN_SOURCE_LABELS[shop.beanSource], shop.roaster].filter(Boolean).join(' · ')
   const records = allRecords ? shop.reports : shop.reports.slice(0, RECORDS_SHOWN)
   // "Buy this bean" links a reported coffee to the listing with the same name.
@@ -44,120 +43,11 @@ export function AboutSection({
 
   return (
     <>
-      <SectionHeader
-        title="About this shop"
-        subtitle="Gear, beans and space — kept current by regulars and the owner"
-        action={
-          shop.reportCount > 0 && (
-            <span className="sp-link">
-              Verified by {plural(shop.reportCount, 'report')}
-              {latest ? ` · ${timeAgo(latest.createdAt)}` : ''}
-            </span>
-          )
-        }
-      />
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="sp-card flex flex-col gap-2.5 px-[18px] py-4">
-          <p className="sp-eyebrow">Gear</p>
-          {machines.length > 0 ? (
-            machines.map((m, i) => (
-              <div key={i}>
-                <p className="font-semibold">{machineDisplay(m.brand, m.model)}</p>
-                <p className="text-xs text-espresso-500">Espresso machine</p>
-              </div>
-            ))
-          ) : (
-            <p className="text-sm text-espresso-500">Machine not reported yet.</p>
-          )}
-          {shop.grinders.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {shop.grinders.map((g) => (
-                <span key={g} className="sp-chip">
-                  {g}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="sp-card flex flex-col gap-2.5 px-[18px] py-4">
-          <p className="sp-eyebrow">Beans</p>
-          <p className="font-semibold">{beansLabel}</p>
-          {shop.coffees.map((c, i) => {
-            const listing = listingFor(c)
-            return (
-              <div key={i} className="flex flex-col gap-1.5">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-[13px] font-semibold">{[c.roaster, c.name].filter(Boolean).join(' — ') || 'House coffee'}</p>
-                  {listing && (
-                    <button type="button" onClick={onJumpToShop} className="sp-link shrink-0 text-xs">
-                      Buy this bean →
-                    </button>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {coffeePills(c).map((p) => (
-                    <span key={p} className="sp-chip">
-                      {p}
-                    </span>
-                  ))}
-                </div>
-                {c.tastingNotes.length > 0 && <p className="text-[11px] text-espresso-500">{c.tastingNotes.join(' · ')}</p>}
-              </div>
-            )
-          })}
-          {shop.coffees.length === 0 && shop.beanOrigins.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {shop.beanOrigins.map((o) => (
-                <span key={o} className="sp-chip">
-                  {o}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="sp-card flex flex-col gap-2.5 px-[18px] py-4">
-          <p className="sp-eyebrow">Space</p>
-          {AMENITIES.map((a) => (
-            <div key={a.key} className="sp-row">
-              <span>{a.label}</span>
-              {shop[a.key] !== null ? (
-                <span className="font-medium">{shop[a.key] ? 'Yes' : 'No'}</span>
-              ) : user ? (
-                <button type="button" onClick={onReport} className="sp-link">
-                  Unknown — know it?
-                </button>
-              ) : (
-                <span className="text-espresso-500">Unknown</span>
-              )}
-            </div>
-          ))}
-          {shop.milkBrands.length > 0 && (
-            <div className="sp-row">
-              <span>Milk</span>
-              <span className="font-medium">{shop.milkBrands.join(', ')}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {children}
-
-      <div className="flex items-end justify-between pt-4">
-        <div>
-          <h3 className="font-semibold">Records · {shop.reportCount}</h3>
-          <p className="mt-0.5 text-[13px] text-espresso-500">Who reported what, and when — every fact above traces back to one of these</p>
-        </div>
-        <span className="sp-link">Newest first</span>
-      </div>
-
       {user ? (
         <div className="sp-report-bar">
           <div className="flex-1">
             <p className="text-sm font-semibold">Been here recently?</p>
-            <p className="text-xs text-espresso-500">Confirm what is still true or report a change — photos welcome.</p>
+            <p className="text-xs text-espresso-500">Confirm the setup below or report what changed.</p>
           </div>
           <button type="button" onClick={onReport} className="sp-pill sp-pill--dark sp-pill--sm">
             Report an update
@@ -169,6 +59,83 @@ export function AboutSection({
       ) : (
         <p className="sp-report-bar text-sm text-espresso-700">Sign in (top right) to confirm or report what is on the bar.</p>
       )}
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <InfoCard eyebrow="Gear">
+          {machines.length > 0 ? (
+            machines.map((m, i) => (
+              <Row key={i} label={machineDisplay(m.brand, m.model)}>
+                <Chip>Espresso</Chip>
+              </Row>
+            ))
+          ) : (
+            <Empty>Machine not reported yet.</Empty>
+          )}
+          {shop.grinders.map((g) => (
+            <Row key={g} label={g}>
+              <Chip>Grinder</Chip>
+            </Row>
+          ))}
+        </InfoCard>
+
+        <InfoCard eyebrow="Beans" tag={beanSource}>
+          {shop.coffees.length > 0 ? (
+            shop.coffees.map((c, i) => {
+              // Unnamed coffees lead with their first attribute (usually the type) instead of a placeholder.
+              const name = [c.roaster, c.name].filter(Boolean).join(' — ')
+              const pills = [...coffeePills(c), ...c.tastingNotes]
+              const title = name || pills.shift() || 'House coffee'
+              return (
+                <Row key={i} label={title}>
+                  {pills.map((p) => (
+                    <Chip key={p}>{p}</Chip>
+                  ))}
+                  {listingFor(c) && (
+                    <button type="button" onClick={onJumpToShop} className="sp-link text-xs">
+                      Buy this bean →
+                    </button>
+                  )}
+                </Row>
+              )
+            })
+          ) : shop.beanOrigins.length > 0 ? (
+            <Row label="Origins">
+              {shop.beanOrigins.map((o) => (
+                <Chip key={o}>{o}</Chip>
+              ))}
+            </Row>
+          ) : (
+            <Empty>{beanSource ? 'Coffees not reported yet.' : 'Beans not reported yet.'}</Empty>
+          )}
+          {shop.milkBrands.length > 0 && (
+            <Row label="Milk">
+              {shop.milkBrands.map((m) => (
+                <Chip key={m}>{m}</Chip>
+              ))}
+            </Row>
+          )}
+        </InfoCard>
+
+        <InfoCard eyebrow="Space">
+          {AMENITIES.map((a) => (
+            <Row key={a.key} label={a.label}>
+              {shop[a.key] !== null ? (
+                <Chip>{shop[a.key] ? 'Yes' : 'No'}</Chip>
+              ) : user ? (
+                <button type="button" onClick={onReport} className="sp-link text-xs">
+                  Unknown — know it?
+                </button>
+              ) : (
+                <Chip>Unknown</Chip>
+              )}
+            </Row>
+          ))}
+        </InfoCard>
+      </div>
+
+      {children}
+
+      <SubHeader title="Records" meta={latest ? `${plural(shop.reportCount, 'report')} · latest ${timeAgo(latest.createdAt)}` : undefined} />
 
       {records.map((r) => (
         <RecordCard key={r.id} report={r} />

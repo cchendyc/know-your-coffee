@@ -101,6 +101,7 @@ class UserRepository:
         # Contributions stay, anonymized; ownership and personal edges go.
         with self._session.begin() as s:
             s.execute(sa.update(m.Report).where(m.Report.user_id == user_id).values(user_id=None))
+            s.execute(sa.update(m.Review).where(m.Review.user_id == user_id).values(user_id=None))
             s.execute(sa.update(m.ShopPhoto).where(m.ShopPhoto.user_id == user_id).values(user_id=None))
             s.execute(sa.update(m.Order).where(m.Order.buyer_user_id == user_id).values(buyer_user_id=None))
             s.execute(sa.update(m.Shop).where(m.Shop.owner_user_id == user_id).values(owner_user_id=None))

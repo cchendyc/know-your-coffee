@@ -139,6 +139,15 @@ struct MachineGuess: Codable {
     let notes: String?
 }
 
+struct ShopReview: Codable, Identifiable, Hashable {
+    let id: String
+    let rating: Int
+    let body: String?
+    let author: Reporter?
+    let createdAt: String
+    let updatedAt: String
+}
+
 struct Reporter: Codable, Hashable {
     let name: String
     let picture: String?
@@ -224,12 +233,26 @@ struct DeliverySettings: Codable, Hashable {
 
 struct ListingCover: Codable, Hashable {
     let id: String
-    let data: String // data URL
+    /// Data URL. nil until fetchShopMedia fills it in.
+    var data: String?
 
     var imageData: Data? {
+        guard let data else { return nil }
         guard let comma = data.firstIndex(of: ",") else { return Data(base64Encoded: data) }
         return Data(base64Encoded: String(data[data.index(after: comma)...]))
     }
+}
+
+/// Second half of the shop payload: every base64 image. Fetched only when a
+/// panel needs it, so the page and tabs do not wait on megabytes of JSON.
+struct ShopMedia: Decodable {
+    struct ProductCover: Decodable {
+        let id: String
+        let coverPhoto: ListingCover?
+    }
+
+    let photos: [ShopPhoto]
+    let products: [ProductCover]
 }
 
 // Buyer-facing listing on the shop page; the seller's Product carries more.
@@ -239,7 +262,7 @@ struct ShopListing: Codable, Identifiable, Hashable {
     let price: Double
     let subtitle: String?
     let status: String // IN_STOCK / LOW_STOCK / OUT_OF_STOCK / HIDDEN
-    let coverPhoto: ListingCover?
+    var coverPhoto: ListingCover?
 }
 
 extension Report {
@@ -296,11 +319,16 @@ struct CoffeeShop: Codable, Identifiable, Hashable {
     var savedByMe: Bool
     var beenByMe: Bool
     var updatedAt: String
-    // Present only in the full shop(id:) payload.
+    // Present only in the full shop(id:) payload. ownerId and products
+    // also ride on the feed so the tab bar renders before the detail fetch.
     var photos: [ShopPhoto]?
     var photoCount: Int?
     var reports: [Report]?
     var reportCount: Int?
+    var reviews: [ShopReview]?
+    var reviewCount: Int?
+    var ratingAverage: Double?
+    var myReview: ShopReview?
     var chain: Chain?
     var ownerId: String?
     var ownedByMe: Bool?
@@ -310,6 +338,20 @@ struct CoffeeShop: Codable, Identifiable, Hashable {
     /// Owner has claimed the shop and published at least one listing.
     var sellsOnline: Bool { ownerId != nil && !(products ?? []).isEmpty }
 
+    /// Lays the lazily fetched images over a payload that has none.
+    func merging(_ media: ShopMedia) -> CoffeeShop {
+        var copy = self
+        copy.photos = media.photos
+        let covers = Dictionary(media.products.map { ($0.id, $0.coverPhoto) }, uniquingKeysWith: { a, _ in a })
+        copy.products = products?.map { listing in
+            guard let cover = covers[listing.id] ?? nil else { return listing }
+            var updated = listing
+            updated.coverPhoto = cover
+            return updated
+        }
+        return copy
+    }
+
     /// Carries the detail-only fields over a core-fields payload (e.g. the
     /// setShopStatus response) so the page does not blank them.
     func keepingDetails(from other: CoffeeShop) -> CoffeeShop {
@@ -318,6 +360,10 @@ struct CoffeeShop: Codable, Identifiable, Hashable {
         copy.photoCount = other.photoCount
         copy.reports = other.reports
         copy.reportCount = other.reportCount
+        copy.reviews = other.reviews
+        copy.reviewCount = other.reviewCount
+        copy.ratingAverage = other.ratingAverage
+        copy.myReview = other.myReview
         copy.chain = other.chain
         copy.ownerId = other.ownerId
         copy.ownedByMe = other.ownedByMe

@@ -173,7 +173,7 @@ class ShopRepository:
             s.execute(sa.delete(m.Shipment).where(m.Shipment.order_id.in_(order_ids)))
             product_ids = sa.select(m.Product.id).where(m.Product.shop_id == shop_id)
             s.execute(sa.delete(m.ProductPhoto).where(m.ProductPhoto.product_id.in_(product_ids)))
-            for model in (m.Order, m.Product, m.ShopPhoto, m.ShopBookmark, m.ShopVisit, m.Report, m.ShopClaim):
+            for model in (m.Order, m.Product, m.ShopPhoto, m.ShopBookmark, m.ShopVisit, m.Report, m.Review, m.ShopClaim):
                 s.execute(sa.delete(model).where(model.shop_id == shop_id))
             row = s.execute(sa.delete(m.Shop).where(m.Shop.id == shop_id).returning(m.Shop.id)).first()
         return bool(row)

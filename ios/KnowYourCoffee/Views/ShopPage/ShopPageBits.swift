@@ -18,7 +18,7 @@ enum ShopPageFormat {
     }
 }
 
-/// 18pt panel title with optional 11pt meta line, and a trailing accent action.
+/// Section title with optional meta line, and a trailing accent action.
 struct ShopSectionHeader<Trailing: View>: View {
     let title: String
     var meta: String?
@@ -32,13 +32,13 @@ struct ShopSectionHeader<Trailing: View>: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.kycSection)
                     .foregroundStyle(Color.ink)
                 if let meta, !meta.isEmpty {
                     Text(meta)
-                        .font(.system(size: 11))
+                        .font(.kycSecondary)
                         .foregroundStyle(Color.inkMuted)
                 }
             }
@@ -145,6 +145,96 @@ struct ReporterAvatar: View {
     }
 }
 
+struct ShopMoreItem: Identifiable {
+    let symbol: String
+    let title: String
+    let subtitle: String
+    var destructive = false
+    let action: () -> Void
+
+    var id: String { title }
+}
+
+/// Bottom sheet behind the "…" nav button. Replaces the system Menu so it
+/// matches the page: cream backdrop, surface cards, espresso icon wells.
+struct ShopMoreSheet: View {
+    let shopName: String
+    let items: [ShopMoreItem]
+    let onPick: (ShopMoreItem) -> Void
+
+    private static let rowHeight: CGFloat = 62
+
+    private var regular: [ShopMoreItem] { items.filter { !$0.destructive } }
+    private var destructive: [ShopMoreItem] { items.filter(\.destructive) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(shopName)
+                .font(.kycSection)
+                .foregroundStyle(Color.ink)
+                .lineLimit(1)
+                .padding(.top, 22)
+
+            group(regular)
+            if !destructive.isEmpty {
+                group(destructive)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color.cream50)
+        .presentationDetents([.height(height)])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var height: CGFloat {
+        let groups: CGFloat = destructive.isEmpty ? 1 : 2
+        return 22 + 22 + 20 + CGFloat(items.count) * Self.rowHeight + groups * 14
+    }
+
+    private func group(_ items: [ShopMoreItem]) -> some View {
+        VStack(spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                if index > 0 { Divider().overlay(Color.cream200).padding(.leading, 62) }
+                row(item)
+            }
+        }
+        .cardStyle()
+    }
+
+    private func row(_ item: ShopMoreItem) -> some View {
+        Button { onPick(item) } label: {
+            HStack(spacing: 12) {
+                Image(systemName: item.symbol)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(item.destructive ? Color.red : Color.espresso700)
+                    .frame(width: 36, height: 36)
+                    .background(item.destructive ? Color.red.opacity(0.10) : Color.cream100, in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.title)
+                        .font(.kycBodyBold)
+                        .foregroundStyle(item.destructive ? Color.red : Color.ink)
+                    Text(item.subtitle)
+                        .font(.kycSecondary)
+                        .foregroundStyle(Color.inkMuted)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                if !item.destructive {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.inkFaint)
+                }
+            }
+            .padding(.horizontal, 14)
+            .frame(height: Self.rowHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 /// Grid of every uploaded photo; opened from the cover's "N photos" chip.
 struct ShopPhotoSheet: View {
     let shop: CoffeeShop
@@ -158,10 +248,15 @@ struct ShopPhotoSheet: View {
         NavigationStack {
             ScrollView {
                 if images.isEmpty {
-                    Text(shop.photos?.isEmpty == false ? "Decoding photos…" : "No photos yet.")
-                        .font(.kycSecondary)
-                        .foregroundStyle(Color.inkMuted)
-                        .padding(.top, 40)
+                    if shop.photos == nil, (shop.photoCount ?? 0) > 0 {
+                        ProgressView()
+                            .padding(.top, 40)
+                    } else {
+                        Text(shop.photos?.isEmpty == false ? "Decoding photos…" : "No photos yet.")
+                            .font(.kycSecondary)
+                            .foregroundStyle(Color.inkMuted)
+                            .padding(.top, 40)
+                    }
                 } else {
                     LazyVGrid(columns: columns, spacing: 3) {
                         ForEach(images, id: \.0.id) { photo, image in
@@ -191,7 +286,7 @@ struct ShopPhotoSheet: View {
                 }
             }
         }
-        .task {
+        .task(id: shop.photos?.map(\.id)) {
             // Base64 decode off the main thread; a dozen photos can be several MB.
             let photos = shop.photos ?? []
             let decoded: [(ShopPhoto, Data)] = await Task.detached(priority: .userInitiated) {

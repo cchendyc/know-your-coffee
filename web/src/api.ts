@@ -79,6 +79,15 @@ export interface ShopPhoto {
   createdAt: string
 }
 
+export interface Review {
+  id: string
+  rating: number
+  body: string | null
+  author: { name: string; picture: string | null } | null
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Report {
   id: string
   machine: MachineBrand | null
@@ -310,6 +319,10 @@ export interface ShopPageData extends CoffeeShop {
   photoCount: number
   reports: Report[]
   reportCount: number
+  reviews: Review[]
+  reviewCount: number
+  ratingAverage: number | null
+  myReview: Review | null
 }
 
 export function fetchShopPage(id: string) {
@@ -321,6 +334,9 @@ export function fetchShopPage(id: string) {
         deliverySettings { shipping pickup pickupInstructions }
         products { id name price subtitle status coverPhoto { id data position } }
         reports(limit: 20) { ${REPORT_FIELDS} }
+        reviewCount ratingAverage
+        myReview { id rating body createdAt updatedAt author { name picture } }
+        reviews(limit: 50) { id rating body createdAt updatedAt author { name picture } }
         chain { id name shops { ${RELATED_SHOP_FIELDS} } }
       }
     }`,
@@ -380,6 +396,15 @@ export function fetchShopPreview(id: string) {
     const { reports, ...rest } = d.shop
     return { ...rest, latestReport: reports[0] ?? null }
   })
+}
+
+export function submitReview(input: { shopId: string; rating: number; body?: string | null }) {
+  return gql<{ submitReview: Review }>(
+    `mutation SubmitReview($input: ReviewInput!) {
+      submitReview(input: $input) { id rating body createdAt updatedAt author { name picture } }
+    }`,
+    { input },
+  ).then((d) => d.submitReview)
 }
 
 export function submitReport(input: ReportInput) {

@@ -184,6 +184,8 @@ struct Pill: View {
 // Left-aligned wrapping layout for pill collections.
 struct FlowLayout: Layout {
     var spacing: CGFloat = 6
+    /// Right-align each row; used when the flow sits at the trailing edge of a row.
+    var trailing = false
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         arrange(proposal: proposal, subviews: subviews).size
@@ -201,6 +203,7 @@ struct FlowLayout: Layout {
     private func arrange(proposal: ProposedViewSize, subviews: Subviews) -> (size: CGSize, positions: [CGPoint]) {
         let maxWidth = proposal.width ?? .infinity
         var positions: [CGPoint] = []
+        var rowStarts: [Int] = [0]
         var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, width: CGFloat = 0
 
         for subview in subviews {
@@ -209,11 +212,23 @@ struct FlowLayout: Layout {
                 x = 0
                 y += rowHeight + spacing
                 rowHeight = 0
+                rowStarts.append(positions.count)
             }
             positions.append(CGPoint(x: x, y: y))
             rowHeight = max(rowHeight, size.height)
             width = max(width, x + size.width)
             x += size.width + spacing
+        }
+
+        if trailing {
+            let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+            for (i, start) in rowStarts.enumerated() {
+                let end = i + 1 < rowStarts.count ? rowStarts[i + 1] : positions.count
+                guard start < end else { continue }
+                let rowWidth = positions[end - 1].x + sizes[end - 1].width
+                let shift = width - rowWidth
+                for j in start..<end { positions[j].x += shift }
+            }
         }
         return (CGSize(width: width, height: y + rowHeight), positions)
     }

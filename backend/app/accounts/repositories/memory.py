@@ -95,6 +95,11 @@ class MemoryUserRepository:
                 if str(report.user_id or "") == user_id:
                     report.user_id = None
                     report.user = None
+        for reviews in store.reviews.values():
+            for review in reviews:
+                if str(review.user_id or "") == user_id:
+                    review.user_id = None
+                    review.user = None
         for photos in store.photos.values():
             for photo in photos:
                 if str(photo.user_id or "") == user_id:

@@ -52,6 +52,24 @@ def resolve_submit_report(_, info, input):
     )
 
 
+MAX_REVIEW_BODY = 2000
+
+
+@mutation.field("submitReview")
+def resolve_submit_review(_, info, input):
+    user = require_user(info)
+    repos = info.context["repos"]
+    if not repos.shops.get(input["shopId"]):
+        raise GraphQLError(f"Shop {input['shopId']} not found")
+    rating = input["rating"]
+    if not isinstance(rating, int) or rating < 1 or rating > 5:
+        raise GraphQLError("Rating must be a whole number from 1 to 5.")
+    body = (input.get("body") or "").strip() or None
+    if body and len(body) > MAX_REVIEW_BODY:
+        raise GraphQLError(f"Reviews can be at most {MAX_REVIEW_BODY} characters.")
+    return repos.reviews.upsert(input["shopId"], user["id"], rating, body)
+
+
 @mutation.field("setShopStatus")
 def resolve_set_shop_status(_, info, shopId, saved=None, been=None):
     user = require_user(info)

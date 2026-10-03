@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// About tab: gear, beans, space, menu, then the record thread. One panel so
-/// a visitor reads what the community knows before anything for sale.
+/// About tab: update prompt, gear, beans, space, menu, then the record thread.
+/// Mirrors web AboutSection: every card is an eyebrow row plus label/pill rows.
 struct ShopAboutPanel: View {
     let shop: CoffeeShop
     let listings: [ShopListing]
@@ -19,20 +19,16 @@ struct ShopAboutPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            ShopSectionHeader(
-                "About this shop",
-                meta: "Verified by \(ShopPageFormat.plural(reportCount, "report")) · updated \(RelativeDate.format(shop.updatedAt))"
-            )
+            UpdatePromptRow(action: onUpdate)
             gearCard
             beansCard
             spaceCard
 
             if !shop.drinks.isEmpty {
-                menu
+                menuCard
             }
 
             records
-            reportBar
         }
         .padding(.horizontal, 24)
         .padding(.top, 20)
@@ -45,72 +41,57 @@ struct ShopAboutPanel: View {
             if shop.knownMachines.isEmpty {
                 UnknownRow(label: "Espresso machine", onKnow: onUpdate)
             } else {
-                ForEach(Array(shop.knownMachines.enumerated()), id: \.offset) { index, machine in
-                    if index > 0 { Divider().overlay(Color.cream200) }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(machine.display).font(.kycBodyBold).foregroundStyle(Color.ink)
-                        Text("Espresso machine").font(.system(size: 11)).foregroundStyle(Color.inkMuted)
-                    }
+                ForEach(Array(shop.knownMachines.enumerated()), id: \.offset) { _, machine in
+                    InfoRow(label: machine.display) { Pill(text: "Espresso") }
                 }
             }
-            if !shop.grinders.isEmpty {
-                Divider().overlay(Color.cream200)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Grinders").font(.system(size: 11)).foregroundStyle(Color.inkMuted)
-                    FlowLayout(spacing: 6) {
-                        ForEach(shop.grinders, id: \.self) { Pill(text: $0) }
-                    }
-                }
+            ForEach(shop.grinders, id: \.self) { grinder in
+                InfoRow(label: grinder) { Pill(text: "Grinder") }
             }
         }
     }
 
     // MARK: Beans
 
+    private var beanSource: String? {
+        switch shop.beanSource {
+        case .unknown: nil
+        case .inHouseRoast: "Roasted in-house"
+        default: [shop.beanSource.label, shop.roaster].compactMap { $0 }.joined(separator: " · ")
+        }
+    }
+
     private var beansCard: some View {
-        AboutCard(eyebrow: "Beans") {
-            if shop.beanSource == .unknown, shop.roaster == nil, shop.coffees.isEmpty {
-                UnknownRow(label: "Who roasts the beans", onKnow: onUpdate)
+        AboutCard(eyebrow: "Beans", tag: beanSource) {
+            if !shop.coffees.isEmpty {
+                ForEach(Array(shop.coffees.enumerated()), id: \.offset) { _, coffee in
+                    coffeeRow(coffee)
+                }
+            } else if !shop.beanOrigins.isEmpty {
+                InfoRow(label: "Origins") {
+                    ForEach(shop.beanOrigins, id: \.self) { Pill(text: $0) }
+                }
             } else {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(shop.roaster ?? shop.beanSource.label).font(.kycBodyBold).foregroundStyle(Color.ink)
-                    if shop.roaster != nil, shop.beanSource != .unknown {
-                        Text(shop.beanSource.label).font(.system(size: 11)).foregroundStyle(Color.inkMuted)
-                    }
-                }
-                if !shop.beanOrigins.isEmpty {
-                    FlowLayout(spacing: 6) {
-                        ForEach(shop.beanOrigins, id: \.self) { Pill(text: $0) }
-                    }
-                }
+                UnknownRow(label: beanSource == nil ? "Who roasts the beans" : "Coffees on the bar", onKnow: onUpdate)
             }
-            ForEach(Array(shop.coffees.enumerated()), id: \.offset) { _, coffee in
-                Divider().overlay(Color.cream200)
-                coffeeRow(coffee)
+            if shop.milkBrands.isEmpty {
+                UnknownRow(label: "Milk", onKnow: onUpdate)
+            } else {
+                InfoRow(label: "Milk") {
+                    ForEach(shop.milkBrands, id: \.self) { Pill(text: $0) }
+                }
             }
         }
     }
 
+    // Unnamed coffees lead with their first attribute (usually the type) instead of a placeholder.
     private func coffeeRow(_ coffee: Coffee) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(coffee.title ?? "House coffee")
-                    .font(.kycSecondaryBold)
-                    .foregroundStyle(Color.ink)
-                Spacer(minLength: 8)
-                if listingMatches(coffee) {
-                    ShopLinkButton(label: "Buy this bean", symbol: "arrow.right", action: onShop)
-                }
-            }
-            if !coffee.pills.isEmpty {
-                FlowLayout(spacing: 6) {
-                    ForEach(coffee.pills, id: \.self) { Pill(text: $0) }
-                }
-            }
-            if !coffee.tastingNotes.isEmpty {
-                Text("Notes: \(coffee.tastingNotes.joined(separator: ", "))")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.inkMuted)
+        var pills = coffee.pills + coffee.tastingNotes
+        let title = coffee.title ?? (pills.isEmpty ? "House coffee" : pills.removeFirst())
+        return InfoRow(label: title) {
+            ForEach(pills, id: \.self) { Pill(text: $0) }
+            if listingMatches(coffee) {
+                ShopLinkButton(label: "Buy this bean", symbol: "arrow.right", action: onShop)
             }
         }
     }
@@ -126,35 +107,17 @@ struct ShopAboutPanel: View {
     private var spaceCard: some View {
         AboutCard(eyebrow: "Space") {
             amenityRow("Dog friendly", shop.dogFriendly)
-            Divider().overlay(Color.cream200)
             amenityRow("Wi-Fi", shop.wifi)
-            Divider().overlay(Color.cream200)
             amenityRow("Outdoor seating", shop.outdoorSeating)
-            Divider().overlay(Color.cream200)
-            HStack {
-                Text("Milk").font(.kycSecondary).foregroundStyle(Color.ink)
-                Spacer()
-                if shop.milkBrands.isEmpty {
-                    ShopLinkButton(label: "Unknown — know it?", action: onUpdate)
-                } else {
-                    Text(shop.milkBrands.joined(separator: ", "))
-                        .font(.kycSecondaryBold)
-                        .foregroundStyle(Color.ink)
-                        .multilineTextAlignment(.trailing)
-                }
-            }
         }
     }
 
+    @ViewBuilder
     private func amenityRow(_ label: String, _ value: Bool?) -> some View {
-        HStack {
-            Text(label).font(.kycSecondary).foregroundStyle(Color.ink)
-            Spacer()
-            if let value {
-                Text(value ? "Yes" : "No").font(.kycSecondaryBold).foregroundStyle(Color.ink)
-            } else {
-                ShopLinkButton(label: "Unknown — know it?", action: onUpdate)
-            }
+        if let value {
+            InfoRow(label: label) { Pill(text: value ? "Yes" : "No") }
+        } else {
+            UnknownRow(label: label, onKnow: onUpdate)
         }
     }
 
@@ -164,41 +127,21 @@ struct ShopAboutPanel: View {
         showAllDrinks ? shop.drinks : Array(shop.drinks.prefix(Self.drinkPreview))
     }
 
-    private var menu: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ShopSectionHeader(
-                "Menu",
-                meta: [ShopPageFormat.plural(shop.drinks.count, "drink"),
-                       shop.milkBrands.isEmpty ? nil : "Milk: \(shop.milkBrands.joined(separator: ", "))"]
-                    .compactMap { $0 }.joined(separator: " · ")
-            ) {
-                ShopLinkButton(label: "Update menu", action: onUpdate)
-            }
-            .padding(.top, 6)
-
-            VStack(spacing: 0) {
-                ForEach(Array(visibleDrinks.enumerated()), id: \.offset) { index, drink in
-                    if index > 0 { Divider().overlay(Color.cream200) }
-                    HStack {
-                        Text(drink.name).font(.system(size: 14)).foregroundStyle(Color.ink)
-                        Spacer()
-                        Text(drink.price.map { "$\(ShopPageFormat.price($0))" } ?? "—")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(drink.price == nil ? Color.inkFaint : Color.ink)
+    private var menuCard: some View {
+        AboutCard(eyebrow: "Menu") {
+            ForEach(Array(visibleDrinks.enumerated()), id: \.offset) { _, drink in
+                InfoRow(label: drink.name) {
+                    if let price = drink.price {
+                        Pill(text: "$\(ShopPageFormat.price(price))")
                     }
-                    .padding(.vertical, 11)
-                }
-                if shop.drinks.count > Self.drinkPreview {
-                    Divider().overlay(Color.cream200)
-                    ShopLinkButton(label: showAllDrinks ? "Show fewer" : "See all \(ShopPageFormat.plural(shop.drinks.count, "drink"))") {
-                        withAnimation(.easeOut(duration: 0.2)) { showAllDrinks.toggle() }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 11)
                 }
             }
-            .padding(.horizontal, 16)
-            .cardStyle()
+            if shop.drinks.count > Self.drinkPreview {
+                ShopLinkButton(label: showAllDrinks ? "Show fewer" : "See all \(ShopPageFormat.plural(shop.drinks.count, "drink"))") {
+                    withAnimation(.easeOut(duration: 0.2)) { showAllDrinks.toggle() }
+                }
+                .padding(.top, 2)
+            }
         }
     }
 
@@ -208,17 +151,15 @@ struct ShopAboutPanel: View {
         showAllRecords ? reports : Array(reports.prefix(Self.recordPreview))
     }
 
+    private var recordsMeta: String? {
+        guard let latest = reports.first else { return nil }
+        return "\(ShopPageFormat.plural(reportCount, "report")) · latest \(RelativeDate.format(latest.createdAt))"
+    }
+
     private var records: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Records · \(reportCount)").font(.kycBodyBold).foregroundStyle(Color.ink)
-                    Text("Who reported what, and when").font(.kycMeta).foregroundStyle(Color.inkMuted)
-                }
-                Spacer()
-                Text("Newest first").font(.kycMeta).foregroundStyle(Color.crema500)
-            }
-            .padding(.top, 6)
+            ShopSectionHeader("Records", meta: recordsMeta)
+                .padding(.top, 6)
 
             VStack(alignment: .leading, spacing: 0) {
                 if reports.isEmpty {
@@ -252,7 +193,7 @@ struct ShopAboutPanel: View {
                 HStack(spacing: 6) {
                     Text(report.reporter?.name ?? "Anonymous").font(.kycMetaBold).foregroundStyle(Color.ink)
                     Text("\(RelativeDate.format(report.createdAt)) · via \(report.source.lowercased())")
-                        .font(.system(size: 11))
+                        .font(.kycMeta)
                         .foregroundStyle(Color.inkMuted)
                 }
                 let summary = report.summary
@@ -264,34 +205,59 @@ struct ShopAboutPanel: View {
         }
         .padding(.vertical, 12)
     }
-
-    private var reportBar: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Know something new?").font(.kycSecondaryBold).foregroundStyle(Color.ink)
-                Text("Keep this page true for the next person.").font(.kycMeta).foregroundStyle(Color.inkMuted)
-            }
-            Spacer(minLength: 8)
-            ShopPrimaryPill(label: "Report an update", action: onUpdate)
-        }
-        .padding(14)
-        .background(Color.accentSoft, in: RoundedRectangle(cornerRadius: KYCRadius.card, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: KYCRadius.card, style: .continuous)
-                .strokeBorder(Color.crema400, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-        )
-    }
-
 }
 
-// White card with an uppercase eyebrow; rows separate themselves with Dividers.
+// MARK: - Pieces
+
+/// Tappable row that opens the report form. A list-row shape instead of a
+/// banner with two buttons, which reads as foreign inside an iOS scroll view.
+private struct UpdatePromptRow: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.espresso700)
+                    .frame(width: 36, height: 36)
+                    .background(Color.cream100, in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Report an update")
+                        .font(.kycBodyBold)
+                        .foregroundStyle(Color.ink)
+                    Text("Machine, beans, drinks, or photos")
+                        .font(.kycSecondary)
+                        .foregroundStyle(Color.inkMuted)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.inkFaint)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .cardStyle()
+    }
+}
+
+// White card: eyebrow row (with an optional card-level note on the right), then rows.
 private struct AboutCard<Content: View>: View {
     let eyebrow: String
+    var tag: String?
     @ViewBuilder let content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            EyebrowLabel(eyebrow)
+            HStack(alignment: .firstTextBaseline) {
+                EyebrowLabel(eyebrow)
+                Spacer(minLength: 8)
+                if let tag { EyebrowLabel(tag).multilineTextAlignment(.trailing) }
+            }
             content
         }
         .padding(16)
@@ -300,14 +266,29 @@ private struct AboutCard<Content: View>: View {
     }
 }
 
+/// Label on the left, pills (or a link) right-aligned and wrapping.
+private struct InfoRow<Trailing: View>: View {
+    let label: String
+    @ViewBuilder let trailing: Trailing
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(label)
+                .font(.kycSecondary)
+                .foregroundStyle(Color.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            FlowLayout(spacing: 6, trailing: true) { trailing }
+        }
+    }
+}
+
 private struct UnknownRow: View {
     let label: String
     let onKnow: () -> Void
 
     var body: some View {
-        HStack {
-            Text(label).font(.kycSecondary).foregroundStyle(Color.ink)
-            Spacer()
+        InfoRow(label: label) {
             ShopLinkButton(label: "Unknown — know it?", action: onKnow)
         }
     }

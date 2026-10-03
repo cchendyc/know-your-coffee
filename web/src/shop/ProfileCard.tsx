@@ -1,6 +1,6 @@
 import type { CoffeeShop, ShopPageData, User } from '../api'
 import { timeAgo } from '../format'
-import { BookmarkIcon, CheckIcon, DirectionsIcon, ShareIcon, TruckIcon } from './bits'
+import { BookmarkIcon, CheckIcon, DirectionsIcon, ShareIcon } from './bits'
 import { SECTION_LABELS, initials, type Section } from './util'
 
 // Renders from the explorer's copy first (no ownership, counts, or
@@ -11,7 +11,6 @@ export function ProfileCard({
   shop,
   user,
   busy,
-  machineCount,
   sellsOnline,
   sections,
   active,
@@ -22,7 +21,6 @@ export function ProfileCard({
   shop: ProfileShop
   user: User | null
   busy: boolean
-  machineCount: number
   sellsOnline: boolean
   sections: Section[]
   active: Section
@@ -53,7 +51,6 @@ export function ProfileCard({
             <div className="flex min-w-0 flex-1 flex-col gap-2">
               <h1 className="text-2xl font-bold tracking-tight">{shop.name}</h1>
               <p className="text-[13px] text-espresso-500">
-                {shop.ownerId ? `Official ${shop.name} · ` : ''}
                 {shop.address}, {shop.city}
               </p>
               {shop.reportCount != null && (
@@ -105,12 +102,6 @@ export function ProfileCard({
                   <CheckIcon className="size-[18px]" />
                 </button>
               </div>
-              <p className="sp-stats text-xs">
-                <span>
-                  <b>{machineCount}</b> {machineCount === 1 ? 'machine' : 'machines'} · <b>{shop.coffees.length}</b>{' '}
-                  {shop.coffees.length === 1 ? 'coffee' : 'coffees'} on the menu
-                </span>
-              </p>
             </div>
           </div>
 
@@ -125,16 +116,8 @@ export function ProfileCard({
                 </button>
               ))}
             </nav>
-            {sellsOnline && shop.deliverySettings && (
-              <p className="flex items-center gap-2 pb-3 text-xs text-espresso-500">
-                {shop.deliverySettings.shipping && (
-                  <span className="sp-badge" style={{ paddingLeft: 8 }}>
-                    <TruckIcon className="size-3.5" />
-                    Ships to you
-                  </span>
-                )}
-                {shop.deliverySettings.pickup && <span>Pickup in {shop.city}</span>}
-              </p>
+            {sellsOnline && shop.deliverySettings?.pickup && (
+              <p className="pb-3 text-xs text-espresso-500">Pickup in {shop.city}</p>
             )}
           </div>
         </div>
