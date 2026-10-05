@@ -12,6 +12,7 @@ struct ShopDetailView: View {
     @State private var full: CoffeeShop?
     @State private var loadError: String?
     @State private var showReportForm = false
+    @State private var showShopReport = false
     @State private var showClaim = false
     @State private var showSignIn = false
     // The gated action the user tapped; runs after a successful sign-in.
@@ -36,6 +37,7 @@ struct ShopDetailView: View {
                     onToggleSaved: { gated { toggle(saved: !shop.savedByMe) } },
                     onToggleBeen: { gated { toggle(been: !shop.beenByMe) } },
                     onUpdate: { gated { showReportForm = true } },
+                    onReport: { gated { showShopReport = true } },
                     onReload: { Task { await loadFull() } },
                     onClaim: shop.ownerId == nil ? { gated { showClaim = true } } : nil,
                     onDelete: auth.user?.isAdmin == true ? { confirmDelete = true } : nil
@@ -51,6 +53,11 @@ struct ShopDetailView: View {
             ReportFormView(shop: shop) {
                 showReportForm = false
                 Task { await loadFull() }
+            }
+        }
+        .sheet(isPresented: $showShopReport) {
+            ShopReportSheet(shopName: shop.name) { reason in
+                try await CoffeeAPI.reportShop(shopID: shop.id, reason: reason)
             }
         }
         .sheet(isPresented: $showClaim) {
@@ -139,6 +146,9 @@ private struct ChainLocationPage: View {
 
     @State private var shop: CoffeeShop?
     @State private var error: String?
+    @State private var showShopReport = false
+    @State private var showSignIn = false
+    @State private var pendingAction: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -146,6 +156,7 @@ private struct ChainLocationPage: View {
             if let shop {
                 ShopPageView(shop: shop, actions: ShopPageActions(
                     onBack: { dismiss() },
+                    onReport: { gated { showShopReport = true } },
                     onReload: { Task { await reload() } }
                 ))
             } else if let error {
@@ -162,7 +173,30 @@ private struct ChainLocationPage: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showShopReport) {
+            if let shop {
+                ShopReportSheet(shopName: shop.name) { reason in
+                    try await CoffeeAPI.reportShop(shopID: shop.id, reason: reason)
+                }
+            }
+        }
+        .sheet(isPresented: $showSignIn, onDismiss: {
+            let action = pendingAction
+            pendingAction = nil
+            if AuthStore.shared.isSignedIn { action?() }
+        }) {
+            SignInSheet()
+        }
         .task { await reload() }
+    }
+
+    private func gated(_ action: @escaping () -> Void) {
+        if AuthStore.shared.isSignedIn {
+            action()
+        } else {
+            pendingAction = action
+            showSignIn = true
+        }
     }
 
     private func reload() async {

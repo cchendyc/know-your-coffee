@@ -100,6 +100,10 @@ class MemoryUserRepository:
                 if str(review.user_id or "") == user_id:
                     review.user_id = None
                     review.user = None
+        for flags in store.shop_flags.values():
+            for flag in flags:
+                if str(flag.user_id or "") == user_id:
+                    flag.user_id = None
         for photos in store.photos.values():
             for photo in photos:
                 if str(photo.user_id or "") == user_id:

@@ -19,7 +19,7 @@ struct RootView: View {
         func icon(active: Bool) -> String {
             switch self {
             case .home: active ? "house.fill" : "house"
-            case .sellerHub: active ? "storefront.fill" : "storefront"
+            case .sellerHub: active ? "square.grid.2x2.fill" : "square.grid.2x2"
             case .me: active ? "person.crop.circle.fill" : "person.crop.circle"
             }
         }

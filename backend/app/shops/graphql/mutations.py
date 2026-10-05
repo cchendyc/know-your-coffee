@@ -4,7 +4,9 @@ from ariadne import MutationType
 from graphql import GraphQLError
 
 from ...core.graphql import require_admin, require_shop_owner, require_user
+from ...models.enums import ShopReportReason
 from ...services.vision import identify_machine, parse_menu
+from ..repositories.shop_flag_repository import DuplicateShopFlag
 
 mutation = MutationType()
 
@@ -68,6 +70,20 @@ def resolve_submit_review(_, info, input):
     if body and len(body) > MAX_REVIEW_BODY:
         raise GraphQLError(f"Reviews can be at most {MAX_REVIEW_BODY} characters.")
     return repos.reviews.upsert(input["shopId"], user["id"], rating, body)
+
+
+@mutation.field("reportShop")
+def resolve_report_shop(_, info, shopId, reason):
+    user = require_user(info)
+    repos = info.context["repos"]
+    if not repos.shops.get(shopId):
+        raise GraphQLError(f"Shop {shopId} not found")
+    code = reason.value if isinstance(reason, ShopReportReason) else str(reason)
+    try:
+        repos.shop_flags.add(shopId, user["id"], code)
+    except DuplicateShopFlag:
+        raise GraphQLError("You already reported this shop.")
+    return True
 
 
 @mutation.field("setShopStatus")

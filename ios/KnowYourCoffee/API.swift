@@ -226,6 +226,12 @@ enum CoffeeAPI {
         ], as: Payload.self).setShopStatus
     }
 
+    static func reportShop(shopID: String, reason: String) async throws {
+        struct Payload: Decodable { let reportShop: Bool }
+        let query = "mutation ReportShop($shopId: ID!, $reason: ShopReportReason!) { reportShop(shopId: $shopId, reason: $reason) }"
+        _ = try await execute(query, variables: ["shopId": shopID, "reason": reason], as: Payload.self)
+    }
+
     static func submitReview(shopID: String, rating: Int, body: String?) async throws {
         struct Payload: Decodable {
             struct R: Decodable { let id: String }
@@ -334,8 +340,8 @@ enum CoffeeAPI {
         let query = """
             query Account {
               me { \(userFields) }
-              mySeller { shops { id name address city sellerOnboarded \(workloadFields) } \(workloadFields) }
-              myClaims { id status note createdAt shop { id name city } }
+              mySeller { shops { id name address city photoUrl sellerOnboarded \(workloadFields) } \(workloadFields) }
+              myClaims { id status note createdAt shop { id name city photoUrl } }
             }
             """
         let payload = try await execute(query, as: Payload.self)
@@ -351,7 +357,7 @@ enum CoffeeAPI {
     static func fetchMyClaims() async throws -> [ShopClaim] {
         struct Payload: Decodable { let myClaims: [ShopClaim] }
         let query = """
-            query MyClaims { myClaims { id status note createdAt shop { id name city } } }
+            query MyClaims { myClaims { id status note createdAt shop { id name city photoUrl } } }
             """
         return try await execute(query, as: Payload.self).myClaims
     }
@@ -390,8 +396,8 @@ enum CoffeeAPI {
         }
         let query = """
             query MySeller {
-              mySeller { shops { id name address city sellerOnboarded \(workloadFields) } \(workloadFields) }
-              myClaims { id status note createdAt shop { id name city } }
+              mySeller { shops { id name address city photoUrl sellerOnboarded \(workloadFields) } \(workloadFields) }
+              myClaims { id status note createdAt shop { id name city photoUrl } }
             }
             """
         let payload = try await execute(query, as: Payload.self)

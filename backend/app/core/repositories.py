@@ -11,6 +11,7 @@ class Repositories:
     chains: Any
     reports: Any
     reviews: Any
+    shop_flags: Any
     photos: Any
     users: Any
     claims: Any
@@ -38,6 +39,7 @@ def create_repositories() -> Repositories:
         from ..shops.repositories.photo_repository import PhotoRepository
         from ..shops.repositories.report_repository import ReportRepository
         from ..shops.repositories.review_repository import ReviewRepository
+        from ..shops.repositories.shop_flag_repository import ShopFlagRepository
         from ..shops.repositories.shop_repository import ShopRepository
         from .db import create_session_factory
 
@@ -48,6 +50,7 @@ def create_repositories() -> Repositories:
             chains=ChainRepository(session),
             reports=ReportRepository(session),
             reviews=ReviewRepository(session),
+            shop_flags=ShopFlagRepository(session),
             photos=PhotoRepository(session),
             users=UserRepository(session),
             claims=ClaimRepository(session),
@@ -82,6 +85,7 @@ def create_memory_repositories(store) -> Repositories:
         MemoryPhotoRepository,
         MemoryReportRepository,
         MemoryReviewRepository,
+        MemoryShopFlagRepository,
         MemoryShopRepository,
     )
 
@@ -90,6 +94,7 @@ def create_memory_repositories(store) -> Repositories:
         chains=MemoryChainRepository(store),
         reports=MemoryReportRepository(store),
         reviews=MemoryReviewRepository(store),
+        shop_flags=MemoryShopFlagRepository(store),
         photos=MemoryPhotoRepository(store),
         users=MemoryUserRepository(store),
         claims=MemoryClaimRepository(store),

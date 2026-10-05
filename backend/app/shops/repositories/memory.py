@@ -200,6 +200,7 @@ class MemoryShopRepository:
         del store.shops[shop_id]
         store.reports.pop(shop_id, None)
         store.reviews.pop(shop_id, None)
+        store.shop_flags.pop(shop_id, None)
         store.photos.pop(shop_id, None)
         store.bookmarks = {k for k in store.bookmarks if k[1] != shop_id}
         store.visits = {k for k in store.visits if k[1] != shop_id}
@@ -368,6 +369,27 @@ class MemoryReviewRepository:
             updated_at=now,
         )
         store.reviews.setdefault(str(shop_id), []).append(row)
+        return row
+
+
+class MemoryShopFlagRepository:
+    def __init__(self, store: MemoryStore):
+        self._store = store
+
+    def add(self, shop_id: str, user_id: str, reason: str) -> m.ShopFlag:
+        from .shop_flag_repository import DuplicateShopFlag
+
+        rows = self._store.shop_flags.setdefault(str(shop_id), [])
+        if any(str(row.user_id or "") == str(user_id) for row in rows):
+            raise DuplicateShopFlag()
+        row = m.ShopFlag(
+            id=self._store.next_id(),
+            shop_id=int(shop_id),
+            user_id=int(user_id),
+            reason=reason,
+            created_at=_now(),
+        )
+        rows.append(row)
         return row
 
 

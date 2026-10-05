@@ -1,10 +1,9 @@
 import AuthenticationServices
 import SwiftUI
 
-// Me tab / profile sheet, laid out like the Figma "iOS / You" frame: avatar
-// and name, Saved/Been stats, Your shop (Seller Hub) or Become a seller,
-// My claims, Appearance, then Sign out. One account query feeds the page;
-// failures show inline with Retry instead of leaving stats on "…".
+// Me tab / profile sheet: avatar and name, Saved/Been stats, shops (a pending
+// claim is another row), Appearance, then Sign out. One account query feeds
+// the page; failures show inline with Retry instead of leaving stats on "…".
 struct ProfileView: View {
     // True when shown as the Me tab: no Done button, and dismissal is a no-op.
     var isTab = false
@@ -30,8 +29,9 @@ struct ProfileView: View {
     @AppStorage("appearance") private var appearanceRaw = AppAppearance.system.rawValue
 
     private var shops: [SellerShop] { account?.seller?.shops ?? [] }
-    private var claims: [ShopClaim] { account?.claims ?? [] }
-    private var hasPendingClaim: Bool { claims.contains { $0.status == "PENDING" } }
+    private var pendingClaims: [ShopClaim] {
+        (account?.claims ?? []).filter { $0.status == "PENDING" }
+    }
 
     var body: some View {
         NavigationStack {
@@ -42,7 +42,6 @@ struct ProfileView: View {
                         if case .failed(let message) = load { errorBanner(message) }
                         statsRow
                         sellerSection
-                        if !claims.isEmpty { claimsSection }
                     } else {
                         signedOutHeader
                         if let sessionNotice { notice(sessionNotice) }
@@ -77,7 +76,8 @@ struct ProfileView: View {
                 .padding(.bottom, 24)
             }
             .background(Color.cream50)
-            .navigationTitle(isTab ? "Me" : "")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(isTab ? .hidden : .automatic, for: .navigationBar)
             .toolbarBackground(Color.cream50, for: .navigationBar)
             .toolbar {
                 if !isTab {
@@ -210,33 +210,43 @@ struct ProfileView: View {
         return load == .loading ? "00" : "—"
     }
 
-    // Verified owners get Seller Hub rows; everyone else gets the application
-    // entry, unless an application is already under review.
+    // Owned shops, plus a row for each claim still waiting on support.
     @ViewBuilder
     private var sellerSection: some View {
-        if !shops.isEmpty {
-            section(shops.count == 1 ? "Your shop" : "Your shops") {
+        if !shops.isEmpty || !pendingClaims.isEmpty {
+            section(shops.count + pendingClaims.count == 1 ? "Your shop" : "Your shops") {
                 ForEach(shops) { shop in
                     NavigationLink {
                         SellerHubView(shops: shops.map(\.owned), selected: shop.owned)
                     } label: {
                         row(
-                            icon: "storefront",
-                            title: shops.count == 1 ? "Seller Hub" : shop.name,
-                            subtitle: shops.count == 1 ? shop.name : shop.city,
+                            icon: "square.grid.2x2",
+                            imageURL: shop.photoURL,
+                            title: shop.name,
+                            subtitle: shop.city,
                             verified: shop.sellerOnboarded,
                             badge: sellerBadge(shop)
                         )
                     }
                     .buttonStyle(.plain)
                 }
+                ForEach(pendingClaims) { claim in
+                    row(
+                        icon: "square.grid.2x2",
+                        imageURL: claim.shop.photoURL,
+                        title: claim.shop.name,
+                        subtitle: claim.shop.city,
+                        badge: Badge(text: "Pending", tint: .crema500),
+                        showsChevron: false
+                    )
+                }
             }
         } else if load == .loading {
             section("Your shop") {
-                row(icon: "storefront", title: "Seller Hub", subtitle: "Checking your shops")
+                row(icon: "square.grid.2x2", title: "Seller Hub", subtitle: "Checking your shops")
                     .redacted(reason: .placeholder)
             }
-        } else if !hasPendingClaim {
+        } else {
             section("Sell on Know Your Coffee") {
                 Button {
                     showBecomeSeller = true
@@ -252,32 +262,6 @@ struct ProfileView: View {
         if !shop.sellerOnboarded { return Badge(text: "Finish setup", tint: .crema500) }
         let open = shop.workload?.toFulfill ?? 0
         return open > 0 ? Badge(text: "\(open) new", tint: .crema500) : nil
-    }
-
-    private var claimsSection: some View {
-        section("My claims") {
-            ForEach(claims) { claim in
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(claim.shop.name)
-                            .font(.kycBody)
-                            .foregroundStyle(Color.ink)
-                        Text(claim.shop.city)
-                            .font(.kycSecondary)
-                            .foregroundStyle(Color.inkMuted)
-                    }
-                    Spacer()
-                    Text(claim.status.capitalized)
-                        .font(.kycMetaBold)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 4)
-                        .background(statusColor(claim.status).opacity(0.12), in: Capsule())
-                        .foregroundStyle(statusColor(claim.status))
-                }
-                .padding(14)
-                .background(Color.surface, in: RoundedRectangle(cornerRadius: KYCRadius.control, style: .continuous))
-            }
-        }
     }
 
     // System follows iOS light/dark; Light and Dark Roast force a theme.
@@ -352,13 +336,9 @@ struct ProfileView: View {
     }
 
     // Icon tile, title, subtitle with optional verified check, badge, chevron.
-    private func row(icon: String, title: String, subtitle: String, verified: Bool = false, badge: Badge? = nil) -> some View {
+    private func row(icon: String, imageURL: URL? = nil, title: String, subtitle: String, verified: Bool = false, badge: Badge? = nil, showsChevron: Bool = true) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(Color.espresso700)
-                .frame(width: 40, height: 40)
-                .background(Color.cream100, in: RoundedRectangle(cornerRadius: KYCRadius.thumb, style: .continuous))
+            shopAvatar(icon: icon, imageURL: imageURL)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.kycBodyBold)
@@ -386,13 +366,39 @@ struct ProfileView: View {
                     .background(badge.tint.opacity(0.14), in: Capsule())
                     .foregroundStyle(badge.tint)
             }
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color.inkFaint)
+            if showsChevron {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.inkFaint)
+            }
         }
         .padding(14)
         .background(Color.surface, in: RoundedRectangle(cornerRadius: KYCRadius.control, style: .continuous))
         .contentShape(Rectangle())
+    }
+
+    private func shopAvatar(icon: String, imageURL: URL?) -> some View {
+        let shape = RoundedRectangle(cornerRadius: KYCRadius.thumb, style: .continuous)
+        return Group {
+            if let imageURL {
+                AsyncImage(url: imageURL) { phase in
+                    if case .success(let image) = phase {
+                        image.resizable().scaledToFill()
+                    } else {
+                        Image(systemName: icon)
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(Color.espresso700)
+                    }
+                }
+            } else {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(Color.espresso700)
+            }
+        }
+        .frame(width: 40, height: 40)
+        .background(Color.cream100, in: shape)
+        .clipShape(shape)
     }
 
     private func errorBanner(_ message: String) -> some View {
@@ -423,14 +429,6 @@ struct ProfileView: View {
             .foregroundStyle(Color.inkMuted)
             .multilineTextAlignment(.center)
             .padding(.horizontal, 32)
-    }
-
-    private func statusColor(_ status: String) -> Color {
-        switch status {
-        case "APPROVED": .savedGreen
-        case "REJECTED": .red
-        default: .crema500
-        }
     }
 
     // MARK: Signed out

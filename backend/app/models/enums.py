@@ -44,6 +44,17 @@ USER_ROLES = ["USER", "ADMIN"]
 
 CLAIM_STATUSES = ["PENDING", "APPROVED", "REJECTED"]
 
+
+class ShopReportReason(StrEnum):
+    """Why a person flagged a shop. Not a community update."""
+
+    NOT_A_COFFEE_SHOP = "NOT_A_COFFEE_SHOP"
+    CLOSED = "CLOSED"
+    WRONG_INFO = "WRONG_INFO"
+    INAPPROPRIATE = "INAPPROPRIATE"
+    SPAM = "SPAM"
+
+
 # Orders are auto-accepted at checkout; sellers never accept or decline.
 # SHIP orders go PLACED > SHIPPED > DELIVERED via their shipment.
 # PICKUP orders go PLACED > READY_FOR_PICKUP > PICKED_UP and have no shipment.

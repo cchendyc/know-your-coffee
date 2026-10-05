@@ -81,6 +81,20 @@ enum ReportSource {
   PHOTO
 }
 
+"Why a shop was flagged. A community update uses submitReport instead."
+enum ShopReportReason {
+  "The place is not a coffee shop."
+  NOT_A_COFFEE_SHOP
+  "Closed, or the listing does not match a real place."
+  CLOSED
+  "Name, address, or photo is wrong."
+  WRONG_INFO
+  "Photos or text that should not be on the page."
+  INAPPROPRIATE
+  "Spam, scam, or a fake listing."
+  SPAM
+}
+
 enum CoffeeType {
   SINGLE_ORIGIN
   BLEND
@@ -733,6 +747,8 @@ type Mutation {
   submitReport(input: ReportInput!): Report!
   "Create or replace the signed-in user's review of any shop. Requires sign-in. Verified-buyer badges from delivered orders are not applied yet."
   submitReview(input: ReviewInput!): Review!
+  "Flag a shop that breaks the rules. Not a community update. Requires sign-in. One report per person per shop."
+  reportShop(shopId: ID!, reason: ShopReportReason!): Boolean!
   "Bookmark (saved) or mark visited (been). Omitted flags are left unchanged. Requires sign-in."
   setShopStatus(shopId: ID!, saved: Boolean, been: Boolean): CoffeeShop!
   "Attach community photos to a shop, grouped by what they show. Requires sign-in."

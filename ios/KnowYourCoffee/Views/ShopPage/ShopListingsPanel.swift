@@ -39,53 +39,48 @@ struct ShopListingsPanel: View {
     }
 }
 
-private struct ListingCard: View {
+private struct ListingRow: View {
     let listing: ShopListing
     let onAdd: () -> Void
 
     @State private var cover: UIImage?
+    // Cart quantity for this row. Lives here until a real cart exists.
+    @State private var quantity = 0
 
     private var soldOut: Bool { listing.status == "OUT_OF_STOCK" }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        HStack(alignment: .center, spacing: 12) {
             art
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(listing.name)
                     .font(.kycBodyBold)
                     .foregroundStyle(Color.ink)
                     .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text(listing.subtitle ?? " ")
-                    .font(.kycMeta)
-                    .foregroundStyle(Color.inkMuted)
-                    .lineLimit(1)
-                HStack {
+                if let subtitle = listing.subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.kycMeta)
+                        .foregroundStyle(Color.inkMuted)
+                        .lineLimit(1)
+                }
+                HStack(spacing: 6) {
                     Text("$\(ShopPageFormat.price(listing.price))")
                         .font(.kycBodyBold)
                         .foregroundStyle(Color.ink)
-                    Spacer()
-                    Button(action: onAdd) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(Color.inkInverse)
-                            .frame(width: 30, height: 30)
-                            .background(soldOut ? Color.inkFaint : Color.espresso700, in: Circle())
+                    if let badge {
+                        Text(badge.text)
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(badge.tint)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(badge.fill, in: Capsule())
                     }
-                    .buttonStyle(.plain)
-                    .disabled(soldOut)
-                    .accessibilityLabel("Add \(listing.name) to cart")
                 }
-                .padding(.top, 4)
             }
-            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            stepper
         }
-        .background(Color.surface)
-        .clipShape(RoundedRectangle(cornerRadius: KYCRadius.card, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: KYCRadius.card, style: .continuous)
-                .stroke(Color.cream200, lineWidth: 1)
-        )
+        .padding(12)
         .task(id: listing.coverPhoto) {
             guard let photo = listing.coverPhoto, photo.data != nil else { cover = nil; return }
             let data = await Task.detached(priority: .userInitiated) { photo.imageData }.value
@@ -102,41 +97,65 @@ private struct ListingCard: View {
                 bag
             }
         }
-        .frame(height: 148)
-        .frame(maxWidth: .infinity)
-        .clipped()
-        .overlay(alignment: .topLeading) {
-            if let badge {
-                Text(badge.text)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(badge.tint)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(badge.fill, in: Capsule())
-                    .padding(8)
-            }
-        }
+        .frame(width: 72, height: 72)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     // Placeholder bag with the listing name, for covers not yet uploaded.
     private var bag: some View {
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
+        RoundedRectangle(cornerRadius: 5, style: .continuous)
             .fill(Color.espresso700)
-            .frame(width: 72, height: 98)
+            .frame(width: 36, height: 50)
             .overlay(alignment: .topLeading) {
-                Rectangle().fill(Color.crema400).frame(height: 10)
-                    .clipShape(UnevenRoundedRectangle(topLeadingRadius: 8, topTrailingRadius: 8))
+                Rectangle().fill(Color.crema400).frame(height: 6)
+                    .clipShape(UnevenRoundedRectangle(topLeadingRadius: 5, topTrailingRadius: 5))
             }
             .overlay {
                 Text(listing.name.uppercased())
-                    .font(.system(size: 7, weight: .bold))
-                    .tracking(0.4)
+                    .font(.system(size: 5, weight: .bold))
+                    .tracking(0.3)
                     .multilineTextAlignment(.center)
                     .lineLimit(3)
                     .minimumScaleFactor(0.6)
                     .foregroundStyle(Color.inkInverse)
-                    .padding(8)
+                    .padding(4)
             }
+    }
+
+    @ViewBuilder
+    private var stepper: some View {
+        if quantity == 0 {
+            roundButton("plus", enabled: !soldOut) {
+                quantity = 1
+                onAdd()
+            }
+            .accessibilityLabel("Add \(listing.name) to cart")
+        } else {
+            HStack(spacing: 0) {
+                roundButton("minus", enabled: true) { quantity -= 1 }
+                    .accessibilityLabel("Remove one \(listing.name)")
+                Text("\(quantity)")
+                    .font(.kycBodyBold)
+                    .monospacedDigit()
+                    .foregroundStyle(Color.ink)
+                    .frame(minWidth: 24)
+                roundButton("plus", enabled: !soldOut) { quantity += 1 }
+                    .accessibilityLabel("Add one more \(listing.name)")
+            }
+        }
+    }
+
+    private func roundButton(_ symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(enabled ? Color.ink : Color.inkFaint)
+                .frame(width: 30, height: 30)
+                .background(Color.surface, in: Circle())
+                .overlay(Circle().stroke(Color.cream200, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
     }
 
     private var badge: (text: String, tint: Color, fill: Color)? {
@@ -169,16 +188,15 @@ struct ShopReviewsPanel: View {
             HStack(alignment: .top, spacing: 16) {
                 VStack(spacing: 2) {
                     Text(shop.ratingAverage.map { String(format: "%.1f", $0) } ?? "–")
-                        .font(.system(size: 20, weight: .bold))
+                        .font(.kycBodyBold)
                         .foregroundStyle(shop.ratingAverage == nil ? Color.inkFaint : Color.ink)
-                    ReviewStars(value: Int((shop.ratingAverage ?? 0).rounded()), size: 10)
+                    ReviewStars(value: Int((shop.ratingAverage ?? 0).rounded()), size: 11)
                 }
-                .frame(width: 84)
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(count == 0 ? "No ratings yet" : ShopPageFormat.plural(count, "rating"))
-                        .font(.kycBodyBold)
-                        .foregroundStyle(Color.ink)
+                        .font(.kycSecondary)
+                        .foregroundStyle(Color.inkMuted)
                     if needSignIn {
                         Text("Sign in to leave a review.")
                             .font(.kycSecondary)

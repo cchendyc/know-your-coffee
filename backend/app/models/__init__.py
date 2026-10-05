@@ -42,6 +42,7 @@ from .report import Report
 from .review import Review
 from .shipment import Shipment
 from .shop import Shop
+from .shop_flag import ShopFlag
 from .user import LoginCode, User
 from .visit import ShopVisit
 
@@ -91,6 +92,7 @@ __all__ = [
     "ShipmentStatus",
     "ShipsTo",
     "Shop",
+    "ShopFlag",
     "ShopBookmark",
     "ShopClaim",
     "ShopPhoto",

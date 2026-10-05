@@ -431,6 +431,9 @@ struct ShopClaim: Codable, Identifiable, Hashable {
         let id: String
         let name: String
         let city: String
+        let photoUrl: String?
+
+        var photoURL: URL? { photoUrl.flatMap(URL.init(string:)) }
     }
 
     let id: String
@@ -464,9 +467,11 @@ struct SellerShop: Codable, Identifiable, Hashable {
     let name: String
     let address: String
     let city: String
+    var photoUrl: String? = nil
     let sellerOnboarded: Bool
     let workload: SellerWorkload?
 
+    var photoURL: URL? { photoUrl.flatMap(URL.init(string:)) }
     var owned: OwnedShop { OwnedShop(id: id, name: name, city: city) }
 }
 

@@ -8,6 +8,8 @@ struct ShopPageActions {
     var onToggleBeen: () -> Void = {}
     /// Opens the report-an-update form.
     var onUpdate: () -> Void = {}
+    /// Flag the shop for breaking the rules. Not a community update.
+    var onReport: () -> Void = {}
     /// Refetch the shop after a review is saved.
     var onReload: () -> Void = {}
     /// nil when the shop already has an owner or claiming is not offered here.
@@ -290,7 +292,7 @@ struct ShopPageView: View {
     // MARK: Tabs
 
     private var tabBar: some View {
-        ShopTabBar(tabs: tabs, selection: $tab, shopCount: listings.count)
+        ShopTabBar(tabs: tabs, selection: $tab)
     }
 
     @ViewBuilder
@@ -348,13 +350,12 @@ struct ShopPageView: View {
     }
 
     private var moreItems: [ShopMoreItem] {
-        var items: [ShopMoreItem] = []
-        if let website = shop.website, let url = URL(string: website) {
-            items.append(ShopMoreItem(
-                symbol: "safari", title: "Visit website",
-                subtitle: url.host?.replacingOccurrences(of: "www.", with: "") ?? website
-            ) { openURL(url) })
-        }
+        var items: [ShopMoreItem] = [
+            ShopMoreItem(
+                symbol: "flag", title: "Report shop",
+                subtitle: "It breaks the rules", action: actions.onReport
+            ),
+        ]
         if let onClaim = actions.onClaim {
             items.append(ShopMoreItem(
                 symbol: "checkmark.shield", title: "Claim this shop",
@@ -572,7 +573,6 @@ private struct NavCircleLabel: View {
 private struct ShopTabBar: View {
     let tabs: [ShopTab]
     @Binding var selection: ShopTab
-    let shopCount: Int
 
     var body: some View {
         HStack(spacing: 0) {
@@ -580,18 +580,8 @@ private struct ShopTabBar: View {
                 Button {
                     selection = tab
                 } label: {
-                    HStack(spacing: 6) {
-                        Text(tab.label)
-                            .font(.system(size: 14, weight: .semibold))
-                        if tab == .shop, shopCount > 0 {
-                            Text("\(shopCount)")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(Color.crema500)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.accentSoft, in: Capsule())
-                        }
-                    }
+                    Text(tab.label)
+                        .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(selection == tab ? Color.ink : Color.inkMuted)
                     .frame(maxWidth: .infinity)
                     .frame(height: 40)

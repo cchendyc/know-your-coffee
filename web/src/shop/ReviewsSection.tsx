@@ -71,7 +71,7 @@ export function ReviewsSection({
     <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         <div className="sp-card flex w-full flex-col gap-4 p-5 lg:w-[340px] lg:shrink-0">
           <div className="flex items-center gap-3">
-            <p className={`text-xl leading-none font-bold ${ratingAverage == null ? 'text-espresso-500/40' : ''}`}>
+            <p className={`text-sm leading-none font-semibold ${ratingAverage == null ? 'text-espresso-500/40' : ''}`}>
               {ratingAverage == null ? '–' : ratingAverage.toFixed(1)}
             </p>
             <div>

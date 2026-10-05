@@ -23,6 +23,7 @@ from .models.enums import (
     ListingStatus,
     OrderStatus,
     ShipmentStatus,
+    ShopReportReason,
 )
 from .shops.graphql import bindables as shops_bindables
 
@@ -46,6 +47,7 @@ def create_schema():
         EnumType("ListingStatus", ListingStatus),
         EnumType("AttributeValueType", AttributeValueType),
         EnumType("AttributeSection", AttributeSection),
+        EnumType("ShopReportReason", ShopReportReason),
     ]
     return make_executable_schema(
         type_defs,

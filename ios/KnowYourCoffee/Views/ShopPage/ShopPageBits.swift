@@ -235,6 +235,110 @@ struct ShopMoreSheet: View {
     }
 }
 
+/// Problems a person can flag. Matches ShopReportReason. Not a bar update.
+struct ShopReportSheet: View {
+    let shopName: String
+    let onSubmit: (String) async throws -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var busy = false
+    @State private var error: String?
+    @State private var sent = false
+
+    private let reasons: [(id: String, title: String)] = [
+        ("NOT_A_COFFEE_SHOP", "Not a coffee shop"),
+        ("CLOSED", "Closed or doesn't exist"),
+        ("WRONG_INFO", "Wrong name, address, or photo"),
+        ("INAPPROPRIATE", "Inappropriate content"),
+        ("SPAM", "Spam or scam"),
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if sent {
+                Text("Thanks")
+                    .font(.kycSection)
+                    .foregroundStyle(Color.ink)
+                    .padding(.top, 22)
+                Text("We’ll review this shop.")
+                    .font(.kycSecondary)
+                    .foregroundStyle(Color.inkMuted)
+                Button("Done") { dismiss() }
+                    .font(.kycBodyBold)
+                    .foregroundStyle(Color.ink)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48)
+                    .background(Color.white, in: .rect(cornerRadius: 14))
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.cream200, lineWidth: 1))
+                    .padding(.top, 8)
+            } else {
+                reasonList
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color.cream50)
+        .presentationDetents([.height(420)])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var reasonList: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Report \(shopName)")
+                .font(.kycSection)
+                .foregroundStyle(Color.ink)
+                .lineLimit(2)
+                .padding(.top, 22)
+            Text("What rule does it break?")
+                .font(.kycSecondary)
+                .foregroundStyle(Color.inkMuted)
+
+            VStack(spacing: 0) {
+                ForEach(Array(reasons.enumerated()), id: \.element.id) { index, reason in
+                    if index > 0 { Divider().overlay(Color.cream200).padding(.leading, 16) }
+                    Button {
+                        Task { await send(reason.id) }
+                    } label: {
+                        HStack {
+                            Text(reason.title)
+                                .font(.kycBody)
+                                .foregroundStyle(Color.ink)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(Color.inkFaint)
+                        }
+                        .padding(.horizontal, 16)
+                        .frame(height: 52)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(busy)
+                }
+            }
+            .cardStyle()
+
+            if let error {
+                Text(error).font(.kycMeta).foregroundStyle(.red)
+            }
+        }
+    }
+
+    private func send(_ reason: String) async {
+        busy = true
+        error = nil
+        do {
+            try await onSubmit(reason)
+            sent = true
+            busy = false
+        } catch {
+            self.error = error.localizedDescription
+            busy = false
+        }
+    }
+}
+
 /// Grid of every uploaded photo; opened from the cover's "N photos" chip.
 struct ShopPhotoSheet: View {
     let shop: CoffeeShop

@@ -18,6 +18,7 @@ class MemoryStore:
     chains: dict[str, m.Chain] = field(default_factory=dict)
     reports: dict[str, list[m.Report]] = field(default_factory=dict)  # by shop id
     reviews: dict[str, list[m.Review]] = field(default_factory=dict)  # by shop id
+    shop_flags: dict[str, list[m.ShopFlag]] = field(default_factory=dict)  # by shop id
     photos: dict[str, list[m.ShopPhoto]] = field(default_factory=dict)  # by shop id
     users: dict[str, m.User] = field(default_factory=dict)
     bookmarks: set = field(default_factory=set)  # (user_id, shop_id)
