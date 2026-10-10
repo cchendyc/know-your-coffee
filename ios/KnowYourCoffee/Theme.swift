@@ -15,6 +15,8 @@ extension Color {
     static let crema500 = dynamic(light: 0xC08C3E, dark: 0xE0A458)
     static let markerOrange = dynamic(light: 0xE85D04, dark: 0xF2762B)
     static let savedGreen = dynamic(light: 0x2E9E4F, dark: 0x6FBF8F)
+    /// Been-to map pins fade back like a visited link (web .is-been).
+    static let beenTaupe = dynamic(light: 0xA3968B, dark: 0x8C7F74)
     /// Card surface: white on cream in light, elevated umber on espresso black in dark.
     static let surface = dynamic(light: 0xFFFFFF, dark: 0x271A11)
     /// Soft fills behind status chips (Figma accent-soft / warning-soft).
