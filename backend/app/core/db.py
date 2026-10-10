@@ -34,11 +34,24 @@ def _engine_url(url: str) -> str:
 def create_session_factory(database_url: str) -> sessionmaker:
     # Neon closes idle connections after ~5 min; pre_ping revives dead
     # ones instead of surfacing "SSL connection has been closed".
+    #
+    # Resolvers run sync on uvicorn's single event loop, so one blocked
+    # psycopg call stalls every request. Without these limits a half-dead
+    # socket blocks until the kernel TCP timeout (~15 min on Linux) and the
+    # whole API reads as down. Keepalives detect a dead peer in ~60s.
     engine = sa.create_engine(
         _engine_url(database_url),
         pool_size=5,
         max_overflow=0,
         pool_recycle=240,
         pool_pre_ping=True,
+        pool_timeout=10,
+        connect_args={
+            "connect_timeout": 10,
+            "keepalives": 1,
+            "keepalives_idle": 30,
+            "keepalives_interval": 10,
+            "keepalives_count": 3,
+        },
     )
     return sessionmaker(engine, expire_on_commit=False)
