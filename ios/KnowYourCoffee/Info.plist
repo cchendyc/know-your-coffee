@@ -13,6 +13,9 @@
 	     The same value goes in the backend env as GOOGLE_OAUTH_IOS_CLIENT_ID. -->
 	<key>GoogleOAuthClientID</key>
 	<string>468965480395-el9e0porpnrf8c4qjdg3n81uqgpstbtj.apps.googleusercontent.com</string>
+	<!-- Only HTTPS; exempt from export compliance, so TestFlight builds skip the question. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>Photograph the machine or menu to autofill your report.</string>
 	<!-- Static launch screen matches the espresso backdrop of LaunchAnimation,
