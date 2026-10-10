@@ -22,9 +22,15 @@ enum CoffeeAPI {
     static let defaultEndpoint = "https://knowyourcoffee.onrender.com"
 
     static var endpoint: String {
+        // Release has no UI to clear the override, and a TestFlight install
+        // keeps UserDefaults from an earlier dev build on the same device.
+        #if DEBUG
         let stored = UserDefaults.standard.string(forKey: endpointKey)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return (stored?.isEmpty == false ? stored! : defaultEndpoint)
+        #else
+        return defaultEndpoint
+        #endif
     }
 
     private struct Envelope<T: Decodable>: Decodable {
