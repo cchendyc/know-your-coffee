@@ -1,11 +1,14 @@
 import SwiftUI
 
 // Palette mirrors web/src/index.css so both clients feel like one product.
-// Every color is dynamic: light values are the cream/espresso palette, dark
-// values are the Dark Roast theme from the Figma iOS page. Roles, not hues:
-// espresso700 is "accent", so in the dark theme it becomes glowing crema.
+// Every color is dynamic: light values are the espresso palette on a white
+// canvas, dark values are the Dark Roast theme from the Figma iOS page.
+// Roles, not hues: espresso700 is "accent", so in the dark theme it becomes
+// glowing crema; cream50 is "canvas", so in light it is plain white.
 extension Color {
-    static let cream50 = dynamic(light: 0xFBF8F3, dark: 0x1B120C)
+    /// Page canvas and tab bar. White, not cream, so screens do not read as
+    /// tinted; the name stays to match web --color-cream-50.
+    static let cream50 = dynamic(light: 0xFFFFFF, dark: 0x1B120C)
     static let cream100 = dynamic(light: 0xF4EDE2, dark: 0x3A2A1D)
     static let cream200 = dynamic(light: 0xE9DCC9, dark: 0x3A2A1D)
     static let espresso500 = dynamic(light: 0x6F4E37, dark: 0xB99C82)
@@ -17,7 +20,8 @@ extension Color {
     static let savedGreen = dynamic(light: 0x2E9E4F, dark: 0x6FBF8F)
     /// Been-to map pins fade back like a visited link (web .is-been).
     static let beenTaupe = dynamic(light: 0xA3968B, dark: 0x8C7F74)
-    /// Card surface: white on cream in light, elevated umber on espresso black in dark.
+    /// Card surface: white in light (same as the canvas, so the shadow does the
+    /// lifting), elevated umber on espresso black in dark.
     static let surface = dynamic(light: 0xFFFFFF, dark: 0x271A11)
     /// Soft fills behind status chips (Figma accent-soft / warning-soft).
     static let accentSoft = dynamic(light: 0xF7EAD6, dark: 0x3E2F13)
@@ -132,8 +136,8 @@ struct CardBackground: ViewModifier {
     }
 }
 
-// Second elevation layer: cream inset inside a white card, for grouped
-// sub-content (a coffee entry, a report row, a claim).
+// Second elevation layer inside a card, for grouped sub-content (a coffee
+// entry, a report row, a claim). Outlined in light; recessed in dark.
 struct InsetCardBackground: ViewModifier {
     func body(content: Content) -> some View {
         content

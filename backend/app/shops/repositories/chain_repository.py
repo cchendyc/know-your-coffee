@@ -17,6 +17,13 @@ class ChainRepository:
         with self._session() as s:
             return s.get(m.Chain, chain_id)
 
+    def get_many(self, chain_ids: list[str]) -> dict[str, m.Chain]:
+        if not chain_ids:
+            return {}
+        with self._session() as s:
+            rows = s.scalars(sa.select(m.Chain).where(m.Chain.id.in_(chain_ids))).all()
+            return {str(row.id): row for row in rows}
+
     def list_shops(self, chain_id: str, viewer_id: str | None = None) -> list[m.Shop]:
         with self._session() as s:
             rows = s.execute(

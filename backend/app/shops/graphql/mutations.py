@@ -2,8 +2,9 @@
 
 from ariadne import MutationType
 from graphql import GraphQLError
+from starlette.concurrency import run_in_threadpool
 
-from ...core.graphql import require_admin, require_shop_owner, require_user
+from ...core.graphql import require_admin, require_shop_owner, require_user, threaded
 from ...models.enums import ShopReportReason
 from ...services.vision import identify_machine, parse_menu
 from ..repositories.shop_flag_repository import DuplicateShopFlag
@@ -40,6 +41,7 @@ def report_fields(input: dict) -> dict:
 
 
 @mutation.field("submitReport")
+@threaded
 def resolve_submit_report(_, info, input):
     user = require_user(info)
     repos = info.context["repos"]
@@ -58,6 +60,7 @@ MAX_REVIEW_BODY = 2000
 
 
 @mutation.field("submitReview")
+@threaded
 def resolve_submit_review(_, info, input):
     user = require_user(info)
     repos = info.context["repos"]
@@ -73,6 +76,7 @@ def resolve_submit_review(_, info, input):
 
 
 @mutation.field("reportShop")
+@threaded
 def resolve_report_shop(_, info, shopId, reason):
     user = require_user(info)
     repos = info.context["repos"]
@@ -87,6 +91,7 @@ def resolve_report_shop(_, info, shopId, reason):
 
 
 @mutation.field("setShopStatus")
+@threaded
 def resolve_set_shop_status(_, info, shopId, saved=None, been=None):
     user = require_user(info)
     repos = info.context["repos"]
@@ -98,6 +103,7 @@ def resolve_set_shop_status(_, info, shopId, saved=None, been=None):
 
 
 @mutation.field("addShopPhotos")
+@threaded
 def resolve_add_shop_photos(_, info, shopId, photos):
     user = require_user(info)
     repos = info.context["repos"]
@@ -113,6 +119,7 @@ def resolve_add_shop_photos(_, info, shopId, photos):
 
 
 @mutation.field("updateShopProfile")
+@threaded
 def resolve_update_shop_profile(_, info, shopId, input):
     user = require_shop_owner(info, shopId)
     changes = {}
@@ -126,6 +133,7 @@ def resolve_update_shop_profile(_, info, shopId, input):
 
 
 @mutation.field("completeSellerOnboarding")
+@threaded
 def resolve_complete_seller_onboarding(_, info, shopId):
     user = require_shop_owner(info, shopId)
     repos = info.context["repos"]
@@ -147,17 +155,18 @@ async def resolve_parse_menu(_, info, imageBase64):
 
 @mutation.field("importShopsFromYelp")
 async def resolve_import_yelp(_, info, location):
-    require_admin(info)
+    await run_in_threadpool(require_admin, info)
     return await info.context["services"].shop_imports.from_yelp(location)
 
 
 @mutation.field("importShopsFromGoogle")
 async def resolve_import_google(_, info, location):
-    require_admin(info)
+    await run_in_threadpool(require_admin, info)
     return await info.context["services"].shop_imports.from_google(location)
 
 
 @mutation.field("deleteShop")
+@threaded
 def resolve_delete_shop(_, info, id):
     require_admin(info)
     if not info.context["repos"].shops.delete(id):

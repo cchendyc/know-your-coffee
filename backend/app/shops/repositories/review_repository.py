@@ -33,6 +33,21 @@ class ReviewRepository:
             ).one()
         return int(count), (float(average) if average is not None else None)
 
+    def summary_for_shops(self, shop_ids: list[str]) -> dict[str, tuple[int, float | None]]:
+        """(count, average) per shop; shops without reviews are absent."""
+        if not shop_ids:
+            return {}
+        with self._session() as s:
+            rows = s.execute(
+                sa.select(m.Review.shop_id, sa.func.count(), sa.func.avg(m.Review.rating))
+                .where(m.Review.shop_id.in_(shop_ids))
+                .group_by(m.Review.shop_id)
+            ).all()
+        return {
+            str(shop_id): (int(count), float(average) if average is not None else None)
+            for shop_id, count, average in rows
+        }
+
     def for_user(self, shop_id: str, user_id: str) -> m.Review | None:
         stmt = (
             _shop_reviews(shop_id)

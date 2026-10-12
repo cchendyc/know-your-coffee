@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 from ... import models as m
 from ...core.errors import DuplicateEmailError
-from ...core.memory import MemoryStore
+from ...core.memory import MemoryStore, by_key
 
 
 class MemoryUserRepository:
@@ -29,6 +29,9 @@ class MemoryUserRepository:
 
     def get(self, user_id: str) -> m.User | None:
         return self._store.users.get(str(user_id))
+
+    def get_many(self, user_ids: list[str]) -> dict[str, m.User]:
+        return by_key(user_ids, self.get)
 
     def upsert_google_user(self, sub: str, email: str, name: str, picture: str | None, role: str | None) -> m.User:
         email = email.lower()

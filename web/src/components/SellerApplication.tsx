@@ -286,7 +286,7 @@ export function SellerApplicationModal({
                 )}
 
                 {step === 'review' && (
-                  <div className="divide-y divide-cream-200 rounded-xl bg-white">
+                  <div className="divide-y divide-cream-200 rounded-xl border border-cream-200 bg-white">
                     {(
                       [
                         ['Shop', selectedShop ? `${selectedShop.name}, ${selectedShop.city}` : '—'],

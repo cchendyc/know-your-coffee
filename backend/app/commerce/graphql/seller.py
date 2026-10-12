@@ -6,7 +6,7 @@ them; per-shop screens keep using shopId arguments."""
 
 from ariadne import ObjectType
 
-from ...core.graphql import require_shop_owner, require_user
+from ...core.graphql import require_shop_owner, require_user, threaded
 from ...models.enums import CANCELABLE_STATUSES, ListingStatus, ShipmentStatus
 
 seller = ObjectType("Seller")
@@ -34,5 +34,6 @@ def owned_shop_ids(info, shop_id: str | None) -> list[str]:
 
 
 @seller.field("workload")
+@threaded
 def resolve_seller_workload(seller_row, info):
     return workload(info.context["repos"], [str(s.id) for s in seller_row["shops"]])

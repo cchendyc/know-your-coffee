@@ -7,18 +7,14 @@ from sqlalchemy.orm import contains_eager, sessionmaker
 from ... import models as m
 
 
+# Admin reports fold into the shop record like any other, but they are
+# data entry, not community activity: list and count both skip them.
+# Anonymous reports (user_id NULL) stay visible.
+_NOT_ADMIN = sa.or_(m.User.role.is_(None), m.User.role != "ADMIN")
+
+
 def _community_reports(shop_id: str):
-    # Admin reports fold into the shop record like any other, but they are
-    # data entry, not community activity: list and count both skip them.
-    # Anonymous reports (user_id NULL) stay visible.
-    return (
-        sa.select(m.Report)
-        .outerjoin(m.Report.user)
-        .where(
-            m.Report.shop_id == shop_id,
-            sa.or_(m.User.role.is_(None), m.User.role != "ADMIN"),
-        )
-    )
+    return sa.select(m.Report).outerjoin(m.Report.user).where(m.Report.shop_id == shop_id, _NOT_ADMIN)
 
 
 class ReportRepository:
@@ -38,6 +34,19 @@ class ReportRepository:
     def count(self, shop_id: str) -> int:
         with self._session() as s:
             return s.scalar(sa.select(sa.func.count()).select_from(_community_reports(shop_id).subquery())) or 0
+
+    def count_for_shops(self, shop_ids: list[str]) -> dict[str, int]:
+        if not shop_ids:
+            return {}
+        with self._session() as s:
+            rows = s.execute(
+                sa.select(m.Report.shop_id, sa.func.count())
+                .select_from(m.Report)
+                .outerjoin(m.Report.user)
+                .where(m.Report.shop_id.in_(shop_ids), _NOT_ADMIN)
+                .group_by(m.Report.shop_id)
+            ).all()
+        return {str(shop_id): int(count) for shop_id, count in rows}
 
     def add(self, shop_id: str, user_id: str | None, note: str | None, source: str, fields: dict) -> m.Report:
         """fields: report column names -> values (machine, coffees, wifi, ...)."""

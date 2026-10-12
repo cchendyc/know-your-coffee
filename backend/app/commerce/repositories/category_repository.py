@@ -19,17 +19,30 @@ class CategoryRepository:
         with self._session() as s:
             return s.get(m.Category, category_id)
 
+    def get_many(self, category_ids: list[str]) -> dict[str, m.Category]:
+        if not category_ids:
+            return {}
+        with self._session() as s:
+            rows = s.scalars(sa.select(m.Category).where(m.Category.id.in_(category_ids))).all()
+            return {str(row.id): row for row in rows}
+
     def fields(self, category_id: str) -> list[m.CategoryField]:
         """CategoryAttribute joined to ProductAttribute, with active options, in display order."""
+        return self.fields_for_many([category_id]).get(str(category_id), [])
+
+    def fields_for_many(self, category_ids: list[str]) -> dict[str, list[m.CategoryField]]:
+        """fields() for several categories in two queries; categories without fields are absent."""
+        if not category_ids:
+            return {}
         stmt = (
             sa.select(m.CategoryAttribute, m.ProductAttribute)
             .join(m.ProductAttribute, m.ProductAttribute.id == m.CategoryAttribute.attribute_id)
-            .where(m.CategoryAttribute.category_id == category_id)
-            .order_by(m.CategoryAttribute.position, m.CategoryAttribute.id)
+            .where(m.CategoryAttribute.category_id.in_(category_ids))
+            .order_by(m.CategoryAttribute.category_id, m.CategoryAttribute.position, m.CategoryAttribute.id)
         )
         with self._session() as s:
             rows = s.execute(stmt).all()
-            attribute_ids = [attribute.id for _, attribute in rows]
+            attribute_ids = list({attribute.id for _, attribute in rows})
             options = s.scalars(
                 sa.select(m.ProductAttributeOption)
                 .where(m.ProductAttributeOption.attribute_id.in_(attribute_ids), m.ProductAttributeOption.is_active.is_(True))
@@ -38,17 +51,19 @@ class CategoryRepository:
         options_by_attribute: dict[int, list[m.ProductAttributeOption]] = {}
         for option in options:
             options_by_attribute.setdefault(option.attribute_id, []).append(option)
-        return [
-            m.CategoryField(
-                key=attribute.key,
-                label=attribute.label,
-                value_type=attribute.value_type,
-                unit=attribute.unit,
-                help=attribute.help,
-                required=mapping.is_required,
-                show_in_subtitle=mapping.show_in_subtitle,
-                section=mapping.section,
-                options=options_by_attribute.get(attribute.id, []),
+        fields: dict[str, list[m.CategoryField]] = {}
+        for mapping, attribute in rows:
+            fields.setdefault(str(mapping.category_id), []).append(
+                m.CategoryField(
+                    key=attribute.key,
+                    label=attribute.label,
+                    value_type=attribute.value_type,
+                    unit=attribute.unit,
+                    help=attribute.help,
+                    required=mapping.is_required,
+                    show_in_subtitle=mapping.show_in_subtitle,
+                    section=mapping.section,
+                    options=options_by_attribute.get(attribute.id, []),
+                )
             )
-            for mapping, attribute in rows
-        ]
+        return fields

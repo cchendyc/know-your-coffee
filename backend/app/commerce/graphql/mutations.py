@@ -4,7 +4,7 @@ from ariadne import MutationType
 from graphql import GraphQLError
 
 from ...core.errors import DomainError
-from ...core.graphql import is_admin, require_shop_owner, require_user
+from ...core.graphql import is_admin, require_shop_owner, require_user, threaded
 from ...models import MAX_PHOTO_BYTES, MAX_PRODUCT_PHOTOS
 from ...models.enums import Carrier, Fulfillment, OrderStatus
 
@@ -47,6 +47,7 @@ def check_product_input(input: dict) -> None:
 
 
 @mutation.field("createProduct")
+@threaded
 def resolve_create_product(_, info, shopId, input):
     require_shop_owner(info, shopId)
     if not input.get("name") or input.get("price") is None:
@@ -59,6 +60,7 @@ def resolve_create_product(_, info, shopId, input):
 
 
 @mutation.field("updateProduct")
+@threaded
 def resolve_update_product(_, info, id, input):
     repos = info.context["repos"]
     product = repos.products.get(id)
@@ -70,6 +72,7 @@ def resolve_update_product(_, info, id, input):
 
 
 @mutation.field("deleteProduct")
+@threaded
 def resolve_delete_product(_, info, id):
     repos = info.context["repos"]
     product = repos.products.get(id)
@@ -80,6 +83,7 @@ def resolve_delete_product(_, info, id):
 
 
 @mutation.field("setProductPhotos")
+@threaded
 def resolve_set_product_photos(_, info, productId, photos):
     repos = info.context["repos"]
     product = repos.products.get(productId)
@@ -102,6 +106,7 @@ def resolve_set_product_photos(_, info, productId, photos):
 
 
 @mutation.field("copyProducts")
+@threaded
 def resolve_copy_products(_, info, fromShopId, toShopId, productIds=None):
     require_shop_owner(info, fromShopId)
     require_shop_owner(info, toShopId)
@@ -138,6 +143,7 @@ def resolve_copy_products(_, info, fromShopId, toShopId, productIds=None):
 
 
 @mutation.field("updateDeliverySettings")
+@threaded
 def resolve_update_delivery_settings(_, info, shopId, input):
     require_shop_owner(info, shopId)
     repos = info.context["repos"]
@@ -157,6 +163,7 @@ def resolve_update_delivery_settings(_, info, shopId, input):
 
 
 @mutation.field("placeOrder")
+@threaded
 def resolve_place_order(_, info, shopId, items, fulfillment=Fulfillment.SHIP):
     user = require_user(info)
     context = info.context
@@ -170,6 +177,7 @@ def resolve_place_order(_, info, shopId, items, fulfillment=Fulfillment.SHIP):
 
 
 @mutation.field("cancelOrder")
+@threaded
 def resolve_cancel_order(_, info, id):
     user = require_user(info)
     repos = info.context["repos"]
@@ -202,16 +210,19 @@ def advance_pickup(info, order_id, from_status, to_status):
 
 
 @mutation.field("markReadyForPickup")
+@threaded
 def resolve_mark_ready_for_pickup(_, info, id):
     return advance_pickup(info, id, OrderStatus.PLACED, OrderStatus.READY_FOR_PICKUP)
 
 
 @mutation.field("markPickedUp")
+@threaded
 def resolve_mark_picked_up(_, info, id):
     return advance_pickup(info, id, OrderStatus.READY_FOR_PICKUP, OrderStatus.PICKED_UP)
 
 
 @mutation.field("updateShipment")
+@threaded
 def resolve_update_shipment(_, info, id, carrier=None, tracking=None, status=None):
     repos = info.context["repos"]
     shipment = repos.shipments.get(id)

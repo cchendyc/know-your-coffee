@@ -5,7 +5,8 @@ import SwiftUI
 struct ShopAboutPanel: View {
     let shop: CoffeeShop
     let listings: [ShopListing]
-    let onUpdate: () -> Void
+    /// Opens the report launcher; a fact lands on that sheet.
+    let onUpdate: (ReportFact?) -> Void
     let onShop: () -> Void
 
     @State private var showAllDrinks = false
@@ -19,7 +20,7 @@ struct ShopAboutPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            UpdatePromptRow(action: onUpdate)
+            UpdatePromptRow { onUpdate(nil) }
             gearCard
             beansCard
             spaceCard
@@ -39,7 +40,7 @@ struct ShopAboutPanel: View {
     private var gearCard: some View {
         AboutCard(eyebrow: "Gear") {
             if shop.knownMachines.isEmpty {
-                UnknownRow(label: "Espresso machine", onKnow: onUpdate)
+                UnknownRow(label: "Espresso machine") { onUpdate(.machine) }
             } else {
                 ForEach(Array(shop.knownMachines.enumerated()), id: \.offset) { _, machine in
                     InfoRow(label: machine.display) { Pill(text: "Espresso") }
@@ -71,11 +72,13 @@ struct ShopAboutPanel: View {
                 InfoRow(label: "Origins") {
                     ForEach(shop.beanOrigins, id: \.self) { Pill(text: $0) }
                 }
+            } else if beanSource == nil {
+                UnknownRow(label: "Who roasts the beans") { onUpdate(.roaster) }
             } else {
-                UnknownRow(label: beanSource == nil ? "Who roasts the beans" : "Coffees on the bar", onKnow: onUpdate)
+                UnknownRow(label: "Coffees on the bar") { onUpdate(.coffee) }
             }
             if shop.milkBrands.isEmpty {
-                UnknownRow(label: "Milk", onKnow: onUpdate)
+                UnknownRow(label: "Milk") { onUpdate(.milk) }
             } else {
                 InfoRow(label: "Milk") {
                     ForEach(shop.milkBrands, id: \.self) { Pill(text: $0) }
@@ -117,7 +120,7 @@ struct ShopAboutPanel: View {
         if let value {
             InfoRow(label: label) { Pill(text: value ? "Yes" : "No") }
         } else {
-            UnknownRow(label: label, onKnow: onUpdate)
+            UnknownRow(label: label) { onUpdate(.space) }
         }
     }
 
@@ -147,8 +150,11 @@ struct ShopAboutPanel: View {
 
     // MARK: Records
 
-    private var visibleReports: [Report] {
-        showAllRecords ? reports : Array(reports.prefix(Self.recordPreview))
+    /// One launcher session saves several one-field reports; show them as one record.
+    private var recordGroups: [RecordGroup] { RecordGroup.group(reports) }
+
+    private var visibleGroups: [RecordGroup] {
+        showAllRecords ? recordGroups : Array(recordGroups.prefix(Self.recordPreview))
     }
 
     private var recordsMeta: String? {
@@ -168,13 +174,13 @@ struct ShopAboutPanel: View {
                         .foregroundStyle(Color.inkMuted)
                         .padding(.vertical, 14)
                 }
-                ForEach(Array(visibleReports.enumerated()), id: \.element.id) { index, report in
+                ForEach(Array(visibleGroups.enumerated()), id: \.element.id) { index, group in
                     if index > 0 { Divider().overlay(Color.cream200) }
-                    recordRow(report)
+                    recordRow(group)
                 }
-                if reports.count > Self.recordPreview {
+                if recordGroups.count > Self.recordPreview {
                     Divider().overlay(Color.cream200)
-                    ShopLinkButton(label: showAllRecords ? "Show fewer" : "See all \(ShopPageFormat.plural(reports.count, "record"))") {
+                    ShopLinkButton(label: showAllRecords ? "Show fewer" : "See all \(ShopPageFormat.plural(recordGroups.count, "record"))") {
                         withAnimation(.easeOut(duration: 0.2)) { showAllRecords.toggle() }
                     }
                     .frame(maxWidth: .infinity)
@@ -186,24 +192,66 @@ struct ShopAboutPanel: View {
         }
     }
 
-    private func recordRow(_ report: Report) -> some View {
+    private func recordRow(_ group: RecordGroup) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            ReporterAvatar(reporter: report.reporter)
+            ReporterAvatar(reporter: group.reporter)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    Text(report.reporter?.name ?? "Anonymous").font(.kycMetaBold).foregroundStyle(Color.ink)
-                    Text("\(RelativeDate.format(report.createdAt)) · via \(report.source.lowercased())")
+                    Text(group.reporter?.name ?? "Anonymous").font(.kycMetaBold).foregroundStyle(Color.ink)
+                    Text("\(RelativeDate.format(group.createdAt)) · via \(group.source)")
                         .font(.kycMeta)
                         .foregroundStyle(Color.inkMuted)
                 }
-                let summary = report.summary
-                Text(summary.isEmpty ? "Confirmed the current record." : summary)
+                Text(group.summary)
                     .font(.kycSecondary)
                     .lineSpacing(3)
                     .foregroundStyle(Color.ink)
             }
         }
         .padding(.vertical, 12)
+    }
+}
+
+/// Consecutive reports by one reporter within ten minutes, shown as one row.
+/// Display only; the server keeps each report.
+private struct RecordGroup: Identifiable {
+    let id: String
+    let reporter: Reporter?
+    let createdAt: String
+    let source: String
+    let summary: String
+
+    private static let window: TimeInterval = 10 * 60
+
+    static func group(_ reports: [Report]) -> [RecordGroup] {
+        var runs: [[Report]] = []
+        for report in reports {
+            if let last = runs.last?.last, joins(report, last) {
+                runs[runs.count - 1].append(report)
+            } else {
+                runs.append([report])
+            }
+        }
+        return runs.map { run in
+            let summaries = run.map(\.summary).filter { !$0.isEmpty }
+            let sources = Set(run.map { $0.source.lowercased() })
+            return RecordGroup(
+                id: run[0].id,
+                reporter: run[0].reporter,
+                createdAt: run[0].createdAt,
+                source: sources.count == 1 ? sources.first! : "photo and text",
+                summary: summaries.isEmpty ? "Confirmed the current record." : summaries.joined(separator: " · ")
+            )
+        }
+    }
+
+    /// Reports arrive newest first, so `previous` is the later one.
+    private static func joins(_ report: Report, _ previous: Report) -> Bool {
+        guard let reporter = report.reporter, reporter == previous.reporter,
+              let a = RelativeDate.date(report.createdAt),
+              let b = RelativeDate.date(previous.createdAt)
+        else { return false }
+        return abs(b.timeIntervalSince(a)) <= window
     }
 }
 

@@ -92,6 +92,8 @@ struct RootView: View {
     }
 
     // Figma tab bar: hairline divider, tiny semibold labels, ink active state.
+    // Same fill as the page canvas so the bar reads as part of the screen,
+    // not a separate card.
     private var tabBar: some View {
         HStack(spacing: 0) {
             ForEach(tabs, id: \.self) { item in
@@ -110,7 +112,7 @@ struct RootView: View {
                                         .padding(.horizontal, 5)
                                         .frame(minWidth: 16, minHeight: 16)
                                         .background(Color(red: 0.89, green: 0.17, blue: 0.17), in: Capsule()) // Figma #e32b2b
-                                        .overlay(Capsule().strokeBorder(Color.surface, lineWidth: 1.5))
+                                        .overlay(Capsule().strokeBorder(Color.cream50, lineWidth: 1.5))
                                         .offset(x: 10, y: -6)
                                 }
                             }
@@ -126,7 +128,7 @@ struct RootView: View {
         }
         .padding(.top, 5)
         .background(
-            Color.surface
+            Color.cream50
                 .overlay(alignment: .top) { Color.cream200.frame(height: 0.5) }
                 .ignoresSafeArea(edges: .bottom)
         )

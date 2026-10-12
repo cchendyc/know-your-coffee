@@ -139,6 +139,86 @@ struct MachineGuess: Codable {
     let notes: String?
 }
 
+/// A pickable value and its label; value is what the API accepts.
+struct ReportOption: Codable, Hashable, Identifiable {
+    let value: String
+    let label: String
+    var id: String { value }
+}
+
+/// Every list the report sheets offer. Served by Query.reportOptions; nothing is hardcoded here.
+struct ReportOptions: Codable, Hashable {
+    let machineBrands: [ReportOption]
+    let machines: [String]
+    let grinders: [String]
+    let beanSources: [ReportOption]
+    let roasters: [String]
+    let coffeeTypes: [ReportOption]
+    let processes: [ReportOption]
+    let roastLevels: [ReportOption]
+    let fermentations: [String]
+    let origins: [String]
+    let drinks: [String]
+    let milkBrands: [String]
+    let amenities: [ReportOption]
+    let reportReasons: [ReportOption]
+
+    func label(in list: KeyPath<ReportOptions, [ReportOption]>, for value: String?) -> String? {
+        guard let value else { return nil }
+        return self[keyPath: list].first { $0.value == value }?.label
+    }
+
+    /// Splits typed machine text on the longest brand label it starts with.
+    /// "La Marzocco Linea PB" → (LA_MARZOCCO, "Linea PB"); no match → (OTHER, text).
+    func parseMachine(_ text: String) -> (brand: String, model: String?) {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        let match = machineBrands
+            .filter { trimmed.range(of: $0.label, options: [.caseInsensitive, .anchored]) != nil }
+            .max { $0.label.count < $1.label.count }
+        guard let match else { return ("OTHER", trimmed) }
+        let model = trimmed.dropFirst(match.label.count).trimmingCharacters(in: .whitespaces)
+        return (match.value, model.isEmpty ? nil : model)
+    }
+
+    func machineDisplay(brand: String, model: String?) -> String {
+        let label = brand == "OTHER" ? nil : self.label(in: \.machineBrands, for: brand)
+        return [label, model].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " ")
+    }
+}
+
+/// One tile on the report launcher; also the deep-link target from "Unknown — know it?".
+enum ReportFact: String, CaseIterable, Identifiable, Hashable {
+    case machine, grinder, roaster, coffee, menu, milk, space, other
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .machine: "Machine"
+        case .grinder: "Grinder"
+        case .roaster: "Roaster"
+        case .coffee: "Coffee"
+        case .menu: "Menu & prices"
+        case .milk: "Milk"
+        case .space: "Space"
+        case .other: "Something else"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .machine: "dial.medium.fill"
+        case .grinder: "gearshape.2.fill"
+        case .roaster: "flame.fill"
+        case .coffee: "leaf.fill"
+        case .menu: "cup.and.saucer.fill"
+        case .milk: "drop.fill"
+        case .space: "sofa.fill"
+        case .other: "ellipsis.circle.fill"
+        }
+    }
+}
+
 struct ShopReview: Codable, Identifiable, Hashable {
     let id: String
     let rating: Int
@@ -789,7 +869,11 @@ enum RelativeDate {
     private static let isoPlain = ISO8601DateFormatter()
 
     static func format(_ string: String) -> String {
-        guard let date = iso.date(from: string) ?? isoPlain.date(from: string) else { return "" }
+        guard let date = date(string) else { return "" }
         return date.formatted(.relative(presentation: .named))
+    }
+
+    static func date(_ string: String) -> Date? {
+        iso.date(from: string) ?? isoPlain.date(from: string)
     }
 }

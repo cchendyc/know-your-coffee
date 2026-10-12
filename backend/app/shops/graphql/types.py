@@ -1,10 +1,15 @@
 """Field resolvers for shop-domain GraphQL types.
 
 snake_case_fallback_resolvers covers plain column fields; only computed
-fields and stored-jsonb camelCase keys get explicit resolvers here."""
+fields and stored-jsonb camelCase keys get explicit resolvers here.
+
+Fields that look up another row per shop go through info.context["loaders"]
+so a page of shops costs one query per field, not one per shop. Fields
+only ever read for a single shop (the detail page) run in a worker thread."""
 
 from ariadne import ObjectType
 
+from ...core.graphql import threaded
 from ..text import norm_coffees
 
 coffee_shop = ObjectType("CoffeeShop")
@@ -29,7 +34,7 @@ def resolve_owner_id(shop, _info):
 def resolve_owner(shop, info):
     if not shop.owner_user_id:
         return None
-    return info.context["repos"].users.get(str(shop.owner_user_id))
+    return info.context["loaders"].user.load(str(shop.owner_user_id))
 
 
 @coffee_shop.field("ownedByMe")
@@ -56,37 +61,42 @@ def resolve_shop_coffees(shop, _info):
 
 @coffee_shop.field("chain")
 def resolve_shop_chain(shop, info):
-    return info.context["repos"].chains.get(str(shop.chain_id)) if shop.chain_id else None
+    return info.context["loaders"].chain.load(str(shop.chain_id)) if shop.chain_id else None
 
 
 @coffee_shop.field("reports")
+@threaded
 def resolve_shop_reports(shop, info, limit=None):
     return info.context["repos"].reports.list(str(shop.id), limit)
 
 
 @coffee_shop.field("reportCount")
 def resolve_shop_report_count(shop, info):
-    return info.context["repos"].reports.count(str(shop.id))
+    return info.context["loaders"].shop_report_count.load(str(shop.id))
 
 
 @coffee_shop.field("reviews")
+@threaded
 def resolve_shop_reviews(shop, info, limit=None):
     return info.context["repos"].reviews.list(str(shop.id), limit)
 
 
+# reviewCount and ratingAverage share one loader key, so asking for both
+# still costs a single grouped query.
 @coffee_shop.field("reviewCount")
-def resolve_shop_review_count(shop, info):
-    count, _average = info.context["repos"].reviews.summary(str(shop.id))
+async def resolve_shop_review_count(shop, info):
+    count, _average = await info.context["loaders"].shop_review_summary.load(str(shop.id))
     return count
 
 
 @coffee_shop.field("ratingAverage")
-def resolve_shop_rating_average(shop, info):
-    _count, average = info.context["repos"].reviews.summary(str(shop.id))
+async def resolve_shop_rating_average(shop, info):
+    _count, average = await info.context["loaders"].shop_review_summary.load(str(shop.id))
     return average
 
 
 @coffee_shop.field("myReview")
+@threaded
 def resolve_shop_my_review(shop, info):
     user_id = viewer_id(info)
     if not user_id:
@@ -95,13 +105,14 @@ def resolve_shop_my_review(shop, info):
 
 
 @coffee_shop.field("photos")
+@threaded
 def resolve_shop_photos(shop, info, limit=None):
     return info.context["repos"].photos.list(str(shop.id), limit)
 
 
 @coffee_shop.field("photoCount")
 def resolve_shop_photo_count(shop, info):
-    return info.context["repos"].photos.count(str(shop.id))
+    return info.context["loaders"].shop_photo_count.load(str(shop.id))
 
 
 # Coffee parents are jsonb documents with stored camelCase keys.
@@ -116,6 +127,7 @@ def resolve_tasting_notes(doc, _info):
 
 
 @chain.field("shops")
+@threaded
 def resolve_chain_shops(chain_row, info):
     return info.context["repos"].chains.list_shops(str(chain_row.id), viewer_id(info))
 

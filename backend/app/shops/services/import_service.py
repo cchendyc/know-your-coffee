@@ -1,5 +1,7 @@
 """Bulk shop import: dedupe against existing shops, then relink chains."""
 
+from starlette.concurrency import run_in_threadpool
+
 from ... import models as m
 from ...services.google import fetch_shops_from_google, new_shop_from_place
 from ...services.yelp import fetch_shops_from_yelp
@@ -21,12 +23,14 @@ class ShopImportService:
         # Relink may have moved chain assignments after the rows detached; re-fetch.
         return [shop for shop_id in ids if (shop := self._shops.get(shop_id))]
 
+    # store() is a burst of blocking queries (one per imported shop plus the
+    # chain relink), so it runs off the event loop.
     async def from_place(self, place_id: str) -> m.Shop | None:
         new = await new_shop_from_place(place_id)
-        return self.store([new])[0] if new else None
+        return (await run_in_threadpool(self.store, [new]))[0] if new else None
 
     async def from_yelp(self, location: str) -> list[m.Shop]:
-        return self.store(await fetch_shops_from_yelp(location))
+        return await run_in_threadpool(self.store, await fetch_shops_from_yelp(location))
 
     async def from_google(self, location: str) -> list[m.Shop]:
-        return self.store(await fetch_shops_from_google(location))
+        return await run_in_threadpool(self.store, await fetch_shops_from_google(location))

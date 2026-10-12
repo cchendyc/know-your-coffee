@@ -2,7 +2,7 @@
 
 from ariadne import QueryType
 
-from ...core.graphql import page_bounds, require_shop_owner
+from ...core.graphql import page_bounds, require_shop_owner, threaded
 from ...models.enums import ListingStatus
 from .seller import owned_shop_ids
 
@@ -10,11 +10,13 @@ query = QueryType()
 
 
 @query.field("categories")
+@threaded
 def resolve_categories(_, info):
     return info.context["repos"].categories.list()
 
 
 @query.field("product")
+@threaded
 def resolve_product(_, info, id):
     repos = info.context["repos"]
     product = repos.products.get(id)
@@ -29,6 +31,7 @@ def resolve_product(_, info, id):
 
 
 @query.field("myProducts")
+@threaded
 def resolve_my_products(_, info, shopId, limit, offset, status=None):
     require_shop_owner(info, shopId)
     rows, total = info.context["repos"].products.page(shopId, status, *page_bounds(limit, offset))
@@ -36,6 +39,7 @@ def resolve_my_products(_, info, shopId, limit, offset, status=None):
 
 
 @query.field("myProductCounts")
+@threaded
 def resolve_my_product_counts(_, info, shopId):
     require_shop_owner(info, shopId)
     counts = info.context["repos"].products.status_counts(shopId)
@@ -48,6 +52,7 @@ def resolve_my_product_counts(_, info, shopId):
 
 
 @query.field("myOrders")
+@threaded
 def resolve_my_orders(_, info, limit, offset, shopId=None, status=None):
     shop_ids = owned_shop_ids(info, shopId)
     rows, total = info.context["repos"].orders.page_for_shops(shop_ids, status, *page_bounds(limit, offset))
@@ -55,6 +60,7 @@ def resolve_my_orders(_, info, limit, offset, shopId=None, status=None):
 
 
 @query.field("myShipments")
+@threaded
 def resolve_my_shipments(_, info, limit, offset, shopId=None, status=None):
     shop_ids = owned_shop_ids(info, shopId)
     rows, total = info.context["repos"].shipments.page_for_shops(shop_ids, status, *page_bounds(limit, offset))
@@ -62,6 +68,7 @@ def resolve_my_shipments(_, info, limit, offset, shopId=None, status=None):
 
 
 @query.field("mySeller")
+@threaded
 def resolve_my_seller(_, info):
     user = info.context["user"]
     shops = info.context["repos"].shops.list_owned(user["id"]) if user else []
@@ -69,6 +76,7 @@ def resolve_my_seller(_, info):
 
 
 @query.field("myPurchases")
+@threaded
 def resolve_my_purchases(_, info):
     user = info.context["user"]
     return info.context["repos"].orders.list_purchases(user["id"]) if user else []

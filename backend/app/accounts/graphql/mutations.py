@@ -5,10 +5,11 @@ import re
 
 from ariadne import MutationType
 from graphql import GraphQLError
+from starlette.concurrency import run_in_threadpool
 
 from ... import settings
 from ...core.errors import DomainError
-from ...core.graphql import require_user
+from ...core.graphql import require_user, threaded
 from ...services import email as email_service
 from ...services import sms
 
@@ -61,7 +62,7 @@ async def resolve_sign_in_with_apple(_, info, identityToken, name=None):
 async def resolve_start_phone_sign_in(_, info, phone):
     normalized = _normalize_phone(phone)
     try:
-        code = info.context["services"].auth.issue_code(normalized)
+        code = await run_in_threadpool(info.context["services"].auth.issue_code, normalized)
     except DomainError as e:
         raise GraphQLError(str(e))
     if sms.configured():
@@ -79,6 +80,7 @@ async def resolve_start_phone_sign_in(_, info, phone):
 
 
 @mutation.field("signInWithPhone")
+@threaded
 def resolve_sign_in_with_phone(_, info, phone, code):
     try:
         return info.context["services"].auth.sign_in_with_phone(_normalize_phone(phone), code)
@@ -90,7 +92,7 @@ def resolve_sign_in_with_phone(_, info, phone, code):
 async def resolve_start_email_sign_in(_, info, email):
     normalized = _normalize_email(email)
     try:
-        code = info.context["services"].auth.issue_code(normalized)
+        code = await run_in_threadpool(info.context["services"].auth.issue_code, normalized)
     except DomainError as e:
         raise GraphQLError(str(e))
     if email_service.configured():
@@ -112,6 +114,7 @@ async def resolve_start_email_sign_in(_, info, email):
 
 
 @mutation.field("signInWithEmail")
+@threaded
 def resolve_sign_in_with_email(_, info, email, code):
     try:
         return info.context["services"].auth.sign_in_with_email(_normalize_email(email), code)
@@ -120,6 +123,7 @@ def resolve_sign_in_with_email(_, info, email, code):
 
 
 @mutation.field("deleteAccount")
+@threaded
 def resolve_delete_account(_, info):
     user = require_user(info)
     if not info.context["repos"].users.delete(user["id"]):

@@ -37,12 +37,18 @@ class ProductService:
         return cleaned
 
     def subtitle(self, product: m.Product) -> str | None:
+        """render_subtitle with the category looked up here; GraphQL batches
+        the lookup through loaders and calls render_subtitle directly."""
+        category = self._categories.get(str(product.category_id))
+        return self.render_subtitle(product, category, self._categories.fields(str(product.category_id)))
+
+    @staticmethod
+    def render_subtitle(product: m.Product, category: m.Category | None, category_fields: list[m.CategoryField]) -> str | None:
         """Fill the category's template from the listing's attributes.
         Segments (split on " · ") whose every token is empty are dropped."""
-        category = self._categories.get(str(product.category_id))
         if not category or not category.subtitle_template:
             return None
-        fields = {f.key: f for f in self._categories.fields(str(product.category_id))}
+        fields = {f.key: f for f in category_fields}
         segments = []
         for segment in category.subtitle_template.split(SEGMENT_SEPARATOR):
             filled = [display_value(fields[key], product.attributes.get(key)) for key in TOKEN.findall(segment) if key in fields]

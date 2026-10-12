@@ -3,11 +3,14 @@
 from ariadne import QueryType
 from graphql import GraphQLError
 
+from ...core.graphql import threaded
+
 query = QueryType()
 
 
 @query.field("me")
 @query.field("userNode")
+@threaded
 def resolve_me(_, info):
     user = info.context["user"]
     if not user:

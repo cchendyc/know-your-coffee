@@ -4,7 +4,7 @@ from datetime import UTC, date, datetime, timedelta
 
 from ... import models as m
 from ...core.errors import OutOfStockError
-from ...core.memory import MemoryStore
+from ...core.memory import MemoryStore, by_key
 from ...models.enums import (
     CANCELABLE_STATUSES,
     SHIPMENT_TO_ORDER_STATUS,
@@ -81,8 +81,14 @@ class MemoryCategoryRepository:
     def get(self, category_id: str) -> m.Category | None:
         return self._store.categories.get(str(category_id))
 
+    def get_many(self, category_ids: list[str]) -> dict[str, m.Category]:
+        return by_key(category_ids, self.get)
+
     def fields(self, category_id: str) -> list[m.CategoryField]:
         return self._store.category_fields.get(str(category_id), [])
+
+    def fields_for_many(self, category_ids: list[str]) -> dict[str, list[m.CategoryField]]:
+        return {category_id: self.fields(category_id) for category_id in category_ids}
 
     def _seed(self) -> None:
         store = self._store
@@ -126,6 +132,9 @@ class MemoryProductRepository:
             if str(p.shop_id) == shop_id and (include_inactive or p.active) and (not status or p.status == status)
         ]
         return sorted(products, key=lambda p: p.created_at)
+
+    def list_for_shops(self, shop_ids: list[str]) -> dict[str, list[m.Product]]:
+        return {shop_id: self.list(shop_id) for shop_id in shop_ids}
 
     def page(
         self, shop_id: str, status: m.ListingStatus | None, limit: int, offset: int
@@ -184,6 +193,9 @@ class MemoryProductPhotoRepository:
     def cover(self, product_id: str) -> m.ProductPhoto | None:
         photos = self.list(product_id)
         return photos[0] if photos else None
+
+    def covers_for_products(self, product_ids: list[str]) -> dict[str, m.ProductPhoto]:
+        return by_key(product_ids, self.cover)
 
     def replace(self, product_id: str, items: list[dict]) -> list[m.ProductPhoto]:
         existing = {str(p.id): p for p in self._store.product_photos.get(str(product_id), [])}
@@ -295,6 +307,9 @@ class MemoryOrderRepository:
     def get(self, order_id: str) -> m.Order | None:
         return self._with_items(self._store.orders.get(str(order_id)))
 
+    def get_many(self, order_ids: list[str]) -> dict[str, m.Order]:
+        return by_key(order_ids, self.get)
+
     def events(self, order_id: str) -> list[m.OrderEvent]:
         return list(self._store.order_events.get(str(order_id), []))
 
@@ -383,6 +398,9 @@ class MemoryShipmentRepository:
 
     def for_order(self, order_id: str) -> m.Shipment | None:
         return next((s for s in self._store.shipments.values() if str(s.order_id) == str(order_id)), None)
+
+    def for_orders(self, order_ids: list[str]) -> dict[str, m.Shipment]:
+        return by_key(order_ids, self.for_order)
 
     def page_for_shops(
         self, shop_ids: list[str], status: ShipmentStatus | None, limit: int, offset: int

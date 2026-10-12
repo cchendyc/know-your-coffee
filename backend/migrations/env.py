@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 from alembic import context
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 
 # Migrations are handwritten SQL, but exposing the model metadata lets
 # `alembic revision --autogenerate` draft them and flag drift.
@@ -39,6 +39,10 @@ def run_migrations_online() -> None:
     with engine.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
+            # The app role defaults to a 15s statement_timeout (0042); a
+            # backfill may legitimately run longer. LOCAL keeps it to this
+            # transaction, so the opt-out never leaks through the pooler.
+            connection.execute(text("SET LOCAL statement_timeout = 0"))
             context.run_migrations()
 
 

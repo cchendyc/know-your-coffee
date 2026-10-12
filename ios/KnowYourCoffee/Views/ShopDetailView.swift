@@ -11,7 +11,7 @@ struct ShopDetailView: View {
 
     @State private var full: CoffeeShop?
     @State private var loadError: String?
-    @State private var showReportForm = false
+    @State private var reportLaunch: ReportLaunch?
     @State private var showShopReport = false
     @State private var showClaim = false
     @State private var showSignIn = false
@@ -36,7 +36,8 @@ struct ShopDetailView: View {
                     shareURL: shareURL,
                     onToggleSaved: { gated { toggle(saved: !shop.savedByMe) } },
                     onToggleBeen: { gated { toggle(been: !shop.beenByMe) } },
-                    onUpdate: { gated { showReportForm = true } },
+                    // Not gated: the launcher is readable signed out; it asks at Save.
+                    onUpdate: { fact in reportLaunch = ReportLaunch(fact: fact) },
                     onReport: { gated { showShopReport = true } },
                     onReload: { Task { await loadFull() } },
                     onClaim: shop.ownerId == nil ? { gated { showClaim = true } } : nil,
@@ -49,11 +50,8 @@ struct ShopDetailView: View {
             }
         }
         .task(id: summary.id) { await loadFull() }
-        .sheet(isPresented: $showReportForm) {
-            ReportFormView(shop: shop) {
-                showReportForm = false
-                Task { await loadFull() }
-            }
+        .sheet(item: $reportLaunch, onDismiss: { Task { await loadFull() } }) { launch in
+            ReportLauncherView(shop: shop, initialFact: launch.fact)
         }
         .sheet(isPresented: $showShopReport) {
             ShopReportSheet(shopName: shop.name) { reason in
@@ -137,6 +135,12 @@ struct ShopDetailView: View {
             actionError = error.localizedDescription
         }
     }
+}
+
+/// Opens the report launcher, optionally with one sheet already pushed.
+private struct ReportLaunch: Identifiable {
+    let id = UUID()
+    let fact: ReportFact?
 }
 
 // Pushed from the chain list: fetches its own full shop, same page layout.

@@ -95,6 +95,13 @@ class OrderRepository:
             order = s.scalars(order_stmt().where(m.Order.id == order_id)).first()
             return self._attach_items(s, [order])[0] if order else None
 
+    def get_many(self, order_ids: list[str]) -> dict[str, m.Order]:
+        if not order_ids:
+            return {}
+        with self._session() as s:
+            orders = list(s.scalars(order_stmt().where(m.Order.id.in_(order_ids))))
+            return {str(order.id): order for order in self._attach_items(s, orders)}
+
     def events(self, order_id: str) -> list[m.OrderEvent]:
         stmt = sa.select(m.OrderEvent).where(m.OrderEvent.order_id == order_id).order_by(m.OrderEvent.created_at, m.OrderEvent.id)
         with self._session() as s:

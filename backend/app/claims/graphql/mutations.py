@@ -3,12 +3,13 @@
 from ariadne import MutationType
 from graphql import GraphQLError
 
-from ...core.graphql import require_admin, require_user
+from ...core.graphql import require_admin, require_user, threaded
 
 mutation = MutationType()
 
 
 @mutation.field("claimShop")
+@threaded
 def resolve_claim_shop(_, info, shopId, note=None, application=None):
     user = require_user(info)
     repos = info.context["repos"]
@@ -33,6 +34,7 @@ def resolve_claim_shop(_, info, shopId, note=None, application=None):
 
 
 @mutation.field("resolveClaim")
+@threaded
 def resolve_resolve_claim(_, info, claimId, approve):
     require_admin(info)
     claim = info.context["repos"].claims.resolve(claimId, approve)

@@ -4,6 +4,7 @@ from ariadne.asgi import GraphQL
 from starlette.middleware.cors import CORSMiddleware
 
 from .auth import verify_session_token
+from .core.loaders import Loaders
 from .core.repositories import create_repositories
 from .core.services import create_services
 from .schema import create_schema
@@ -21,6 +22,7 @@ def get_context(request, _data):
         "repos": repos,
         "services": services,
         "user": user,
+        "loaders": Loaders(repos, user["id"] if user else None),
         # A token that fails verification (expired, or signed by another
         # secret) must be surfaced, or clients keep a cached login forever.
         "stale_token": bool(token) and user is None,

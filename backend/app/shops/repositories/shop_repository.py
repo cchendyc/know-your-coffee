@@ -80,6 +80,13 @@ class ShopRepository:
             row = s.execute(shops_stmt(viewer_id).where(m.Shop.id == shop_id)).first()
             return shop_from_row(row) if row else None
 
+    def get_many(self, shop_ids: list[str], viewer_id: str | None = None) -> dict[str, m.Shop]:
+        if not shop_ids:
+            return {}
+        with self._session() as s:
+            rows = s.execute(shops_stmt(viewer_id).where(m.Shop.id.in_(shop_ids))).all()
+            return {str(row[0].id): shop_from_row(row) for row in rows}
+
     def list_owned(self, owner_id: str) -> list[m.Shop]:
         with self._session() as s:
             rows = s.execute(
@@ -90,6 +97,20 @@ class ShopRepository:
     def cities(self) -> list[str]:
         with self._session() as s:
             return list(s.scalars(sa.select(m.Shop.city).distinct().order_by(m.Shop.city.asc())))
+
+    def report_values(self) -> list:
+        """Per-shop columns the report option lists are built from."""
+        with self._session() as s:
+            return s.execute(
+                sa.select(
+                    m.Shop.roaster,
+                    m.Shop.grinders,
+                    m.Shop.milk_brands,
+                    m.Shop.drinks,
+                    m.Shop.machines,
+                    m.Shop.coffees,
+                )
+            ).all()
 
     def find_matching(self, name: str, lat: float, lng: float) -> m.Shop | None:
         with self._session() as s:

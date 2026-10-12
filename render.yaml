@@ -6,6 +6,11 @@ services:
     name: know-your-coffee-api
     runtime: python
     plan: free
+    # Same region as the Neon database (us-east-2). Render's default is
+    # Oregon, which put ~55ms of cross-country latency on every query.
+    # Render cannot move an existing service; recreate it from this
+    # blueprint (or in the dashboard) for the change to take effect.
+    region: ohio
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT

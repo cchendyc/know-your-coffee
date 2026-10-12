@@ -19,6 +19,13 @@ class UserRepository:
         with self._session() as s:
             return s.get(m.User, user_id)
 
+    def get_many(self, user_ids: list[str]) -> dict[str, m.User]:
+        if not user_ids:
+            return {}
+        with self._session() as s:
+            rows = s.scalars(sa.select(m.User).where(m.User.id.in_(user_ids))).all()
+            return {str(row.id): row for row in rows}
+
     def upsert_google_user(self, sub: str, email: str, name: str, picture: str | None, role: str | None) -> m.User:
         # Role only ever escalates here (ADMIN_EMAILS bootstrap); sign-in never demotes.
         email = email.lower()

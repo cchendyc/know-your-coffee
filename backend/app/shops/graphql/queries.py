@@ -1,10 +1,12 @@
 """Shop discovery queries."""
 
 from ariadne import QueryType
+from starlette.concurrency import run_in_threadpool
 
-from ...core.graphql import require_user
+from ...core.graphql import require_user, threaded
 from ...services.google import place_preview, search_places
 from ...services.nlsearch import parse_search
+from ..options import build_report_options
 from .types import viewer_id
 
 query = QueryType()
@@ -13,7 +15,7 @@ query = QueryType()
 @query.field("shops")
 async def resolve_shops(_, info, **filter):
     repos = info.context["repos"]
-    shops, total = repos.shops.list(filter, viewer_id(info))
+    shops, total = await run_in_threadpool(repos.shops.list, filter, viewer_id(info))
 
     # Lexical search first; only a query it can't satisfy costs an LLM call.
     search = (filter.get("search") or "").strip()
@@ -28,21 +30,30 @@ async def resolve_shops(_, info, **filter):
             }
             if not retry["search"]:
                 retry.pop("search")
-            shops, total = repos.shops.list(retry, viewer_id(info))
+            shops, total = await run_in_threadpool(repos.shops.list, retry, viewer_id(info))
     return {"shops": shops, "total": total}
 
 
 @query.field("shop")
+@threaded
 def resolve_shop(_, info, id):
     return info.context["repos"].shops.get(id, viewer_id(info))
 
 
 @query.field("cities")
+@threaded
 def resolve_cities(_, info):
     return info.context["repos"].shops.cities()
 
 
+@query.field("reportOptions")
+@threaded
+def resolve_report_options(_, info):
+    return build_report_options(info.context["repos"].shops.report_values())
+
+
 @query.field("myShops")
+@threaded
 def resolve_my_shops(_, info):
     user = info.context["user"]
     return info.context["repos"].shops.list_owned(user["id"]) if user else []
@@ -64,6 +75,6 @@ async def resolve_place_preview(_, info, placeId):
     if not preview:
         return None
     repos = info.context["repos"]
-    match = repos.shops.find_matching(preview["name"], preview["lat"], preview["lng"])
-    existing = repos.shops.get(str(match.id), viewer_id(info)) if match else None
+    match = await run_in_threadpool(repos.shops.find_matching, preview["name"], preview["lat"], preview["lng"])
+    existing = await run_in_threadpool(repos.shops.get, str(match.id), viewer_id(info)) if match else None
     return {**preview, "existing": existing}

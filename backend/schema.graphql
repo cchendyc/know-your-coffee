@@ -685,6 +685,38 @@ input ReportInput {
   source: ReportSource = TEXT
 }
 
+"A pickable value and its label. value is the token the API accepts."
+type ReportOption {
+  value: String!
+  label: String!
+}
+
+"""
+Every list the report sheets offer; clients hardcode none of them.
+String lists are suggestions: values already on shops rank first, then a
+curated seed. Any typed text is still accepted.
+"""
+type ReportOptions {
+  "MachineInput.brand values. Text matching no label is sent as OTHER with the text as model."
+  machineBrands: [ReportOption!]!
+  "Whole machines, brand first: \"La Marzocco Linea PB\"."
+  machines: [String!]!
+  grinders: [String!]!
+  beanSources: [ReportOption!]!
+  roasters: [String!]!
+  coffeeTypes: [ReportOption!]!
+  processes: [ReportOption!]!
+  roastLevels: [ReportOption!]!
+  fermentations: [String!]!
+  origins: [String!]!
+  drinks: [String!]!
+  milkBrands: [String!]!
+  "Tri-state Boolean ReportInput fields; value is the field name."
+  amenities: [ReportOption!]!
+  "NOTE saves ReportInput.note. Every other value is a ShopReportReason for reportShop."
+  reportReasons: [ReportOption!]!
+}
+
 type Query {
   shops(
     search: String
@@ -697,6 +729,8 @@ type Query {
   ): ShopPage!
   shop(id: ID!): CoffeeShop
   cities: [String!]!
+  "Option lists for the report sheets. Public."
+  reportOptions: ReportOptions!
   me: User
   "The signed-in viewer; alias of me, named for mobile clients."
   userNode: User

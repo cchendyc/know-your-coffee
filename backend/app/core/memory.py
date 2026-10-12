@@ -6,10 +6,26 @@ the same data. Stores hold app.models instances that are never flushed, so
 constructors must set every column explicitly (SQLAlchemy defaults only
 apply on flush)."""
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from itertools import count
 
 from .. import models as m
+
+
+def by_key(keys: Iterable[str], lookup: Callable[[str], object]) -> dict:
+    """Batch form of a single-key lookup, for the DataLoader methods.
+
+    The memory store is a dict, so a loop is as cheap as a real batch; the
+    Postgres repositories implement these with one IN (...) query instead.
+    Keys whose lookup returns None are left out, matching a missing row.
+    """
+    found = {}
+    for key in keys:
+        value = lookup(key)
+        if value is not None:
+            found[key] = value
+    return found
 
 
 @dataclass

@@ -4,6 +4,8 @@ Raises core.errors domain errors; resolvers translate them for clients."""
 
 import secrets
 
+from starlette.concurrency import run_in_threadpool
+
 from ... import models as m
 from ... import settings
 from ...auth import (
@@ -29,7 +31,8 @@ class AuthService:
     async def sign_in_with_google(self, id_token: str) -> dict:
         identity = await verify_google_id_token(id_token)
         email = identity["email"].lower()
-        user = self._users.upsert_google_user(
+        user = await run_in_threadpool(
+            self._users.upsert_google_user,
             sub=identity["sub"],
             email=email,
             name=identity["name"],
@@ -42,7 +45,9 @@ class AuthService:
         identity = await verify_apple_identity_token(identity_token)
         # Apple sends the name only on first authorization, and only client-side.
         email = identity["email"].lower() if identity.get("email") else None
-        user = self._users.upsert_apple_user(identity["sub"], email, name=(name or "").strip() or "Coffee fan")
+        user = await run_in_threadpool(
+            self._users.upsert_apple_user, identity["sub"], email, name=(name or "").strip() or "Coffee fan"
+        )
         return self.session_payload(user)
 
     def issue_code(self, identifier: str) -> str:

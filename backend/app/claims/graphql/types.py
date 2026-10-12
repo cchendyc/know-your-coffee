@@ -2,13 +2,14 @@
 
 from ariadne import ObjectType
 
+from ...core.graphql import threaded
+
 shop_claim = ObjectType("ShopClaim")
 
 
 @shop_claim.field("shop")
 def resolve_claim_shop(claim, info):
-    user = info.context["user"]
-    return info.context["repos"].shops.get(str(claim.shop_id), user["id"] if user else None)
+    return info.context["loaders"].shop.load(str(claim.shop_id))
 
 
 @shop_claim.field("applicant")
@@ -17,6 +18,7 @@ def resolve_applicant(claim, _info):
 
 
 @shop_claim.field("applicantOwnedShops")
+@threaded
 def resolve_applicant_owned_shops(claim, info):
     return info.context["repos"].shops.list_owned(str(claim.user_id)) if claim.user_id else []
 

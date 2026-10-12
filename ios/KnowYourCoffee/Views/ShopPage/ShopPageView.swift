@@ -6,8 +6,8 @@ struct ShopPageActions {
     var shareURL: URL?
     var onToggleSaved: () -> Void = {}
     var onToggleBeen: () -> Void = {}
-    /// Opens the report-an-update form.
-    var onUpdate: () -> Void = {}
+    /// Opens the report launcher; a fact pushes that sheet first ("Unknown — know it?").
+    var onUpdate: (ReportFact?) -> Void = { _ in }
     /// Flag the shop for breaking the rules. Not a community update.
     var onReport: () -> Void = {}
     /// Refetch the shop after a review is saved.

@@ -250,6 +250,23 @@ enum CoffeeAPI {
         _ = try await execute(query, variables: ["input": input], as: Payload.self)
     }
 
+    /// Every list the report sheets offer; the server owns them.
+    static func fetchReportOptions() async throws -> ReportOptions {
+        struct Payload: Decodable { let reportOptions: ReportOptions }
+        let query = """
+            query ReportOptions {
+              reportOptions {
+                machineBrands { value label } machines grinders
+                beanSources { value label } roasters
+                coffeeTypes { value label } processes { value label } roastLevels { value label }
+                fermentations origins drinks milkBrands
+                amenities { value label } reportReasons { value label }
+              }
+            }
+            """
+        return try await execute(query, as: Payload.self).reportOptions
+    }
+
     static func submitReport(_ input: [String: Any?]) async throws {
         struct Payload: Decodable {
             struct R: Decodable { let id: String }

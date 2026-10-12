@@ -1,9 +1,15 @@
 """Field resolvers for commerce GraphQL types, plus the marketplace fields
-commerce contributes to CoffeeShop."""
+commerce contributes to CoffeeShop.
+
+Lookups that fan out per list item (a shop's products, a product's cover,
+an order's shop) go through info.context["loaders"]; single-row fields
+run in a worker thread."""
+
+import asyncio
 
 from ariadne import ObjectType
 
-from ...core.graphql import is_admin
+from ...core.graphql import is_admin, threaded
 from .seller import workload
 
 category = ObjectType("Category")
@@ -16,17 +22,22 @@ coffee_shop = ObjectType("CoffeeShop")
 
 @category.field("fields")
 def resolve_category_fields(category_row, info):
-    return info.context["repos"].categories.fields(str(category_row.id))
+    return info.context["loaders"].category_fields.load(str(category_row.id))
 
 
 @product.field("category")
 def resolve_product_category(product_row, info):
-    return info.context["repos"].categories.get(str(product_row.category_id))
+    return info.context["loaders"].category.load(str(product_row.category_id))
 
 
 @product.field("subtitle")
-def resolve_product_subtitle(product_row, info):
-    return info.context["services"].products.subtitle(product_row)
+async def resolve_product_subtitle(product_row, info):
+    # The feed asks for this on every product; the category and its fields
+    # come from loaders so a page costs two catalog queries, not 3 per product.
+    loaders = info.context["loaders"]
+    category_id = str(product_row.category_id)
+    category, fields = await asyncio.gather(loaders.category.load(category_id), loaders.category_fields.load(category_id))
+    return info.context["services"].products.render_subtitle(product_row, category, fields)
 
 
 @product.field("lowStock")
@@ -35,13 +46,14 @@ def resolve_low_stock(product_row, _info):
 
 
 @product.field("photos")
+@threaded
 def resolve_product_photos(product_row, info):
     return info.context["repos"].product_photos.list(str(product_row.id))
 
 
 @product.field("coverPhoto")
 def resolve_product_cover_photo(product_row, info):
-    return info.context["repos"].product_photos.cover(str(product_row.id))
+    return info.context["loaders"].product_cover.load(str(product_row.id))
 
 
 @product.field("createdAt")
@@ -56,8 +68,7 @@ def resolve_product_updated_at(product_row, _info):
 
 @order.field("shop")
 def resolve_order_shop(order_row, info):
-    user = info.context["user"]
-    return info.context["repos"].shops.get(str(order_row.shop_id), user["id"] if user else None)
+    return info.context["loaders"].shop.load(str(order_row.shop_id))
 
 
 @order.field("buyer")
@@ -67,7 +78,7 @@ def resolve_buyer(order_row, _info):
 
 @order.field("shipment")
 def resolve_order_shipment(order_row, info):
-    return info.context["repos"].shipments.for_order(str(order_row.id))
+    return info.context["loaders"].order_shipment.load(str(order_row.id))
 
 
 @order.field("createdAt")
@@ -87,7 +98,7 @@ def resolve_unit_price(item, _info):
 
 @shipment.field("order")
 def resolve_shipment_order(shipment_row, info):
-    return info.context["repos"].orders.get(str(shipment_row.order_id))
+    return info.context["loaders"].order.load(str(shipment_row.order_id))
 
 
 @shipment.field("shipBy")
@@ -107,8 +118,9 @@ def resolve_shipment_updated_at(shipment_row, _info):
 
 @coffee_shop.field("products")
 def resolve_shop_products(shop, info):
-    # Buyer-facing storefront: active products only.
-    return info.context["repos"].products.list(str(shop.id))
+    # Buyer-facing storefront: active products only. Batched because the
+    # feed and map ask for it on every shop in the page.
+    return info.context["loaders"].shop_products.load(str(shop.id))
 
 
 @coffee_shop.field("deliverySettings")
@@ -121,6 +133,7 @@ def resolve_delivery_settings(shop, _info):
 
 
 @coffee_shop.field("workload")
+@threaded
 def resolve_shop_workload(shop, info):
     # Seller-only counts; buyers browsing the shop get null, not an error.
     user = info.context["user"]

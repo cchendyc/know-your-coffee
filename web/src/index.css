@@ -1,7 +1,10 @@
 @import 'tailwindcss';
 
 @theme {
-  --color-cream-50: #fbf8f3;
+  /* Page canvas. White, not cream, so screens do not read as tinted; the
+   * cream-50 name stays because the dark override and iOS Theme.swift
+   * key off it. Cards (bg-white) sit on it via border-cream-200. */
+  --color-cream-50: #ffffff;
   --color-cream-100: #f4ede2;
   --color-cream-200: #e9dcc9;
   --color-espresso-500: #6f4e37;
@@ -24,7 +27,7 @@
 
 /*
  * Dark Roast theme (matches the Figma iOS page). Tailwind v4 utilities read
- * these variables, so overriding them re-skins every component: cream base
+ * these variables, so overriding them re-skins every component: white canvas
  * becomes espresso black, white cards become elevated umber, espresso accents
  * become glowing crema, and ink flips to cream. `--color-white` is included
  * deliberately — bg-white is the card surface everywhere.

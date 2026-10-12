@@ -22,6 +22,21 @@ class ProductRepository:
         with self._session() as s:
             return list(s.scalars(stmt.order_by(m.Product.created_at.asc())))
 
+    def list_for_shops(self, shop_ids: list[str]) -> dict[str, list[m.Product]]:
+        """Storefront listings (active only) for many shops; same order as list()."""
+        if not shop_ids:
+            return {}
+        stmt = (
+            sa.select(m.Product)
+            .where(m.Product.shop_id.in_(shop_ids), m.Product.active.is_(True))
+            .order_by(m.Product.created_at.asc())
+        )
+        by_shop: dict[str, list[m.Product]] = {}
+        with self._session() as s:
+            for row in s.scalars(stmt):
+                by_shop.setdefault(str(row.shop_id), []).append(row)
+        return by_shop
+
     def page(
         self, shop_id: str, status: m.ListingStatus | None, limit: int, offset: int
     ) -> tuple[list[m.Product], int]:

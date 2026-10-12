@@ -5,7 +5,7 @@ Every dict argument uses column names, same as the Postgres classes."""
 from datetime import UTC, datetime
 
 from ... import models as m
-from ...core.memory import MemoryStore
+from ...core.memory import MemoryStore, by_key
 from ..records import NewShop
 from ..text import brand_name, cluster_shops, is_same_shop, slugify_brand, split_search
 
@@ -103,12 +103,18 @@ class MemoryShopRepository:
         shop = self._store.shops.get(str(shop_id))
         return self._flagged(shop, viewer_id) if shop else None
 
+    def get_many(self, shop_ids: list[str], viewer_id: str | None = None) -> dict[str, m.Shop]:
+        return by_key(shop_ids, lambda shop_id: self.get(shop_id, viewer_id))
+
     def list_owned(self, owner_id: str) -> list[m.Shop]:
         owned = [s for s in self._store.shops.values() if str(s.owner_user_id or "") == owner_id]
         return sorted((self._flagged(s, owner_id) for s in owned), key=lambda s: s.name)
 
     def cities(self) -> list[str]:
         return sorted({s.city for s in self._store.shops.values()})
+
+    def report_values(self) -> list[m.Shop]:
+        return list(self._store.shops.values())
 
     def find_matching(self, name: str, lat: float, lng: float) -> m.Shop | None:
         probe = {"name": name, "lat": lat, "lng": lng}
@@ -235,6 +241,9 @@ class MemoryChainRepository:
     def get(self, chain_id: str) -> m.Chain | None:
         return self._store.chains.get(str(chain_id))
 
+    def get_many(self, chain_ids: list[str]) -> dict[str, m.Chain]:
+        return by_key(chain_ids, self.get)
+
     def list_shops(self, chain_id: str, viewer_id: str | None = None) -> list[m.Shop]:
         shops = MemoryShopRepository(self._store)
         members = [s for s in self._store.shops.values() if str(s.chain_id or "") == chain_id]
@@ -300,6 +309,9 @@ class MemoryReportRepository:
     def count(self, shop_id: str) -> int:
         return len(self._community(shop_id))
 
+    def count_for_shops(self, shop_ids: list[str]) -> dict[str, int]:
+        return by_key(shop_ids, self.count)
+
     def add(self, shop_id: str, user_id: str | None, note: str | None, source: str, fields: dict) -> m.Report:
         store = self._store
         machines = fields.get("machines")
@@ -344,6 +356,9 @@ class MemoryReviewRepository:
         if not rows:
             return 0, None
         return len(rows), sum(r.rating for r in rows) / len(rows)
+
+    def summary_for_shops(self, shop_ids: list[str]) -> dict[str, tuple[int, float | None]]:
+        return by_key(shop_ids, self.summary)
 
     def for_user(self, shop_id: str, user_id: str) -> m.Review | None:
         return next((r for r in self._rows(shop_id) if str(r.user_id or "") == str(user_id)), None)
@@ -403,6 +418,9 @@ class MemoryPhotoRepository:
 
     def count(self, shop_id: str) -> int:
         return len(self._store.photos.get(str(shop_id), []))
+
+    def count_for_shops(self, shop_ids: list[str]) -> dict[str, int]:
+        return by_key(shop_ids, self.count)
 
     def add(self, shop_id: str, user_id: str | None, photos: list[dict]) -> list[m.ShopPhoto]:
         store = self._store

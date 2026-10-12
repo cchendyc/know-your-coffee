@@ -20,6 +20,14 @@ class ShipmentRepository:
         with self._session() as s:
             return s.scalars(sa.select(m.Shipment).where(m.Shipment.order_id == order_id)).first()
 
+    def for_orders(self, order_ids: list[str]) -> dict[str, m.Shipment]:
+        """One shipment per order; pickup orders (no shipment) are absent."""
+        if not order_ids:
+            return {}
+        with self._session() as s:
+            rows = s.scalars(sa.select(m.Shipment).where(m.Shipment.order_id.in_(order_ids))).all()
+            return {str(row.order_id): row for row in rows}
+
     def page_for_shops(
         self, shop_ids: list[str], status: ShipmentStatus | None, limit: int, offset: int
     ) -> tuple[list[m.Shipment], int]:

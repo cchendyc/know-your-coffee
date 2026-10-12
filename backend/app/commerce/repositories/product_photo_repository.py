@@ -29,6 +29,19 @@ class ProductPhotoRepository:
         with self._session() as s:
             return s.scalars(stmt).first()
 
+    def covers_for_products(self, product_ids: list[str]) -> dict[str, m.ProductPhoto]:
+        """First photo per product (same order as cover()); photo-less products are absent."""
+        if not product_ids:
+            return {}
+        stmt = (
+            sa.select(m.ProductPhoto)
+            .where(m.ProductPhoto.product_id.in_(product_ids))
+            .distinct(m.ProductPhoto.product_id)
+            .order_by(m.ProductPhoto.product_id, m.ProductPhoto.position.asc(), m.ProductPhoto.id.asc())
+        )
+        with self._session() as s:
+            return {str(row.product_id): row for row in s.scalars(stmt)}
+
     def replace(self, product_id: str, items: list[dict]) -> list[m.ProductPhoto]:
         """items, in display order: {"id": existing photo id} or {"data": data URL}.
         Photos of this product not listed are deleted; new ones are inserted;

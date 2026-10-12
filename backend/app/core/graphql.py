@@ -1,8 +1,27 @@
 """Authorization guards and argument checks shared by every domain's resolvers."""
 
+import functools
+
 from graphql import GraphQLError
+from starlette.concurrency import run_in_threadpool
 
 MAX_PAGE_SIZE = 100
+
+
+def threaded(resolver):
+    """Run a sync resolver in a worker thread.
+
+    Repositories block on psycopg. On the event loop that stalls every
+    in-flight request, so one slow or stuck query reads as the API being
+    down. Resolvers that only await httpx stay plain async; async resolvers
+    that also hit a repository wrap that call in run_in_threadpool.
+    """
+
+    @functools.wraps(resolver)
+    async def run_in_thread(*args, **kwargs):
+        return await run_in_threadpool(resolver, *args, **kwargs)
+
+    return run_in_thread
 
 
 def page_bounds(limit: int, offset: int) -> tuple[int, int]:

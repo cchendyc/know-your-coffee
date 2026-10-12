@@ -28,6 +28,17 @@ class PhotoRepository:
                 sa.select(sa.func.count()).select_from(m.ShopPhoto).where(m.ShopPhoto.shop_id == shop_id)
             ) or 0
 
+    def count_for_shops(self, shop_ids: list[str]) -> dict[str, int]:
+        if not shop_ids:
+            return {}
+        with self._session() as s:
+            rows = s.execute(
+                sa.select(m.ShopPhoto.shop_id, sa.func.count())
+                .where(m.ShopPhoto.shop_id.in_(shop_ids))
+                .group_by(m.ShopPhoto.shop_id)
+            ).all()
+        return {str(shop_id): int(count) for shop_id, count in rows}
+
     def add(self, shop_id: str, user_id: str | None, photos: list[dict]) -> list[m.ShopPhoto]:
         with self._session.begin() as s:
             added = []
