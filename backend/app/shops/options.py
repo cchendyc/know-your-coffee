@@ -80,6 +80,24 @@ REPORT_REASON_LABELS = {
     ShopReportReason.SPAM.value: "Spam or scam",
 }
 
+# Grinders are stored as one string, "brand model". Brands are listed so
+# forms can collect the two parts; GRINDERS entries start with one of these.
+GRINDER_BRANDS = [
+    "Mahlkönig",
+    "Mazzer",
+    "Victoria Arduino",
+    "Ditting",
+    "Anfim",
+    "Eureka",
+    "Weber Workshops",
+    "Fellow",
+    "Compak",
+    "Ceado",
+    "Macap",
+    "Fiorenzato",
+    "Nuova Simonelli",
+]
+
 GRINDERS = [
     "Mahlkönig EK43",
     "Mahlkönig E65S GbW",
@@ -91,7 +109,7 @@ GRINDERS = [
     "Victoria Arduino Mythos MY75",
     "Anfim SP II",
     "Eureka Atom 75",
-    "Weber EG-1",
+    "Weber Workshops EG-1",
     "Ditting 807",
 ]
 
@@ -138,6 +156,13 @@ def machine_display(machine: dict[str, Any]) -> str | None:
     return brand or model or None
 
 
+def grinder_brand(grinder: str) -> str | None:
+    """The curated brand a stored grinder string is, or starts with as a word; longest match wins."""
+    words = grinder.casefold().split()
+    matches = [brand for brand in GRINDER_BRANDS if words[: len(brand.split())] == brand.casefold().split()]
+    return max(matches, key=len) if matches else None
+
+
 def _merge(seen: Counter, curated: list[str]) -> list[str]:
     """Values on shops first, most common first; then curated entries not already present.
 
@@ -158,6 +183,7 @@ def build_report_options(rows: Iterable[Any]) -> dict[str, Any]:
     """Rows need roaster, grinders, milk_brands, drinks, machines, coffees attributes."""
     machines: Counter = Counter()
     grinders: Counter = Counter()
+    grinder_brands: Counter = Counter()
     roasters: Counter = Counter()
     drinks: Counter = Counter()
     milks: Counter = Counter()
@@ -172,6 +198,7 @@ def build_report_options(rows: Iterable[Any]) -> dict[str, Any]:
         count(roasters, row.roaster)
         for grinder in row.grinders or []:
             count(grinders, grinder)
+            count(grinder_brands, grinder_brand(grinder or ""))
         for brand in row.milk_brands or []:
             count(milks, brand)
         for drink in row.drinks or []:
@@ -194,6 +221,7 @@ def build_report_options(rows: Iterable[Any]) -> dict[str, Any]:
     return {
         "machine_brands": _options(MACHINE_BRAND_LABELS),
         "machines": _merge(machines, curated_machines),
+        "grinder_brands": _merge(grinder_brands, GRINDER_BRANDS),
         "grinders": _merge(grinders, GRINDERS),
         "bean_sources": _options(BEAN_SOURCE_LABELS),
         "roasters": _merge(roasters, []),

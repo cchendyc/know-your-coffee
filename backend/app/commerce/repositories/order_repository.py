@@ -123,12 +123,17 @@ class OrderRepository:
         with self._session() as s:
             return self._attach_items(s, rows), total
 
-    def count_for_shops(self, shop_ids: list[str], statuses: tuple[OrderStatus, ...]) -> int:
+    def count_for_shops(self, shop_ids: list[str], statuses: tuple[OrderStatus, ...]) -> dict[str, int]:
+        """Orders in `statuses` per shop; shops with none are absent."""
         if not shop_ids:
-            return 0
-        stmt = sa.select(sa.func.count()).where(m.Order.shop_id.in_(shop_ids), m.Order.status.in_(statuses))
+            return {}
+        stmt = (
+            sa.select(m.Order.shop_id, sa.func.count())
+            .where(m.Order.shop_id.in_(shop_ids), m.Order.status.in_(statuses))
+            .group_by(m.Order.shop_id)
+        )
         with self._session() as s:
-            return s.scalar(stmt) or 0
+            return {str(shop_id): int(n) for shop_id, n in s.execute(stmt)}
 
     def count_by_status(self, shop_ids: list[str]) -> dict[OrderStatus, int]:
         counts = dict.fromkeys(OrderStatus, 0)

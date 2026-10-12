@@ -50,7 +50,9 @@ struct ShopDetailView: View {
             }
         }
         .task(id: summary.id) { await loadFull() }
-        .sheet(item: $reportLaunch, onDismiss: { Task { await loadFull() } }) { launch in
+        // Full screen, not a sheet: the fact forms need the keyboard and the
+        // page's own header behind a half sheet read as clutter.
+        .fullScreenCover(item: $reportLaunch, onDismiss: { Task { await loadFull() } }) { launch in
             ReportLauncherView(shop: shop, initialFact: launch.fact)
         }
         .sheet(isPresented: $showShopReport) {

@@ -47,18 +47,26 @@ class ProductRepository:
         stmt = stmt.order_by(m.Product.created_at.asc(), m.Product.id.asc())
         return fetch_page(self._session, stmt, limit, offset)
 
-    def status_counts(self, shop_id: str) -> dict[m.ListingStatus, int]:
-        cols = [sa.func.count().filter(m.Product.status_is(st)) for st in m.ListingStatus]
-        with self._session() as s:
-            row = s.execute(sa.select(*cols).where(m.Product.shop_id == shop_id)).one()
-        return dict(zip(m.ListingStatus, row))
-
-    def count_for_shops(self, shop_ids: list[str], status: m.ListingStatus) -> int:
+    def status_counts_for_shops(self, shop_ids: list[str]) -> dict[str, dict[m.ListingStatus, int]]:
+        """Products per status per shop; shops with no products are absent."""
         if not shop_ids:
-            return 0
-        stmt = sa.select(sa.func.count()).where(m.Product.shop_id.in_(shop_ids), m.Product.status_is(status))
+            return {}
+        cols = [sa.func.count().filter(m.Product.status_is(st)) for st in m.ListingStatus]
+        stmt = sa.select(m.Product.shop_id, *cols).where(m.Product.shop_id.in_(shop_ids)).group_by(m.Product.shop_id)
         with self._session() as s:
-            return s.scalar(stmt) or 0
+            return {str(row[0]): dict(zip(m.ListingStatus, row[1:])) for row in s.execute(stmt)}
+
+    def count_for_shops(self, shop_ids: list[str], status: m.ListingStatus) -> dict[str, int]:
+        """Products in `status` per shop; shops with none are absent."""
+        if not shop_ids:
+            return {}
+        stmt = (
+            sa.select(m.Product.shop_id, sa.func.count())
+            .where(m.Product.shop_id.in_(shop_ids), m.Product.status_is(status))
+            .group_by(m.Product.shop_id)
+        )
+        with self._session() as s:
+            return {str(shop_id): int(n) for shop_id, n in s.execute(stmt)}
 
     def get(self, product_id: str) -> m.Product | None:
         with self._session() as s:

@@ -1,18 +1,15 @@
 import SwiftUI
 
-/// About tab: update prompt, gear, beans, space, menu, then the record thread.
+/// About tab: update prompt, gear, space, then the record thread.
 /// Mirrors web AboutSection: every card is an eyebrow row plus label/pill rows.
+/// Beans and Menu are not shown: sellers will manage those from the Shop tab.
 struct ShopAboutPanel: View {
     let shop: CoffeeShop
-    let listings: [ShopListing]
     /// Opens the report launcher; a fact lands on that sheet.
     let onUpdate: (ReportFact?) -> Void
-    let onShop: () -> Void
 
-    @State private var showAllDrinks = false
     @State private var showAllRecords = false
 
-    private static let drinkPreview = 5
     private static let recordPreview = 3
 
     private var reports: [Report] { shop.reports ?? [] }
@@ -22,13 +19,7 @@ struct ShopAboutPanel: View {
         VStack(alignment: .leading, spacing: 14) {
             UpdatePromptRow { onUpdate(nil) }
             gearCard
-            beansCard
             spaceCard
-
-            if !shop.drinks.isEmpty {
-                menuCard
-            }
-
             records
         }
         .padding(.horizontal, 24)
@@ -43,66 +34,13 @@ struct ShopAboutPanel: View {
                 UnknownRow(label: "Espresso machine") { onUpdate(.machine) }
             } else {
                 ForEach(Array(shop.knownMachines.enumerated()), id: \.offset) { _, machine in
-                    InfoRow(label: machine.display) { Pill(text: "Espresso") }
+                    InfoRow(label: machine.display) { Pill(text: "Espresso machine") }
                 }
             }
             ForEach(shop.grinders, id: \.self) { grinder in
                 InfoRow(label: grinder) { Pill(text: "Grinder") }
             }
         }
-    }
-
-    // MARK: Beans
-
-    private var beanSource: String? {
-        switch shop.beanSource {
-        case .unknown: nil
-        case .inHouseRoast: "Roasted in-house"
-        default: [shop.beanSource.label, shop.roaster].compactMap { $0 }.joined(separator: " · ")
-        }
-    }
-
-    private var beansCard: some View {
-        AboutCard(eyebrow: "Beans", tag: beanSource) {
-            if !shop.coffees.isEmpty {
-                ForEach(Array(shop.coffees.enumerated()), id: \.offset) { _, coffee in
-                    coffeeRow(coffee)
-                }
-            } else if !shop.beanOrigins.isEmpty {
-                InfoRow(label: "Origins") {
-                    ForEach(shop.beanOrigins, id: \.self) { Pill(text: $0) }
-                }
-            } else if beanSource == nil {
-                UnknownRow(label: "Who roasts the beans") { onUpdate(.roaster) }
-            } else {
-                UnknownRow(label: "Coffees on the bar") { onUpdate(.coffee) }
-            }
-            if shop.milkBrands.isEmpty {
-                UnknownRow(label: "Milk") { onUpdate(.milk) }
-            } else {
-                InfoRow(label: "Milk") {
-                    ForEach(shop.milkBrands, id: \.self) { Pill(text: $0) }
-                }
-            }
-        }
-    }
-
-    // Unnamed coffees lead with their first attribute (usually the type) instead of a placeholder.
-    private func coffeeRow(_ coffee: Coffee) -> some View {
-        var pills = coffee.pills + coffee.tastingNotes
-        let title = coffee.title ?? (pills.isEmpty ? "House coffee" : pills.removeFirst())
-        return InfoRow(label: title) {
-            ForEach(pills, id: \.self) { Pill(text: $0) }
-            if listingMatches(coffee) {
-                ShopLinkButton(label: "Buy this bean", symbol: "arrow.right", action: onShop)
-            }
-        }
-    }
-
-    // A coffee is purchasable when a listing name mentions it.
-    private func listingMatches(_ coffee: Coffee) -> Bool {
-        guard let name = coffee.name?.lowercased(), name.count >= 3 else { return false }
-        return listings.contains { $0.name.lowercased().contains(name) }
     }
 
     // MARK: Space
@@ -121,30 +59,6 @@ struct ShopAboutPanel: View {
             InfoRow(label: label) { Pill(text: value ? "Yes" : "No") }
         } else {
             UnknownRow(label: label) { onUpdate(.space) }
-        }
-    }
-
-    // MARK: Menu
-
-    private var visibleDrinks: [DrinkItem] {
-        showAllDrinks ? shop.drinks : Array(shop.drinks.prefix(Self.drinkPreview))
-    }
-
-    private var menuCard: some View {
-        AboutCard(eyebrow: "Menu") {
-            ForEach(Array(visibleDrinks.enumerated()), id: \.offset) { _, drink in
-                InfoRow(label: drink.name) {
-                    if let price = drink.price {
-                        Pill(text: "$\(ShopPageFormat.price(price))")
-                    }
-                }
-            }
-            if shop.drinks.count > Self.drinkPreview {
-                ShopLinkButton(label: showAllDrinks ? "Show fewer" : "See all \(ShopPageFormat.plural(shop.drinks.count, "drink"))") {
-                    withAnimation(.easeOut(duration: 0.2)) { showAllDrinks.toggle() }
-                }
-                .padding(.top, 2)
-            }
         }
     }
 
@@ -331,13 +245,25 @@ private struct InfoRow<Trailing: View>: View {
     }
 }
 
+/// A detail nobody has reported yet. The trailing control is a real button,
+/// outlined so it does not read as one more Pill.
 private struct UnknownRow: View {
     let label: String
     let onKnow: () -> Void
 
     var body: some View {
         InfoRow(label: label) {
-            ShopLinkButton(label: "Unknown — know it?", action: onKnow)
+            Button(action: onKnow) {
+                Label("Add", systemImage: "plus")
+                    .font(.kycMetaBold)
+                    .foregroundStyle(Color.espresso700)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .overlay(Capsule().stroke(Color.espresso700.opacity(0.45), lineWidth: 1))
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Add \(label)")
         }
     }
 }

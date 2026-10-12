@@ -1,13 +1,15 @@
-import { useState, type ReactNode } from 'react'
-import type { Coffee, Report, ShopPageData, User } from '../api'
+import { useState } from 'react'
+import type { Report, ShopPageData, User } from '../api'
 import { timeAgo } from '../format'
-import { AMENITIES, BEAN_SOURCE_LABELS, coffeePills, machineDisplay, reportSummary } from '../labels'
-import { Chip, Empty, InfoCard, Row, SubHeader } from './bits'
+import { AMENITIES, machineDisplay, reportSummary } from '../labels'
+import { Chip, InfoCard, PlusIcon, Row, SubHeader } from './bits'
 import { plural } from './util'
 
 const RECORDS_SHOWN = 2
 const AVATAR_COLORS = ['#c08c3e', '#3d5a80', '#6f4e37', '#5a7d5a', '#8a5a7d']
 
+// Gear and Space only. Beans and the menu are not shown: sellers will
+// manage those from the Shop tab.
 export function AboutSection({
   shop,
   user,
@@ -15,8 +17,6 @@ export function AboutSection({
   canConfirm,
   onReport,
   onConfirm,
-  onJumpToShop,
-  children,
 }: {
   shop: ShopPageData
   user: User | null
@@ -24,22 +24,24 @@ export function AboutSection({
   canConfirm: boolean
   onReport: () => void
   onConfirm: () => void
-  onJumpToShop: () => void
-  // Rendered between the gear/beans/space cards and the records (the menu).
-  children?: ReactNode
 }) {
   const [allRecords, setAllRecords] = useState(false)
   const latest = shop.reports[0]
-  const beanSource =
-    shop.beanSource === 'UNKNOWN'
-      ? null
-      : shop.beanSource === 'IN_HOUSE_ROAST'
-        ? 'Roasted in-house'
-        : [BEAN_SOURCE_LABELS[shop.beanSource], shop.roaster].filter(Boolean).join(' · ')
   const records = allRecords ? shop.reports : shop.reports.slice(0, RECORDS_SHOWN)
-  // "Buy this bean" links a reported coffee to the listing with the same name.
-  const listingFor = (c: Coffee) =>
-    c.name ? shop.products.find((p) => p.name.toLowerCase().includes(c.name!.toLowerCase())) : undefined
+  // A detail nobody has reported yet: a real button for signed-in visitors,
+  // a plain chip otherwise (reporting needs an account).
+  const unknown = user ? (
+    <button
+      type="button"
+      onClick={onReport}
+      className="inline-flex items-center gap-1 rounded-full border border-espresso-700/45 px-2.5 py-1 text-[11px] font-semibold text-espresso-700 transition hover:bg-cream-100"
+    >
+      <PlusIcon className="size-3" />
+      Add
+    </button>
+  ) : (
+    <Chip>Unknown</Chip>
+  )
 
   return (
     <>
@@ -60,16 +62,16 @@ export function AboutSection({
         <p className="sp-report-bar text-sm text-espresso-700">Sign in (top right) to confirm or report what is on the bar.</p>
       )}
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         <InfoCard eyebrow="Gear">
           {machines.length > 0 ? (
             machines.map((m, i) => (
               <Row key={i} label={machineDisplay(m.brand, m.model)}>
-                <Chip>Espresso</Chip>
+                <Chip>Espresso machine</Chip>
               </Row>
             ))
           ) : (
-            <Empty>Machine not reported yet.</Empty>
+            <Row label="Espresso machine">{unknown}</Row>
           )}
           {shop.grinders.map((g) => (
             <Row key={g} label={g}>
@@ -78,62 +80,14 @@ export function AboutSection({
           ))}
         </InfoCard>
 
-        <InfoCard eyebrow="Beans" tag={beanSource}>
-          {shop.coffees.length > 0 ? (
-            shop.coffees.map((c, i) => {
-              // Unnamed coffees lead with their first attribute (usually the type) instead of a placeholder.
-              const name = [c.roaster, c.name].filter(Boolean).join(' — ')
-              const pills = [...coffeePills(c), ...c.tastingNotes]
-              const title = name || pills.shift() || 'House coffee'
-              return (
-                <Row key={i} label={title}>
-                  {pills.map((p) => (
-                    <Chip key={p}>{p}</Chip>
-                  ))}
-                  {listingFor(c) && (
-                    <button type="button" onClick={onJumpToShop} className="sp-link text-xs">
-                      Buy this bean →
-                    </button>
-                  )}
-                </Row>
-              )
-            })
-          ) : shop.beanOrigins.length > 0 ? (
-            <Row label="Origins">
-              {shop.beanOrigins.map((o) => (
-                <Chip key={o}>{o}</Chip>
-              ))}
-            </Row>
-          ) : (
-            <Empty>{beanSource ? 'Coffees not reported yet.' : 'Beans not reported yet.'}</Empty>
-          )}
-          {shop.milkBrands.length > 0 && (
-            <Row label="Milk">
-              {shop.milkBrands.map((m) => (
-                <Chip key={m}>{m}</Chip>
-              ))}
-            </Row>
-          )}
-        </InfoCard>
-
         <InfoCard eyebrow="Space">
           {AMENITIES.map((a) => (
             <Row key={a.key} label={a.label}>
-              {shop[a.key] !== null ? (
-                <Chip>{shop[a.key] ? 'Yes' : 'No'}</Chip>
-              ) : user ? (
-                <button type="button" onClick={onReport} className="sp-link text-xs">
-                  Unknown — know it?
-                </button>
-              ) : (
-                <Chip>Unknown</Chip>
-              )}
+              {shop[a.key] !== null ? <Chip>{shop[a.key] ? 'Yes' : 'No'}</Chip> : unknown}
             </Row>
           ))}
         </InfoCard>
       </div>
-
-      {children}
 
       <SubHeader title="Records" meta={latest ? `${plural(shop.reportCount, 'report')} · latest ${timeAgo(latest.createdAt)}` : undefined} />
 

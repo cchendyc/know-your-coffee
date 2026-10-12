@@ -8,7 +8,8 @@ struct SellerHubView: View {
 
     @State private var selection: HubSelection
     @State private var seller: SellerAccount?
-    @State private var stats: HubStats?
+    // Listing counts for the selected shop; nil on All shops.
+    @State private var counts: ProductCounts?
     @State private var error: String?
     @State private var switching = false
     @State private var addingShop = false
@@ -131,6 +132,7 @@ struct SellerHubView: View {
         (sellerShops.firstIndex { $0.id == shop.id } ?? 0) + 1
     }
 
+    // Workload rides along with mySeller; only the listing counts are a second request.
     private func shopRows(_ shop: SellerShop) -> some View {
         VStack(spacing: 10) {
             hubRow(title: "Products", detail: productsDetail, icon: "shippingbox") {
@@ -138,19 +140,19 @@ struct SellerHubView: View {
             }
             hubRow(
                 title: "Orders",
-                detail: stats.map { "\($0.workload?.toFulfill ?? 0) to fulfill" } ?? "…",
+                detail: shop.workload.map { "\($0.toFulfill) to fulfill" } ?? "…",
                 icon: "bag"
             ) {
                 OrdersListView(shopID: shop.id)
             }
             hubRow(
                 title: "Shipments",
-                detail: stats.map { "\($0.workload?.toShip ?? 0) to ship" } ?? "…",
+                detail: shop.workload.map { "\($0.toShip) to ship" } ?? "…",
                 icon: "truck.box"
             ) {
                 ShipmentsListView(shopID: shop.id)
             }
-            if !copyTargets.isEmpty, (stats?.products.total ?? 0) > 0 {
+            if !copyTargets.isEmpty, (counts?.total ?? 0) > 0 {
                 Button { copying = true } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "doc.on.doc")
@@ -246,18 +248,24 @@ struct SellerHubView: View {
     }
 
     private var productsDetail: String {
-        guard let counts = stats?.products else { return "…" }
+        guard let counts else { return "…" }
         return "\(counts.total) listed\(counts.lowStock > 0 ? " · \(counts.lowStock) low on stock" : "")"
     }
 
     private func load() async {
         do {
             // Badges go stale as orders are handled; refetch with every visit.
-            seller = try await CoffeeAPI.fetchMySeller()
+            // Both requests go out together; waiting for one before starting
+            // the other doubled the time the rows showed "…".
+            async let account = CoffeeAPI.fetchMySeller()
             if let id = selection.shopID {
-                stats = try await CoffeeAPI.fetchHubStats(shopID: id)
+                async let productCounts = CoffeeAPI.fetchProductCounts(shopID: id)
+                let (loadedSeller, loadedCounts) = try await (account, productCounts)
+                seller = loadedSeller
+                counts = loadedCounts
             } else {
-                stats = nil
+                seller = try await account
+                counts = nil
             }
             error = nil
         } catch is CancellationError {
@@ -827,6 +835,8 @@ struct OrdersListView: View {
 struct ShipmentsListView: View {
     let shopID: String?
 
+    private static let filters: [ShipmentStatus?] = [nil, .labelReady, .inTransit, .delivered]
+
     @State private var shipments: [Shipment] = []
     @State private var total = 0
     @State private var loading = false
@@ -837,13 +847,14 @@ struct ShipmentsListView: View {
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
-                Picker("Status", selection: $filter) {
-                    Text("All").tag(ShipmentStatus?.none)
-                    Text("To ship").tag(ShipmentStatus?.some(.labelReady))
-                    Text("In transit").tag(ShipmentStatus?.some(.inTransit))
-                    Text("Delivered").tag(ShipmentStatus?.some(.delivered))
+                KYCSegmentedControl(options: Self.filters, selection: $filter) { status in
+                    switch status {
+                    case nil: "All"
+                    case .labelReady: "To ship"
+                    case .inTransit: "In transit"
+                    default: "Delivered"
+                    }
                 }
-                .pickerStyle(.segmented)
 
                 if let error {
                     Text(error).font(.kycSecondary).foregroundStyle(.red)

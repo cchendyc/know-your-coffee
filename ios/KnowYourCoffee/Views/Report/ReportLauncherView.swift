@@ -1,16 +1,15 @@
 import SwiftUI
 
-/// "Report something": a grid of facts about one shop. Each tile opens one
-/// sheet that saves one report. Values on tiles are stacked, one per line.
+/// "Report something": a grid of square fact tiles for one shop, shown full
+/// screen. Each tile pushes one form that saves one report. Values on tiles
+/// are stacked, one per line. Photo capture lives on the Machine and Menu
+/// forms, not here.
 struct ReportLauncherView: View {
     let initialFact: ReportFact?
 
     @State private var session: ReportSession
     @State private var path = NavigationPath()
-    @State private var detent: PresentationDetent = Self.resting
     @Environment(\.dismiss) private var dismiss
-
-    private static let resting = PresentationDetent.height(560)
 
     init(shop: CoffeeShop, initialFact: ReportFact? = nil) {
         self.initialFact = initialFact
@@ -21,7 +20,6 @@ struct ReportLauncherView: View {
         NavigationStack(path: $path) {
             ScrollView {
                 VStack(spacing: 12) {
-                    cameraBar
                     tiles
                     if let error = session.optionsError {
                         HStack(spacing: 8) {
@@ -48,69 +46,32 @@ struct ReportLauncherView: View {
                 FactSheet(fact: fact, session: session)
             }
         }
-        .environment(\.fieldFocusSink, { session.fieldFocused = $0 })
-        .presentationDetents([Self.resting, .large], selection: $detent)
-        .presentationDragIndicator(.visible)
-        .onChange(of: session.fieldFocused) { _, focused in
-            withAnimation { detent = focused ? .large : Self.resting }
-        }
         .sheet(isPresented: $session.showSignIn, onDismiss: { session.signInDismissed() }) {
             SignInSheet()
         }
         .task {
-            // Push first; the sheet shows a spinner until the lists arrive.
+            // Push first; the form shows a spinner until the lists arrive.
             if let initialFact, path.isEmpty { path.append(initialFact) }
             await session.loadOptions()
         }
     }
 
-    // MARK: Camera
-
-    private var cameraBar: some View {
-        PhotoCaptureButton { images in
-            Task {
-                if let fact = await session.route(images: images) { path.append(fact) }
-            }
-        } label: {
-            HStack(spacing: 6) {
-                if session.analyzing {
-                    ProgressView().tint(Color.espresso700)
-                } else {
-                    Image(systemName: "camera.fill").font(.system(size: 18, weight: .semibold))
-                    Image(systemName: "sparkles").font(.system(size: 12, weight: .semibold))
-                }
-            }
-            .foregroundStyle(Color.espresso700)
-            .frame(maxWidth: .infinity)
-            .frame(height: 56)
-            .background(Color.accentSoft, in: RoundedRectangle(cornerRadius: KYCRadius.card, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: KYCRadius.card, style: .continuous)
-                    .stroke(Color.crema400.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
-            )
-            .contentShape(Rectangle())
-        }
-        .disabled(session.analyzing)
-    }
-
     // MARK: Tiles
 
+    private static let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+
     private var tiles: some View {
-        let facts = ReportFact.allCases
-        return Grid(horizontalSpacing: 10, verticalSpacing: 10) {
-            ForEach(Array(stride(from: 0, to: facts.count, by: 2)), id: \.self) { start in
-                GridRow {
-                    ForEach(facts[start ..< min(start + 2, facts.count)]) { fact in
-                        Button { path.append(fact) } label: {
-                            FactTile(
-                                fact: fact,
-                                lines: TileLine.lines(for: fact, shop: session.shop, options: session.options),
-                                saved: session.saved.contains(fact)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
+        LazyVGrid(columns: Self.columns, spacing: 10) {
+            ForEach(ReportFact.allCases) { fact in
+                Button { path.append(fact) } label: {
+                    FactTile(
+                        fact: fact,
+                        lines: TileLine.lines(for: fact, shop: session.shop, options: session.options),
+                        saved: session.saved.contains(fact)
+                    )
                 }
+                .buttonStyle(.plain)
+                .aspectRatio(1, contentMode: .fit)
             }
         }
     }
@@ -184,19 +145,19 @@ private struct FactTile: View {
     let lines: [TileLine]
     let saved: Bool
 
-    private static let maxLines = 3
+    private static let maxLines = 4
     private var hasGap: Bool { lines.contains { $0.unknown } }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
                 Image(systemName: fact.symbol)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color.espresso700)
-                    .frame(width: 22, height: 22)
+                    .frame(width: 28, height: 28)
                     .background(Color.cream100, in: Circle())
                 Text(fact.title)
-                    .font(.kycSecondaryBold)
+                    .font(.kycBodyBold)
                     .foregroundStyle(Color.ink)
                     .lineLimit(1)
                 Spacer(minLength: 0)
@@ -209,7 +170,7 @@ private struct FactTile: View {
                 }
             }
             if !lines.isEmpty {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) {
                     ForEach(Array(lines.prefix(Self.maxLines).enumerated()), id: \.offset) { _, line in
                         HStack(spacing: 6) {
                             Text(line.label)
@@ -222,17 +183,17 @@ private struct FactTile: View {
                                     .lineLimit(1)
                             }
                         }
-                        .font(.kycMeta)
+                        .font(.kycSecondary)
                     }
                     if lines.count > Self.maxLines {
                         Text("+\(lines.count - Self.maxLines) more")
-                            .font(.kycMeta)
+                            .font(.kycSecondary)
                             .foregroundStyle(Color.inkFaint)
                     }
                 }
             }
         }
-        .padding(12)
+        .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color.surface, in: RoundedRectangle(cornerRadius: KYCRadius.card, style: .continuous))
         .overlay(

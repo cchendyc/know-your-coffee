@@ -267,12 +267,15 @@ struct ProfileView: View {
     // System follows iOS light/dark; Light and Dark Roast force a theme.
     private var appearanceSection: some View {
         section("Appearance") {
-            Picker("Appearance", selection: $appearanceRaw) {
-                ForEach(AppAppearance.allCases) { option in
-                    Text(option.label).tag(option.rawValue)
-                }
-            }
-            .pickerStyle(.segmented)
+            KYCSegmentedControl(
+                options: AppAppearance.allCases,
+                selection: Binding(
+                    get: { AppAppearance(rawValue: appearanceRaw) ?? .system },
+                    set: { appearanceRaw = $0.rawValue }
+                ),
+                label: { $0.label },
+                symbol: { $0.symbol }
+            )
         }
     }
 
@@ -335,27 +338,26 @@ struct ProfileView: View {
         let tint: Color
     }
 
-    // Icon tile, title, subtitle with optional verified check, badge, chevron.
+    // Icon tile, title (with a seal when verified), subtitle, badge, chevron.
     private func row(icon: String, imageURL: URL? = nil, title: String, subtitle: String, verified: Bool = false, badge: Badge? = nil, showsChevron: Bool = true) -> some View {
         HStack(spacing: 12) {
             shopAvatar(icon: icon, imageURL: imageURL)
             VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.kycBodyBold)
-                    .foregroundStyle(Color.ink)
-                HStack(spacing: 4) {
-                    Text(subtitle)
-                        .font(.kycSecondary)
-                        .foregroundStyle(Color.inkMuted)
-                        .lineLimit(1)
+                HStack(spacing: 5) {
+                    Text(title)
+                        .font(.kycBodyBold)
+                        .foregroundStyle(Color.ink)
                     if verified {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 10, weight: .bold))
-                        Text("Verified")
-                            .font(.kycSecondary)
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.savedGreen)
+                            .accessibilityLabel("Verified")
                     }
                 }
-                .foregroundStyle(Color.savedGreen)
+                Text(subtitle)
+                    .font(.kycSecondary)
+                    .foregroundStyle(Color.inkMuted)
+                    .lineLimit(1)
             }
             Spacer(minLength: 8)
             if let badge {

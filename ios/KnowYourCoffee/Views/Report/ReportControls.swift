@@ -4,20 +4,6 @@ import SwiftUI
 // Controls shared by the report sheets. Every option list comes from
 // ReportOptions; these views only render what they are handed.
 
-// MARK: - Focus relay
-
-/// Sheets report text-field focus up to the launcher, which grows the sheet.
-private struct FieldFocusSinkKey: EnvironmentKey {
-    static let defaultValue: (Bool) -> Void = { _ in }
-}
-
-extension EnvironmentValues {
-    var fieldFocusSink: (Bool) -> Void {
-        get { self[FieldFocusSinkKey.self] }
-        set { self[FieldFocusSinkKey.self] = newValue }
-    }
-}
-
 // MARK: - Chrome
 
 private struct FieldChrome: ViewModifier {
@@ -89,7 +75,6 @@ struct TypeaheadField: View {
     var onCommit: (String) -> Bool = { _ in false }
 
     @FocusState private var focused: Bool
-    @Environment(\.fieldFocusSink) private var focusSink
 
     var body: some View {
         VStack(spacing: 4) {
@@ -114,7 +99,6 @@ struct TypeaheadField: View {
                 }
             }
         }
-        .onChange(of: focused) { _, now in focusSink(now) }
     }
 
     private func commit(_ value: String) {
@@ -375,7 +359,9 @@ struct SheetScaffold<Content: View>: View {
 // MARK: - Photo capture
 
 /// Camera or library, as a bare control. Returns the images to the caller.
+/// `hint` explains what happens to the photo, under the dialog title.
 struct PhotoCaptureButton<Label: View>: View {
+    var hint: String? = nil
     let onImages: ([UIImage]) -> Void
     @ViewBuilder let label: () -> Label
 
@@ -387,11 +373,13 @@ struct PhotoCaptureButton<Label: View>: View {
     var body: some View {
         Button { showOptions = true } label: { label() }
             .buttonStyle(.plain)
-            .confirmationDialog("Add a photo", isPresented: $showOptions) {
+            .confirmationDialog("Add a photo", isPresented: $showOptions, titleVisibility: hint == nil ? .automatic : .visible) {
                 if UIImagePickerController.isSourceTypeAvailable(.camera) {
                     Button("Take photo") { showCamera = true }
                 }
                 Button("Choose from library") { showLibrary = true }
+            } message: {
+                if let hint { Text(hint) }
             }
             .fullScreenCover(isPresented: $showCamera) {
                 CameraPicker { image in onImages([image]) }
@@ -412,6 +400,59 @@ struct PhotoCaptureButton<Label: View>: View {
                     onImages(images)
                 }
             }
+    }
+}
+
+/// Toolbar glyph for photo capture that is also read by vision: the photo
+/// is saved with the report, and the sparkle says it will be identified too.
+struct CameraSparkleIcon: View {
+    var body: some View {
+        Image(systemName: "camera.fill")
+            .font(.system(size: 17, weight: .semibold))
+            .overlay(alignment: .topTrailing) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 9, weight: .bold))
+                    .offset(x: 7, y: -6)
+            }
+            .foregroundStyle(Color.espresso700)
+            .accessibilityLabel("Add a photo; it is also identified")
+    }
+}
+
+/// Photos attached to this report, uploaded on Save. Each can be dropped.
+struct PhotoStrip: View {
+    @Binding var photos: [CapturedPhoto]
+    var note: String? = nil
+
+    var body: some View {
+        if !photos.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(photos) { photo in
+                            Image(uiImage: photo.image)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 72, height: 72)
+                                .clipShape(RoundedRectangle(cornerRadius: KYCRadius.thumb, style: .continuous))
+                                .overlay(alignment: .topTrailing) {
+                                    Button { photos.removeAll { $0.id == photo.id } } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.system(size: 18))
+                                            .foregroundStyle(.white, Color.ink.opacity(0.65))
+                                            .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .padding(3)
+                                }
+                        }
+                    }
+                }
+                if let note {
+                    Text(note).font(.kycMeta).foregroundStyle(Color.inkMuted)
+                }
+            }
+        }
     }
 }
 

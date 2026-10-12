@@ -29,6 +29,50 @@ private func compact(_ dict: [String: Any?]) -> [String: Any] {
     dict.compactMapValues { $0 }
 }
 
+// MARK: - Gear composer
+
+/// Brand and model fields plus an Add control. Machines and grinders are
+/// both a brand and a model on the backend (Machine.brand/model; a grinder
+/// is one "brand model" string), so their forms collect the two parts.
+/// Committing the model adds the entry; Add covers brand-only entries.
+private struct GearComposer: View {
+    let noun: String
+    let brands: [String]
+    let models: (String) -> [String]
+    let onAdd: (_ brand: String, _ model: String) -> Void
+
+    @State private var brand = ""
+    @State private var model = ""
+
+    private var trimmedBrand: String { brand.trimmingCharacters(in: .whitespaces) }
+    private var trimmedModel: String { model.trimmingCharacters(in: .whitespaces) }
+    private var canAdd: Bool { !trimmedBrand.isEmpty || !trimmedModel.isEmpty }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                TypeaheadField(placeholder: "Brand", text: $brand, suggestions: brands)
+                TypeaheadField(placeholder: "Model", text: $model, suggestions: models(trimmedBrand)) { value in
+                    model = value
+                    add()
+                    return true
+                }
+            }
+            Button(action: add) { DashedAddLabel(title: "Add \(noun)") }
+                .buttonStyle(.plain)
+                .disabled(!canAdd)
+                .opacity(canAdd ? 1 : 0.5)
+        }
+    }
+
+    private func add() {
+        guard canAdd else { return }
+        onAdd(trimmedBrand, trimmedModel)
+        brand = ""
+        model = ""
+    }
+}
+
 // MARK: - Machine
 
 struct MachineDraft: Identifiable, Hashable {
@@ -42,8 +86,9 @@ struct MachineSheet: View {
     let options: ReportOptions
 
     @State private var machines: [MachineDraft]
-    @State private var text = ""
     @State private var photos: [CapturedPhoto] = []
+    @State private var photoNote: String?
+    @State private var identifying = false
     @State private var dirty = false
     @State private var saving = false
     @State private var error: String?
@@ -61,30 +106,43 @@ struct MachineSheet: View {
         options.machineDisplay(brand: machine.brand, model: machine.model)
     }
 
+    // Removing every machine is not a save (the list would wipe the shop's);
+    // photos alone are, as a photo-only update.
+    private var canSave: Bool { dirty && (!machines.isEmpty || !photos.isEmpty) }
+
     var body: some View {
-        SheetScaffold(canSave: dirty && !machines.isEmpty, saving: saving, error: error, onSave: save) {
+        SheetScaffold(
+            saveTitle: machines.isEmpty && !photos.isEmpty ? "Save photos" : "Save",
+            canSave: canSave, saving: saving, error: error, onSave: save
+        ) {
             ForEach(machines) { machine in
-                EditableRow(title: display(machine)) {
+                let label = options.label(in: \.machineBrands, for: machine.brand)
+                EditableRow(title: label ?? machine.model ?? "Machine", subtitle: label == nil ? nil : machine.model) {
                     machines.removeAll { $0.id == machine.id }
                     dirty = true
                 }
             }
-            TypeaheadField(
-                placeholder: "Add a machine",
-                text: $text,
-                suggestions: options.machines,
-                taken: machines.map(display)
-            ) { value in
-                let parsed = options.parseMachine(value)
-                append(MachineDraft(brand: parsed.brand, model: parsed.model))
-                return true
+            GearComposer(
+                noun: "machine",
+                brands: options.machineBrands.map(\.label),
+                models: { options.machineModels(for: $0) }
+            ) { brand, model in
+                append(draft(brand: brand, model: model))
             }
+            PhotoStrip(photos: $photos, note: identifying ? "Identifying…" : photoNote)
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                PhotoCaptureButton { images in Task { await identify(images) } } label: {
-                    Image(systemName: "camera.fill").foregroundStyle(Color.espresso700)
+                PhotoCaptureButton(hint: "Saved with your report. We also try to identify the machine.") { images in
+                    Task { await identify(images) }
+                } label: {
+                    if identifying {
+                        ProgressView().tint(Color.espresso700)
+                    } else {
+                        CameraSparkleIcon()
+                    }
                 }
+                .disabled(identifying)
             }
         }
         .onAppear {
@@ -96,30 +154,55 @@ struct MachineSheet: View {
         }
     }
 
+    /// MachineInput from the two fields. A brand the server does not list is
+    /// sent as OTHER with the brand kept in the model text; brand left blank
+    /// falls back to splitting the model text ("La Marzocco Linea PB").
+    private func draft(brand: String, model: String) -> MachineDraft {
+        if let value = options.machineBrand(label: brand) {
+            return MachineDraft(brand: value, model: model.isEmpty ? nil : model)
+        }
+        if brand.isEmpty {
+            let parsed = options.parseMachine(model)
+            return MachineDraft(brand: parsed.brand, model: parsed.model)
+        }
+        return MachineDraft(brand: "OTHER", model: [brand, model].filter { !$0.isEmpty }.joined(separator: " "))
+    }
+
     private func append(_ draft: MachineDraft) {
         guard !machines.contains(where: { display($0).caseInsensitiveCompare(display(draft)) == .orderedSame }) else { return }
         machines.append(draft)
         dirty = true
     }
 
+    /// Every photo is kept and uploaded on Save; vision pre-fills when it can.
     private func identify(_ images: [UIImage]) async {
         guard await session.ensureSignedIn() else { return }
-        error = nil
+        identifying = true
+        defer { identifying = false }
+        var found: [String] = []
+        var missed = 0
         for image in images {
             guard let data = image.reportDataURL() else { continue }
-            guard let guess = try? await CoffeeAPI.identifyMachine(imageBase64: data), guess.machine != .unknown else {
-                error = "No machine recognized."
-                continue
+            photos.append(CapturedPhoto(kind: "MACHINE", dataURL: data, image: image))
+            dirty = true
+            if let guess = try? await CoffeeAPI.identifyMachine(imageBase64: data), guess.machine != .unknown {
+                let draft = MachineDraft(brand: guess.machine.rawValue, model: guess.machineModel)
+                append(draft)
+                found.append(display(draft))
+            } else {
+                missed += 1
             }
-            append(MachineDraft(brand: guess.machine.rawValue, model: guess.machineModel))
-            photos.append(CapturedPhoto(kind: "MACHINE", dataURL: data))
         }
+        photoNote = [
+            found.isEmpty ? nil : "Identified \(found.joined(separator: ", ")).",
+            missed == 0 ? nil : "No machine recognized in \(missed == 1 ? "the photo" : "\(missed) photos"); saved with your report anyway.",
+        ].compactMap { $0 }.joined(separator: " ")
     }
 
     private func save() {
         let payload = machines.map { compact(["brand": $0.brand, "model": $0.model]) }
         perform(saving: $saving, error: $error, dismiss: dismiss) {
-            try await session.submit(.machine, fields: ["machines": payload], photos: photos)
+            try await session.submit(.machine, fields: machines.isEmpty ? [:] : ["machines": payload], photos: photos)
         }
     }
 }
@@ -131,7 +214,6 @@ struct GrinderSheet: View {
     let options: ReportOptions
 
     @State private var grinders: [String]
-    @State private var text = ""
     @State private var dirty = false
     @State private var saving = false
     @State private var error: String?
@@ -146,19 +228,27 @@ struct GrinderSheet: View {
     var body: some View {
         SheetScaffold(canSave: dirty, saving: saving, error: error, onSave: save) {
             ForEach(grinders, id: \.self) { grinder in
-                EditableRow(title: grinder) {
+                let parts = options.splitGrinder(grinder)
+                EditableRow(title: parts.brand ?? grinder, subtitle: parts.brand == nil ? nil : parts.model) {
                     grinders.removeAll { $0 == grinder }
                     dirty = true
                 }
             }
-            TypeaheadField(placeholder: "Add a grinder", text: $text, suggestions: options.grinders, taken: grinders) { value in
-                if !grinders.contains(where: { $0.caseInsensitiveCompare(value) == .orderedSame }) {
-                    grinders.append(value)
-                    dirty = true
-                }
-                return true
+            GearComposer(
+                noun: "grinder",
+                brands: options.grinderBrands,
+                models: { options.grinderModels(for: $0) }
+            ) { brand, model in
+                // Stored as one string, brand first, matching the web form.
+                add([brand, model].filter { !$0.isEmpty }.joined(separator: " "))
             }
         }
+    }
+
+    private func add(_ grinder: String) {
+        guard !grinders.contains(where: { $0.caseInsensitiveCompare(grinder) == .orderedSame }) else { return }
+        grinders.append(grinder)
+        dirty = true
     }
 
     private func save() {
@@ -431,6 +521,8 @@ struct MenuSheet: View {
     @State private var drinks: [DrinkDraft]
     @State private var text = ""
     @State private var photos: [CapturedPhoto] = []
+    @State private var photoNote: String?
+    @State private var reading = false
     @State private var dirty = false
     @State private var saving = false
     @State private var error: String?
@@ -442,8 +534,19 @@ struct MenuSheet: View {
         _drinks = State(initialValue: session.shop.drinks.map { DrinkDraft(name: $0.name, price: $0.price) })
     }
 
+    private var payload: [[String: Any]] {
+        drinks.filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }.map(\.payload)
+    }
+
+    // An empty list is never sent (it would wipe the shop's menu, and the web
+    // form sends null for empty too); photos alone save as a photo-only update.
+    private var canSave: Bool { dirty && (!payload.isEmpty || !photos.isEmpty) }
+
     var body: some View {
-        SheetScaffold(canSave: dirty, saving: saving, error: error, onSave: save) {
+        SheetScaffold(
+            saveTitle: payload.isEmpty && !photos.isEmpty ? "Save photos" : "Save",
+            canSave: canSave, saving: saving, error: error, onSave: save
+        ) {
             ForEach($drinks) { $drink in
                 EditableRow(title: drink.name) {
                     drinks.removeAll { $0.id == drink.id }
@@ -461,12 +564,20 @@ struct MenuSheet: View {
                 merge([DrinkItem(name: value, price: nil)])
                 return true
             }
+            PhotoStrip(photos: $photos, note: reading ? "Reading the menu…" : photoNote)
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                PhotoCaptureButton { images in Task { await read(images) } } label: {
-                    Image(systemName: "camera.fill").foregroundStyle(Color.espresso700)
+                PhotoCaptureButton(hint: "Saved with your report. We also read drinks and prices from it.") { images in
+                    Task { await read(images) }
+                } label: {
+                    if reading {
+                        ProgressView().tint(Color.espresso700)
+                    } else {
+                        CameraSparkleIcon()
+                    }
                 }
+                .disabled(reading)
             }
         }
         .onAppear {
@@ -490,24 +601,34 @@ struct MenuSheet: View {
         dirty = true
     }
 
+    /// Every photo is kept and uploaded on Save; vision pre-fills when it can.
     private func read(_ images: [UIImage]) async {
         guard await session.ensureSignedIn() else { return }
-        error = nil
+        reading = true
+        defer { reading = false }
+        var found = 0
+        var missed = 0
         for image in images {
             guard let data = image.reportDataURL() else { continue }
-            guard let items = try? await CoffeeAPI.parseMenu(imageBase64: data), !items.isEmpty else {
-                error = "No menu recognized."
-                continue
+            photos.append(CapturedPhoto(kind: "MENU", dataURL: data, image: image))
+            dirty = true
+            if let items = try? await CoffeeAPI.parseMenu(imageBase64: data), !items.isEmpty {
+                merge(items)
+                found += items.count
+            } else {
+                missed += 1
             }
-            merge(items)
-            photos.append(CapturedPhoto(kind: "MENU", dataURL: data))
         }
+        photoNote = [
+            found == 0 ? nil : "Read \(found) \(found == 1 ? "drink" : "drinks") from your photo; check the prices.",
+            missed == 0 ? nil : "No menu recognized in \(missed == 1 ? "the photo" : "\(missed) photos"); saved with your report anyway.",
+        ].compactMap { $0 }.joined(separator: " ")
     }
 
     private func save() {
-        let payload = drinks.filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }.map(\.payload)
+        let payload = payload
         perform(saving: $saving, error: $error, dismiss: dismiss) {
-            try await session.submit(.menu, fields: ["drinks": payload], photos: photos)
+            try await session.submit(.menu, fields: payload.isEmpty ? [:] : ["drinks": payload], photos: photos)
         }
     }
 }

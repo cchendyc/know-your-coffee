@@ -65,6 +65,14 @@ enum AppAppearance: String, CaseIterable, Identifiable {
         case .dark: .dark
         }
     }
+
+    var symbol: String {
+        switch self {
+        case .system: "circle.lefthalf.filled"
+        case .light: "sun.max.fill"
+        case .dark: "moon.fill"
+        }
+    }
 }
 
 // MARK: - Text roles
@@ -184,6 +192,56 @@ struct Pill: View {
             .padding(.vertical, 4)
             .background(fill, in: Capsule())
             .foregroundStyle(foreground)
+    }
+}
+
+/// Segmented control in the app palette. UISegmentedControl is gray in both
+/// themes and ignores the accent, so it reads as a foreign widget here.
+/// Selected segment: espresso in light, crema in Dark Roast (the primary
+/// button fill); the track is the cream inset color.
+struct KYCSegmentedControl<Option: Hashable>: View {
+    let options: [Option]
+    @Binding var selection: Option
+    let label: (Option) -> String
+    var symbol: (Option) -> String? = { _ in nil }
+
+    @Namespace private var highlight
+
+    private static var innerRadius: CGFloat { KYCRadius.control - 3 }
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(options, id: \.self) { option in
+                let selected = option == selection
+                Button {
+                    withAnimation(.easeOut(duration: 0.18)) { selection = option }
+                } label: {
+                    HStack(spacing: 5) {
+                        if let name = symbol(option) {
+                            Image(systemName: name).font(.system(size: 11, weight: .semibold))
+                        }
+                        Text(label(option)).font(.kycSecondaryBold)
+                    }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .foregroundStyle(selected ? Color.inkInverse : Color.inkMuted)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 34)
+                    .background {
+                        if selected {
+                            RoundedRectangle(cornerRadius: Self.innerRadius, style: .continuous)
+                                .fill(Color.espresso700)
+                                .matchedGeometryEffect(id: "selected", in: highlight)
+                        }
+                    }
+                    .contentShape(RoundedRectangle(cornerRadius: Self.innerRadius, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+        }
+        .padding(3)
+        .background(Color.cream100, in: RoundedRectangle(cornerRadius: KYCRadius.control, style: .continuous))
     }
 }
 

@@ -1,5 +1,6 @@
 """In-memory commerce repositories, mirroring the Postgres behavior."""
 
+from collections import Counter
 from datetime import UTC, date, datetime, timedelta
 
 from ... import models as m
@@ -143,16 +144,16 @@ class MemoryProductRepository:
         products.sort(key=lambda p: (p.created_at, int(p.id)))
         return _page(products, limit, offset)
 
-    def status_counts(self, shop_id: str) -> dict[m.ListingStatus, int]:
-        counts = dict.fromkeys(m.ListingStatus, 0)
+    def status_counts_for_shops(self, shop_ids: list[str]) -> dict[str, dict[m.ListingStatus, int]]:
+        by_shop: dict[str, dict[m.ListingStatus, int]] = {}
         for p in self._store.products.values():
-            if str(p.shop_id) == shop_id:
-                counts[p.status] += 1
-        return counts
+            if str(p.shop_id) in shop_ids:
+                by_shop.setdefault(str(p.shop_id), dict.fromkeys(m.ListingStatus, 0))[p.status] += 1
+        return by_shop
 
-    def count_for_shops(self, shop_ids: list[str], status: m.ListingStatus) -> int:
-        wanted = set(shop_ids)
-        return sum(1 for p in self._store.products.values() if str(p.shop_id) in wanted and p.status == status)
+    def count_for_shops(self, shop_ids: list[str], status: m.ListingStatus) -> dict[str, int]:
+        counts = Counter(str(p.shop_id) for p in self._store.products.values() if p.status == status)
+        return {shop_id: counts[shop_id] for shop_id in shop_ids if counts[shop_id]}
 
     def get(self, product_id: str) -> m.Product | None:
         return self._store.products.get(str(product_id))
@@ -327,9 +328,9 @@ class MemoryOrderRepository:
         rows, total = _page(orders, limit, offset)
         return [self._with_items(o) for o in rows], total
 
-    def count_for_shops(self, shop_ids: list[str], statuses: tuple[OrderStatus, ...]) -> int:
-        wanted = set(shop_ids)
-        return sum(1 for o in self._store.orders.values() if str(o.shop_id) in wanted and o.status in statuses)
+    def count_for_shops(self, shop_ids: list[str], statuses: tuple[OrderStatus, ...]) -> dict[str, int]:
+        counts = Counter(str(o.shop_id) for o in self._store.orders.values() if o.status in statuses)
+        return {shop_id: counts[shop_id] for shop_id in shop_ids if counts[shop_id]}
 
     def count_by_status(self, shop_ids: list[str]) -> dict[OrderStatus, int]:
         wanted = set(shop_ids)
@@ -417,16 +418,14 @@ class MemoryShipmentRepository:
         shipments.sort(key=lambda s: s.ship_by or date.max)
         return _page(shipments, limit, offset)
 
-    def count_for_shops(self, shop_ids: list[str], statuses: tuple[ShipmentStatus, ...]) -> int:
+    def count_for_shops(self, shop_ids: list[str], statuses: tuple[ShipmentStatus, ...]) -> dict[str, int]:
         store = self._store
-        wanted = set(shop_ids)
-        return sum(
-            1
+        counts = Counter(
+            str(order.shop_id)
             for s in store.shipments.values()
-            if s.status in statuses
-            and (order := store.orders.get(str(s.order_id)))
-            and str(order.shop_id) in wanted
+            if s.status in statuses and (order := store.orders.get(str(s.order_id)))
         )
+        return {shop_id: counts[shop_id] for shop_id in shop_ids if counts[shop_id]}
 
     def update(self, shipment_id: str, changes: dict, actor_user_id: str | None = None) -> m.Shipment | None:
         shipment = self._store.shipments.get(str(shipment_id))

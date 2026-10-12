@@ -46,7 +46,7 @@ export function ShopSwitcher({
   const subtitle = current
     ? shops.length > 1
       ? `${current.city} · ${index} of ${shops.length} shops`
-      : '✓ Verified owner'
+      : 'Verified owner'
     : `${shops.length} shops${pendingClaims.length ? ` · ${pendingClaims.length} pending` : ''}`
 
   return (

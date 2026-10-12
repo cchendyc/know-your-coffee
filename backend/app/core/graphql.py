@@ -59,3 +59,16 @@ def require_shop_owner(info, shop_id: str) -> dict:
     if str(shop.owner_user_id or "") != user["id"] and not is_admin(info, user):
         raise GraphQLError("Only the verified owner can manage this shop.")
     return user
+
+
+async def require_shop_owner_batched(info, shop_id: str) -> dict:
+    """require_shop_owner for async resolvers. The shop row comes from the
+    per-request loader, so a query that aliases one field per shop checks
+    every shop with one statement."""
+    user = require_user(info)
+    shop = await info.context["loaders"].shop.load(shop_id)
+    if not shop:
+        raise GraphQLError(f"Shop {shop_id} not found")
+    if str(shop.owner_user_id or "") != user["id"] and not await run_in_threadpool(is_admin, info, user):
+        raise GraphQLError("Only the verified owner can manage this shop.")
+    return user

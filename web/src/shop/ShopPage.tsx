@@ -7,7 +7,6 @@ import { ReportForm } from '../components/ReportForm'
 import { SellerApplicationModal } from '../components/SellerApplication'
 import { AboutSection } from './AboutSection'
 import { ListingGrid } from './ListingGrid'
-import { MenuSection } from './MenuSection'
 import { PhotosSection } from './PhotosSection'
 import { ProfileCard } from './ProfileCard'
 import { RelatedShops } from './RelatedShops'
@@ -15,14 +14,16 @@ import { ReviewsSection } from './ReviewsSection'
 import { useShopPage } from './shopData'
 import { SECTION_LABELS, plural, type Section } from './util'
 
-const sectionFromHash = (hash: string): Section => {
+// null = no tab in the URL; the page picks the default for this shop.
+const sectionFromHash = (hash: string): Section | null => {
   const key = hash.replace(/^#/, '')
-  return key in SECTION_LABELS ? (key as Section) : 'about'
+  return key in SECTION_LABELS ? (key as Section) : null
 }
 import './shop.css'
 
-// Public shop page at /shops/:shopId. About first, then photos when any
-// exist, reviews on every shop, and the storefront when the owner sells.
+// Public shop page at /shops/:shopId. A shop that sells opens on its
+// storefront; every other shop opens on About. Photos appear when any
+// exist and reviews on every shop.
 export function ShopPage({ user, onShopChanged }: { user: User | null; onShopChanged?: (shop: CoffeeShop) => void }) {
   const { shopId = '' } = useParams()
   const navigate = useNavigate()
@@ -32,10 +33,10 @@ export function ShopPage({ user, onShopChanged }: { user: User | null; onShopCha
   const [busy, setBusy] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  // Tabs are panels, not scroll anchors. The hash (#shop) makes a tab
-  // linkable and survives reload; About is the default.
+  // Tabs are panels, not scroll anchors. The hash (#about, #shop) makes a
+  // tab linkable and survives reload; no hash means the shop's default.
   const { hash } = useLocation()
-  const [active, setActive] = useState<Section>(() => sectionFromHash(hash))
+  const [active, setActive] = useState<Section | null>(() => sectionFromHash(hash))
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -52,7 +53,8 @@ export function ShopPage({ user, onShopChanged }: { user: User | null; onShopCha
         (s): s is Section => Boolean(s),
       )
     : ['about']
-  const tab: Section = sections.includes(active) ? active : 'about'
+  const defaultSection: Section = sellsOnline ? 'shop' : 'about'
+  const tab: Section = active && sections.includes(active) ? active : defaultSection
 
   const say = (message: string) => {
     setNotice(message)
@@ -102,7 +104,7 @@ export function ShopPage({ user, onShopChanged }: { user: User | null; onShopCha
 
   const jump = (s: Section) => {
     setActive(s)
-    navigate({ hash: s === 'about' ? '' : s }, { replace: true, state: seed ? { shop: seed } : undefined })
+    navigate({ hash: s === defaultSection ? '' : s }, { replace: true, state: seed ? { shop: seed } : undefined })
   }
   const closeModalAndRefresh = () => {
     setModal('none')
@@ -169,10 +171,7 @@ export function ShopPage({ user, onShopChanged }: { user: User | null; onShopCha
                 canConfirm={buildConfirmFacts(full).length > 0}
                 onReport={() => setModal('report')}
                 onConfirm={() => setModal('confirm')}
-                onJumpToShop={() => jump('shop')}
-              >
-                {full.drinks.length > 0 && <MenuSection shop={full} />}
-              </AboutSection>
+              />
             )}
             {tab === 'photos' && <PhotosSection shopId={full.id} photoCount={full.photoCount} version={version} />}
             {tab === 'reviews' && (

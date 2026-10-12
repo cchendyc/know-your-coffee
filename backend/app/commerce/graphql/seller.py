@@ -4,24 +4,14 @@ Ownership is shops.owner_user_id, so one user may own many shops. This module
 gives the hub one place to read all of them and the work outstanding across
 them; per-shop screens keep using shopId arguments."""
 
+import asyncio
+
 from ariadne import ObjectType
 
-from ...core.graphql import require_shop_owner, require_user, threaded
-from ...models.enums import CANCELABLE_STATUSES, ListingStatus, ShipmentStatus
+from ...core.graphql import require_shop_owner, require_user
+from ..services.workload import sum_workloads
 
 seller = ObjectType("Seller")
-
-# Shipments the seller still has to hand to a carrier.
-UNSHIPPED_STATUSES = (ShipmentStatus.LABEL_READY, ShipmentStatus.READY_FOR_DROPOFF)
-
-
-def workload(repos, shop_ids: list[str]) -> dict:
-    """SellerWorkload for one shop or for a whole seller; three count queries."""
-    return {
-        "to_fulfill": repos.orders.count_for_shops(shop_ids, CANCELABLE_STATUSES),
-        "to_ship": repos.shipments.count_for_shops(shop_ids, UNSHIPPED_STATUSES),
-        "low_stock": repos.products.count_for_shops(shop_ids, ListingStatus.LOW_STOCK),
-    }
 
 
 def owned_shop_ids(info, shop_id: str | None) -> list[str]:
@@ -34,6 +24,9 @@ def owned_shop_ids(info, shop_id: str | None) -> list[str]:
 
 
 @seller.field("workload")
-@threaded
-def resolve_seller_workload(seller_row, info):
-    return workload(info.context["repos"], [str(s.id) for s in seller_row["shops"]])
+async def resolve_seller_workload(seller_row, info):
+    # Shares the batch with shops[].workload, so asking for both costs the
+    # same three queries as asking for either.
+    loader = info.context["loaders"].shop_workload
+    workloads = await asyncio.gather(*(loader.load(str(s.id)) for s in seller_row["shops"]))
+    return sum_workloads(workloads)

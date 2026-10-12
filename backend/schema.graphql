@@ -701,6 +701,9 @@ type ReportOptions {
   machineBrands: [ReportOption!]!
   "Whole machines, brand first: \"La Marzocco Linea PB\"."
   machines: [String!]!
+  "Grinder makers. A grinder is stored as one string, \"brand model\"; forms collect the two parts."
+  grinderBrands: [String!]!
+  "Whole grinders, brand first: \"Mahlkönig EK43\"."
   grinders: [String!]!
   beanSources: [ReportOption!]!
   roasters: [String!]!

@@ -256,7 +256,7 @@ enum CoffeeAPI {
         let query = """
             query ReportOptions {
               reportOptions {
-                machineBrands { value label } machines grinders
+                machineBrands { value label } machines grinderBrands grinders
                 beanSources { value label } roasters
                 coffeeTypes { value label } processes { value label } roastLevels { value label }
                 fermentations origins drinks milkBrands
@@ -450,20 +450,16 @@ enum CoffeeAPI {
     // Seller Hub lists page with limit/offset; the server caps limit at 100.
     static let sellerPageSize = 25
 
-    static func fetchHubStats(shopID: String) async throws -> HubStats {
-        struct Payload: Decodable {
-            struct Shop: Decodable { let workload: HubStats.Workload? }
-            let shop: Shop?
-            let myProductCounts: HubStats.ProductCounts
-        }
+    /// Listing counts for one shop's hub rows. The shop's workload already
+    /// arrives with mySeller, so it is not fetched again here.
+    static func fetchProductCounts(shopID: String) async throws -> ProductCounts {
+        struct Payload: Decodable { let myProductCounts: ProductCounts }
         let query = """
-            query HubStats($shopId: ID!) {
-              shop(id: $shopId) { workload { toFulfill toShip lowStock } }
+            query ProductCounts($shopId: ID!) {
               myProductCounts(shopId: $shopId) { total inStock lowStock hidden }
             }
             """
-        let payload = try await execute(query, variables: ["shopId": shopID], as: Payload.self)
-        return HubStats(workload: payload.shop?.workload, products: payload.myProductCounts)
+        return try await execute(query, variables: ["shopId": shopID], as: Payload.self).myProductCounts
     }
 
     static func fetchMyProducts(

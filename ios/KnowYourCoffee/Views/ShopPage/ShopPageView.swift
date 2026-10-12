@@ -1,4 +1,3 @@
-import MapKit
 import SwiftUI
 
 struct ShopPageActions {
@@ -47,16 +46,16 @@ private struct ShopPageFramesKey: PreferenceKey {
 }
 
 /// Cover → identity card → action tiles → tabs → one panel at a time.
-/// Tabs switch panels; they never scroll to an anchor. About is the default
-/// so the community record is the first thing a visitor reads. Reviews and
-/// Shop only exist once an owner has published listings.
+/// Tabs switch panels; they never scroll to an anchor. A shop that sells
+/// opens on Shop, so listings are the first thing a visitor sees; every
+/// other shop opens on About, the community record.
 struct ShopPageView: View {
     private let base: CoffeeShop
     var loadError: String?
     var isLoadingFull = false
     var actions = ShopPageActions()
 
-    @State private var tab: ShopTab = .about
+    @State private var tab: ShopTab
     @State private var frames = ShopPageFrames()
     @State private var showPhotos = false
     @State private var showMore = false
@@ -73,6 +72,9 @@ struct ShopPageView: View {
         self.loadError = loadError
         self.isLoadingFull = isLoadingFull
         self.actions = actions
+        // The feed's copy already carries ownerId and products, so this is
+        // decided before the full payload lands and the page never jumps.
+        _tab = State(initialValue: shop.sellsOnline ? .shop : .about)
     }
 
     private var shop: CoffeeShop { media.map(base.merging) ?? base }
@@ -145,6 +147,10 @@ struct ShopPageView: View {
         }
         .background(Color.cream50)
         .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
+        // Opening on Shop skips the tab change that normally fetches images.
+        .onAppear { if tab == .shop { loadMediaIfNeeded() } }
+        // The full payload can retract the Shop tab (listings all hidden).
+        .onChange(of: tabs) { if !tabs.contains(tab) { tab = .about } }
         .onChange(of: showPhotos) {
             if showPhotos { loadMediaIfNeeded() }
         }
@@ -256,13 +262,10 @@ struct ShopPageView: View {
 
     // MARK: Actions
 
+    // Save and Been here. Share sits in the nav row beside the menu; pages
+    // without a share link (chain locations) show the website here instead.
     private var actionTiles: some View {
         HStack(spacing: 8) {
-            ActionTile(symbol: "arrow.triangle.turn.up.right.diamond.fill", label: "Directions", style: .primary) {
-                let item = MKMapItem(placemark: MKPlacemark(coordinate: shop.coordinate))
-                item.name = shop.name
-                item.openInMaps()
-            }
             ActionTile(symbol: shop.savedByMe ? "bookmark.fill" : "bookmark",
                        label: shop.savedByMe ? "Saved" : "Save",
                        style: shop.savedByMe ? .active : .plain,
@@ -271,13 +274,7 @@ struct ShopPageView: View {
                        label: shop.beenByMe ? "Been" : "Been here",
                        style: shop.beenByMe ? .active : .plain,
                        action: actions.onToggleBeen)
-            if let url = actions.shareURL {
-                ShareLink(item: url, subject: Text(shop.name),
-                          message: Text("\(shop.name) — \(shop.address), \(shop.city)")) {
-                    ActionTileLabel(symbol: "square.and.arrow.up", label: "Share", style: .plain)
-                }
-                .buttonStyle(.plain)
-            } else if let website = shop.website, let url = URL(string: website) {
+            if actions.shareURL == nil, let website = shop.website, let url = URL(string: website) {
                 Link(destination: url) {
                     ActionTileLabel(symbol: "safari", label: "Website", style: .plain)
                 }
@@ -299,9 +296,7 @@ struct ShopPageView: View {
     private var panel: some View {
         switch tab {
         case .about:
-            ShopAboutPanel(shop: shop, listings: listings, onUpdate: actions.onUpdate) {
-                tab = .shop
-            }
+            ShopAboutPanel(shop: shop, onUpdate: actions.onUpdate)
         case .reviews:
             ShopReviewsPanel(shop: shop, onReload: actions.onReload)
         case .shop:
@@ -316,21 +311,34 @@ struct ShopPageView: View {
             HStack(spacing: 2) {
                 NavCircle(symbol: "chevron.left", action: actions.onBack)
                 Spacer()
-                if solid {
-                    Text(shop.name)
-                        .font(.kycBodyBold)
-                        .lineLimit(1)
-                        .foregroundStyle(Color.ink)
-                    Spacer()
+                // Save and Been here are tiles; Share and the menu stay up
+                // here so they are reachable from any scroll position.
+                if let url = actions.shareURL {
+                    ShareLink(item: url, subject: Text(shop.name),
+                              message: Text("\(shop.name) — \(shop.address), \(shop.city)")) {
+                        NavCircleLabel(symbol: "square.and.arrow.up")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Share")
                 }
-                // Save and Share live in the action tiles; the nav row only
-                // carries what the tiles do not.
                 if !moreItems.isEmpty {
                     NavCircle(symbol: "ellipsis") { showMore = true }
                 }
             }
             .padding(.horizontal, 10)
             .frame(height: Self.navRowHeight)
+            // Overlaid, not inline: two buttons on the right would push an
+            // inline title off center.
+            .overlay {
+                if solid {
+                    Text(shop.name)
+                        .font(.kycBodyBold)
+                        .lineLimit(1)
+                        .foregroundStyle(Color.ink)
+                        .padding(.horizontal, 100)
+                        .allowsHitTesting(false)
+                }
+            }
             .padding(.top, topInset)
 
             if pinned {

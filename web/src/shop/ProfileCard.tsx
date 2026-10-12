@@ -1,6 +1,6 @@
 import type { CoffeeShop, ShopPageData, User } from '../api'
 import { timeAgo } from '../format'
-import { BookmarkIcon, CheckIcon, DirectionsIcon, ShareIcon } from './bits'
+import { BookmarkIcon, CheckIcon, ShareIcon } from './bits'
 import { SECTION_LABELS, initials, type Section } from './util'
 
 // Renders from the explorer's copy first (no ownership, counts, or
@@ -29,7 +29,6 @@ export function ProfileCard({
   onShare: () => void
 }) {
   const latest = shop.reports?.[0]
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${shop.name} ${shop.address} ${shop.city}`)}`
 
   return (
     <>
@@ -74,13 +73,6 @@ export function ProfileCard({
 
             <div className="flex flex-col items-start gap-4 md:items-end">
               <div className="flex flex-wrap items-center gap-2">
-                <button type="button" aria-label="Share" title="Share" onClick={onShare} className="sp-icon-btn">
-                  <ShareIcon className="size-[18px]" />
-                </button>
-                <a href={mapsUrl} target="_blank" rel="noreferrer" className="sp-pill sp-pill--light">
-                  <DirectionsIcon />
-                  Directions
-                </a>
                 <button
                   type="button"
                   disabled={!user || busy}
@@ -100,6 +92,9 @@ export function ProfileCard({
                   className={`sp-icon-btn ${shop.beenByMe ? 'is-on' : ''}`}
                 >
                   <CheckIcon className="size-[18px]" />
+                </button>
+                <button type="button" aria-label="Share" title="Share" onClick={onShare} className="sp-icon-btn">
+                  <ShareIcon className="size-[18px]" />
                 </button>
               </div>
             </div>

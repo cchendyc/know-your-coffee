@@ -2,7 +2,7 @@
 
 from ariadne import QueryType
 
-from ...core.graphql import page_bounds, require_shop_owner, threaded
+from ...core.graphql import page_bounds, require_shop_owner, require_shop_owner_batched, threaded
 from ...models.enums import ListingStatus
 from .seller import owned_shop_ids
 
@@ -39,10 +39,11 @@ def resolve_my_products(_, info, shopId, limit, offset, status=None):
 
 
 @query.field("myProductCounts")
-@threaded
-def resolve_my_product_counts(_, info, shopId):
-    require_shop_owner(info, shopId)
-    counts = info.context["repos"].products.status_counts(shopId)
+async def resolve_my_product_counts(_, info, shopId):
+    # Async so the hub's one-alias-per-shop query batches: one shop lookup
+    # and one grouped count for all shops instead of two statements each.
+    await require_shop_owner_batched(info, shopId)
+    counts = await info.context["loaders"].shop_product_status_counts.load(shopId)
     return {
         "total": sum(counts.values()),
         "in_stock": counts[ListingStatus.IN_STOCK],

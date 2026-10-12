@@ -51,10 +51,6 @@ export function Chip({ children }: { children: ReactNode }) {
   return <span className="sp-chip">{children}</span>
 }
 
-export function Empty({ children }: { children: ReactNode }) {
-  return <p className="py-1 text-sm text-espresso-500">{children}</p>
-}
-
 type IconProps = { className?: string }
 const stroke = (className: string | undefined, d: string, width = 2) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" className={className ?? 'size-4'}>
@@ -65,7 +61,6 @@ const stroke = (className: string | undefined, d: string, width = 2) => (
 export const PlusIcon = ({ className }: IconProps) => stroke(className, 'M12 5v14M5 12h14', 2.5)
 export const CheckIcon = ({ className }: IconProps) => stroke(className, 'm5 12.5 4.5 4.5L19 7.5', 3)
 export const ShareIcon = ({ className }: IconProps) => stroke(className, 'M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13')
-export const DirectionsIcon = ({ className }: IconProps) => stroke(className, 'm3 11 19-9-9 19-2-8-8-2Z')
 export const TruckIcon = ({ className }: IconProps) =>
   stroke(className, 'M1 5h14v11H1zM15 9h4l4 4v3h-8V9ZM7.5 18a2 2 0 1 1-4 0 2 2 0 0 1 4 0ZM20 18a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z')
 export const BagIcon = ({ className }: IconProps) => stroke(className, 'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4ZM3 6h18M16 10a4 4 0 0 1-8 0')

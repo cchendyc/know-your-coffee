@@ -42,17 +42,19 @@ class ShipmentRepository:
         )
         return fetch_page(self._session, stmt, limit, offset)
 
-    def count_for_shops(self, shop_ids: list[str], statuses: tuple[ShipmentStatus, ...]) -> int:
+    def count_for_shops(self, shop_ids: list[str], statuses: tuple[ShipmentStatus, ...]) -> dict[str, int]:
+        """Shipments in `statuses` per shop; shops with none are absent."""
         if not shop_ids:
-            return 0
+            return {}
         stmt = (
-            sa.select(sa.func.count())
+            sa.select(m.Order.shop_id, sa.func.count())
             .select_from(m.Shipment)
             .join(m.Shipment.order)
             .where(m.Order.shop_id.in_(shop_ids), m.Shipment.status.in_(statuses))
+            .group_by(m.Order.shop_id)
         )
         with self._session() as s:
-            return s.scalar(stmt) or 0
+            return {str(shop_id): int(n) for shop_id, n in s.execute(stmt)}
 
     def update(self, shipment_id: str, changes: dict, actor_user_id: str | None = None) -> m.Shipment | None:
         """changes: carrier, tracking, status. A status change syncs the order."""

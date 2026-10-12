@@ -140,7 +140,7 @@ function Stat({ label, value, hint, tone = 'accent' }: { label: string; value: n
 
 function ShopCard({ shop, counts, onOpen }: { shop: SellerShop; counts?: ProductCounts; onOpen: () => void }) {
   const w = shop.workload
-  const badge = shopBadges(shop)[0] ?? { tone: 'ok' as const, label: '✓ Verified owner' }
+  const badge = shopBadges(shop)[0] ?? { tone: 'ok' as const, label: 'Verified owner' }
   const listings = counts ? counts.inStock + counts.lowStock : null
   return (
     <div className={`${cardCls} flex flex-col gap-3`}>

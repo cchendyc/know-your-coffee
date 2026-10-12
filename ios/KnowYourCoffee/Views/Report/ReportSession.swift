@@ -3,10 +3,13 @@ import SwiftUI
 import UIKit
 
 /// A photo taken or picked in the launcher, uploaded with the sheet that used it.
+/// A photo attached to a report; uploaded with addShopPhotos on Save.
 struct CapturedPhoto: Identifiable {
     let id = UUID()
     let kind: String // PhotoKind: MACHINE, MENU, VIBE
     let dataURL: String
+    /// Original, for the thumbnail strip; dataURL is the downscaled upload.
+    let image: UIImage
 }
 
 /// One launcher session: the shop as last fetched, the server's option lists,
@@ -20,8 +23,6 @@ final class ReportSession {
     var optionsError: String?
     var saved: Set<ReportFact> = []
     var showSignIn = false
-    /// A sheet text field has focus; the launcher grows to `.large` so suggestions clear the keyboard.
-    var fieldFocused = false
     var analyzing = false
     /// Vision results waiting for the Machine or Menu sheet to open and consume them.
     var pendingMachine: (guess: MachineGuess, photo: CapturedPhoto)?
@@ -58,10 +59,17 @@ final class ReportSession {
     /// scalars per field and replaces arrays whole. False if sign-in was dismissed.
     func submit(_ fact: ReportFact, fields: [String: Any?], photos: [CapturedPhoto] = []) async throws -> Bool {
         guard await ensureSignedIn() else { return false }
-        var input = fields
-        input["shopId"] = shop.id
-        input["source"] = photos.isEmpty ? "TEXT" : "PHOTO"
-        try await CoffeeAPI.submitReport(input)
+        // Photos alone (vision found nothing to pre-fill) skip the report row:
+        // the server folds every non-null field onto the shop, so an empty
+        // machines list would wipe the shop's machines, and a report with no
+        // fields reads as a blank update.
+        let values = fields.compactMapValues { $0 }
+        if !values.isEmpty {
+            var input: [String: Any?] = values
+            input["shopId"] = shop.id
+            input["source"] = photos.isEmpty ? "TEXT" : "PHOTO"
+            try await CoffeeAPI.submitReport(input)
+        }
         if !photos.isEmpty {
             try await CoffeeAPI.addShopPhotos(
                 shopID: shop.id,
@@ -91,12 +99,12 @@ final class ReportSession {
         for image in images {
             guard let data = image.reportDataURL() else { continue }
             if let guess = try? await CoffeeAPI.identifyMachine(imageBase64: data), guess.machine != .unknown {
-                pendingMachine = (guess, CapturedPhoto(kind: "MACHINE", dataURL: data))
+                pendingMachine = (guess, CapturedPhoto(kind: "MACHINE", dataURL: data, image: image))
                 destination = destination ?? .machine
                 continue
             }
             if let items = try? await CoffeeAPI.parseMenu(imageBase64: data), !items.isEmpty {
-                pendingMenu = (items, CapturedPhoto(kind: "MENU", dataURL: data))
+                pendingMenu = (items, CapturedPhoto(kind: "MENU", dataURL: data, image: image))
                 destination = destination ?? .menu
                 continue
             }

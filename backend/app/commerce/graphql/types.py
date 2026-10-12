@@ -9,8 +9,9 @@ import asyncio
 
 from ariadne import ObjectType
 
+from starlette.concurrency import run_in_threadpool
+
 from ...core.graphql import is_admin, threaded
-from .seller import workload
 
 category = ObjectType("Category")
 product = ObjectType("Product")
@@ -133,10 +134,12 @@ def resolve_delivery_settings(shop, _info):
 
 
 @coffee_shop.field("workload")
-@threaded
-def resolve_shop_workload(shop, info):
+async def resolve_shop_workload(shop, info):
     # Seller-only counts; buyers browsing the shop get null, not an error.
+    # Batched: mySeller asks for this on every owned shop.
     user = info.context["user"]
-    if not user or (str(shop.owner_user_id or "") != user["id"] and not is_admin(info, user)):
+    if not user:
         return None
-    return workload(info.context["repos"], [str(shop.id)])
+    if str(shop.owner_user_id or "") != user["id"] and not await run_in_threadpool(is_admin, info, user):
+        return None
+    return await info.context["loaders"].shop_workload.load(str(shop.id))

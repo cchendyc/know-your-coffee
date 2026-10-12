@@ -150,6 +150,7 @@ struct ReportOption: Codable, Hashable, Identifiable {
 struct ReportOptions: Codable, Hashable {
     let machineBrands: [ReportOption]
     let machines: [String]
+    let grinderBrands: [String]
     let grinders: [String]
     let beanSources: [ReportOption]
     let roasters: [String]
@@ -183,6 +184,46 @@ struct ReportOptions: Codable, Hashable {
     func machineDisplay(brand: String, model: String?) -> String {
         let label = brand == "OTHER" ? nil : self.label(in: \.machineBrands, for: brand)
         return [label, model].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
+    /// MachineBrand value for a typed brand label, if it is one the server lists.
+    func machineBrand(label: String) -> String? {
+        machineBrands.first { $0.label.caseInsensitiveCompare(label) == .orderedSame }?.value
+    }
+
+    /// Model suggestions for a brand: whole-machine suggestions that start with it, brand stripped.
+    func machineModels(for brandLabel: String) -> [String] {
+        Self.models(in: machines, brand: brandLabel)
+    }
+
+    func grinderModels(for brand: String) -> [String] {
+        Self.models(in: grinders, brand: brand)
+    }
+
+    /// Splits a stored "brand model" grinder on the longest listed brand it starts with.
+    func splitGrinder(_ grinder: String) -> (brand: String?, model: String) {
+        let split = grinderBrands
+            .compactMap { brand in Self.stripBrand(brand, from: grinder).map { (brand: brand, model: $0) } }
+            .max { $0.brand.count < $1.brand.count }
+        return split.map { ($0.brand, $0.model) } ?? (nil, grinder)
+    }
+
+    private static func models(in wholes: [String], brand: String) -> [String] {
+        guard !brand.isEmpty else { return [] }
+        var out: [String] = []
+        for whole in wholes {
+            guard let model = stripBrand(brand, from: whole), !model.isEmpty else { continue }
+            if !out.contains(where: { $0.caseInsensitiveCompare(model) == .orderedSame }) { out.append(model) }
+        }
+        return out
+    }
+
+    /// The text after `brand` when `whole` is that brand or starts with it as a word; nil otherwise.
+    private static func stripBrand(_ brand: String, from whole: String) -> String? {
+        guard !brand.isEmpty, whole.range(of: brand, options: [.caseInsensitive, .anchored]) != nil else { return nil }
+        let rest = whole.dropFirst(brand.count)
+        guard rest.isEmpty || rest.first == " " else { return nil }
+        return rest.trimmingCharacters(in: .whitespaces)
     }
 }
 
@@ -575,21 +616,12 @@ struct Page<Item> {
     let total: Int
 }
 
-// Hub row counts, computed server-side so the hub never loads whole lists.
-struct HubStats {
-    struct Workload: Decodable {
-        let toFulfill: Int
-        let toShip: Int
-        let lowStock: Int
-    }
-    struct ProductCounts: Decodable {
-        let total: Int
-        let inStock: Int
-        let lowStock: Int
-        let hidden: Int
-    }
-    let workload: Workload?
-    let products: ProductCounts
+// Listing counts per status, computed server-side so the hub never loads whole lists.
+struct ProductCounts: Decodable {
+    let total: Int
+    let inStock: Int
+    let lowStock: Int
+    let hidden: Int
 }
 
 enum ListingStatus: String, Codable, Hashable, CaseIterable {
